@@ -1,0 +1,713 @@
+<!DOCTYPE html>
+<html lang="fa" dir="rtl">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>قطب‌نمای درآمد</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Vazirmatn:wght@400;500;700;900&display=swap">
+<style>
+:root{
+  color-scheme:light;
+  --bg:#EEF1F5; --surface:#FFFFFF; --sunk:#E3E8EF; --line:#D3DAE4;
+  --ink:#14202F; --ink2:#4A5668; --ink3:#7A8697;
+  --navy:#16283F; --gold:#A8761C; --gold-soft:#F4E6C8; --on-gold:#FFFFFF;
+  --good:#1E8A5F; --warn:#B86E0F; --crit:#C0392B;
+  --good-bg:#DDF1E7; --warn-bg:#FBEBD3; --crit-bg:#F8DEDA;
+  --s1:#2a78d6; --s2:#eb6834; --s3:#1baf7a; --s4:#eda100;
+  --radius:10px;
+}
+@media (prefers-color-scheme:dark){
+  :root:not([data-theme="light"]){
+    color-scheme:dark;
+    --bg:#0C1420; --surface:#16283F; --sunk:#10203A; --line:#26405F;
+    --ink:#E9EEF5; --ink2:#AEB9C8; --ink3:#7F8DA1;
+    --navy:#0A1422; --gold:#E3B35C; --gold-soft:#3A3120; --on-gold:#1A1405;
+    --good:#4CC08E; --warn:#E6A246; --crit:#EE7466;
+    --good-bg:#15372B; --warn-bg:#3B2C14; --crit-bg:#3E1D1A;
+    --s1:#3987e5; --s2:#d95926; --s3:#199e70; --s4:#c98500;
+  }
+}
+:root[data-theme="dark"]{
+  color-scheme:dark;
+  --bg:#0C1420; --surface:#16283F; --sunk:#10203A; --line:#26405F;
+  --ink:#E9EEF5; --ink2:#AEB9C8; --ink3:#7F8DA1;
+  --navy:#0A1422; --gold:#E3B35C; --gold-soft:#3A3120; --on-gold:#1A1405;
+  --good:#4CC08E; --warn:#E6A246; --crit:#EE7466;
+  --good-bg:#15372B; --warn-bg:#3B2C14; --crit-bg:#3E1D1A;
+  --s1:#3987e5; --s2:#d95926; --s3:#199e70; --s4:#c98500;
+}
+*{box-sizing:border-box}
+[hidden]{display:none!important}
+body{margin:0;background:var(--bg);color:var(--ink);font:15px/1.75 Vazirmatn,Tahoma,"Segoe UI",sans-serif;direction:rtl}
+.wrap{max-width:980px;margin:0 auto;padding-inline:16px;padding-block:0 48px}
+h1,h2,h3{margin:0;text-wrap:balance;line-height:1.35}
+h2{font-size:1.15rem;font-weight:900}
+h3{font-size:1rem;font-weight:700}
+.num{font-variant-numeric:tabular-nums}
+button,input,select,textarea{font:inherit;color:inherit}
+button{cursor:pointer}
+:focus-visible{outline:2px solid var(--gold);outline-offset:2px}
+
+/* Hero: the north star */
+.hero{background:var(--navy);color:#E9EEF5;margin-inline:-16px;padding:20px 16px 18px;display:grid;gap:12px}
+.hero-top{display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap}
+.brand{display:flex;align-items:center;gap:10px}
+.brand svg{flex:none}
+.brand b{font-size:1.05rem;font-weight:900;letter-spacing:.2px}
+.brand small{display:block;color:#9FB0C6;font-size:.78rem;line-height:1.3}
+.today-date{color:#9FB0C6;font-size:.85rem}
+.north{display:grid;gap:6px}
+.north-label{font-size:.8rem;color:#C9D4E2;letter-spacing:.3px}
+.north-fig{display:flex;align-items:baseline;gap:10px;flex-wrap:wrap}
+.north-fig strong{font-size:clamp(1.7rem,6vw,2.5rem);font-weight:900;color:#F0C674;line-height:1.1}
+.north-fig span{color:#C9D4E2}
+.track{height:10px;background:#24405F;border-radius:6px;overflow:hidden}
+.track>i{display:block;height:100%;background:#F0C674;border-radius:6px;transition:width .5s}
+.north-meta{display:flex;gap:16px;flex-wrap:wrap;font-size:.83rem;color:#C9D4E2}
+.north-meta b{color:#fff}
+
+/* Tabs */
+nav.tabs{position:sticky;top:env(safe-area-inset-top,0px);z-index:5;background:var(--bg);margin-inline:-16px;padding:10px 16px;display:flex;gap:6px;overflow-x:auto;border-bottom:1px solid var(--line)}
+nav.tabs button{border:0;background:transparent;padding:7px 14px;border-radius:999px;color:var(--ink2);font-weight:700;white-space:nowrap}
+nav.tabs button[aria-selected="true"]{background:var(--ink);color:var(--bg)}
+section.pane{display:grid;gap:18px;padding-top:18px}
+
+.card{background:var(--surface);border:1px solid var(--line);border-radius:var(--radius);padding:16px;display:grid;gap:12px}
+.row{display:flex;gap:10px;align-items:center;flex-wrap:wrap}
+.spread{justify-content:space-between}
+.grid2{display:grid;grid-template-columns:repeat(auto-fit,minmax(280px,1fr));gap:18px}
+.muted{color:var(--ink3);font-size:.85rem}
+.eyebrow{font-size:.75rem;color:var(--ink3);letter-spacing:.4px;font-weight:700}
+
+.btn{border:1px solid var(--line);background:var(--surface);padding:6px 14px;border-radius:8px;font-weight:700;font-size:.9rem}
+.btn:hover{border-color:var(--ink3)}
+.btn.primary{background:var(--gold);border-color:var(--gold);color:var(--on-gold)}
+.btn.ghost{border-color:transparent;background:transparent;color:var(--ink2)}
+.btn.danger{color:var(--crit)}
+.btn:disabled{opacity:.5;cursor:default}
+.x{border:0;background:transparent;color:var(--ink3);font-size:1.1rem;line-height:1;padding:4px 6px;border-radius:6px}
+.x:hover{color:var(--crit);background:var(--crit-bg)}
+
+input[type=text],input[type=number],select,textarea{background:var(--sunk);border:1px solid var(--line);border-radius:8px;padding:7px 10px;width:100%;min-width:0}
+textarea{min-height:70px;resize:vertical;line-height:1.7}
+label.f{display:grid;gap:4px;font-size:.85rem;color:var(--ink2);flex:1 1 160px}
+.form{display:flex;gap:10px;flex-wrap:wrap;align-items:end}
+
+/* Sample banner */
+.banner{background:var(--gold-soft);border:1px solid var(--gold);border-radius:var(--radius);padding:12px 14px;display:flex;gap:12px;align-items:center;justify-content:space-between;flex-wrap:wrap}
+
+/* Insights */
+.insights{display:grid;gap:8px}
+.ins{display:flex;gap:10px;align-items:flex-start;padding:10px 12px;border-radius:8px;font-size:.92rem}
+.ins .tag{flex:none;font-size:.72rem;font-weight:900;padding:2px 8px;border-radius:999px;margin-top:3px}
+.ins.crit{background:var(--crit-bg)} .ins.crit .tag{background:var(--crit);color:#fff}
+.ins.warn{background:var(--warn-bg)} .ins.warn .tag{background:var(--warn);color:#fff}
+.ins.good{background:var(--good-bg)} .ins.good .tag{background:var(--good);color:#fff}
+
+/* Tasks */
+.tasks{display:grid;gap:6px}
+.task{display:flex;align-items:center;gap:10px;padding:8px 10px;border-radius:8px;background:var(--sunk)}
+.task input[type=checkbox]{width:20px;height:20px;accent-color:var(--good);flex:none}
+.task span{flex:1}
+.task.done span{text-decoration:line-through;color:var(--ink3)}
+.task .carried{font-size:.7rem;color:var(--warn);font-weight:700}
+.streak{display:flex;gap:4px;flex-wrap:wrap}
+.streak i{width:16px;height:16px;border-radius:4px;background:var(--sunk);border:1px solid var(--line)}
+.streak i.full{background:var(--good);border-color:var(--good)}
+.streak i.part{background:var(--warn-bg);border-color:var(--warn)}
+
+/* Stat strip */
+.stats{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:10px}
+.stat{background:var(--sunk);border-radius:8px;padding:10px 12px}
+.stat .v{font-size:1.25rem;font-weight:900}
+.stat .l{font-size:.78rem;color:var(--ink3)}
+
+/* Goals */
+.goal{border:1px solid var(--line);border-radius:var(--radius);padding:14px;display:grid;gap:10px;background:var(--surface)}
+.pill{font-size:.72rem;font-weight:700;padding:2px 9px;border-radius:999px;background:var(--sunk);color:var(--ink2)}
+.pill.ok{background:var(--good-bg);color:var(--good)}
+.pill.late{background:var(--crit-bg);color:var(--crit)}
+.pill.risk{background:var(--warn-bg);color:var(--warn)}
+.bar{height:8px;background:var(--sunk);border-radius:5px;overflow:hidden}
+.bar>i{display:block;height:100%;background:var(--gold);border-radius:5px}
+.ms{display:flex;gap:8px;align-items:center;font-size:.9rem}
+.ms input{accent-color:var(--good)}
+
+/* Streams */
+.stream{display:grid;grid-template-columns:auto 1fr auto;gap:10px;align-items:center;padding:10px 0;border-bottom:1px solid var(--line)}
+.stream:last-child{border-bottom:0}
+.dot{width:12px;height:12px;border-radius:3px}
+.tablewrap{overflow-x:auto}
+table{border-collapse:collapse;width:100%;font-size:.88rem}
+th,td{padding:7px 8px;text-align:right;border-bottom:1px solid var(--line);white-space:nowrap}
+th{color:var(--ink3);font-weight:700;font-size:.78rem}
+td input{width:110px;padding:4px 6px}
+
+/* Chart */
+.chart{position:relative}
+.chart svg{display:block;width:100%;height:auto}
+.legend{display:flex;gap:14px;flex-wrap:wrap;font-size:.82rem;color:var(--ink2)}
+.legend span{display:inline-flex;align-items:center;gap:6px}
+.tip{position:absolute;pointer-events:none;background:var(--ink);color:var(--bg);font-size:.8rem;padding:6px 10px;border-radius:6px;white-space:nowrap;transform:translate(50%,-110%)}
+
+/* Reviews */
+.review{border-top:1px solid var(--line);padding-top:10px;display:grid;gap:4px;font-size:.92rem}
+.review b{color:var(--ink2);font-weight:700}
+
+/* Coach */
+.coach-out{white-space:pre-wrap;background:var(--sunk);border-radius:8px;padding:14px;min-height:80px;line-height:1.9}
+.chips{display:flex;gap:8px;flex-wrap:wrap}
+
+.toast{position:fixed;bottom:calc(16px + env(safe-area-inset-bottom,0px));left:50%;transform:translateX(-50%);background:var(--ink);color:var(--bg);padding:8px 16px;border-radius:8px;font-size:.88rem;z-index:20}
+.sync{font-size:.75rem;color:#9FB0C6}
+@media (prefers-reduced-motion:reduce){*{transition:none!important}}
+</style>
+</head>
+<body>
+<div class="wrap">
+
+<header class="hero">
+  <div class="hero-top">
+    <div class="brand">
+      <svg width="34" height="34" viewBox="0 0 34 34" aria-hidden="true"><circle cx="17" cy="17" r="15" fill="none" stroke="#F0C674" stroke-width="2"/><path d="M17 5 L21 17 L17 29 L13 17 Z" fill="#F0C674"/><path d="M17 17 L21 17 L17 29 L13 17 Z" fill="#6E86A6"/></svg>
+      <div><b>قطب‌نمای درآمد</b><small id="hello">برنامه‌ریزی اهداف و درآمد</small></div>
+    </div>
+    <div style="text-align:left"><div class="today-date" id="todayLabel"></div><div class="sync" id="syncLabel">ذخیره روی همین دستگاه</div></div>
+  </div>
+  <div class="north">
+    <div class="north-label">درآمد این ماه از هدف ماهانه</div>
+    <div class="north-fig num"><strong id="nfNow">۰</strong><span id="nfOf"></span></div>
+    <div class="track" role="progressbar" aria-label="پیشرفت به سمت هدف ماهانه" id="nfTrackWrap"><i id="nfTrack" style="width:0"></i></div>
+    <div class="north-meta num" id="nfMeta"></div>
+  </div>
+</header>
+
+<nav class="tabs" role="tablist" id="tabs">
+  <button role="tab" data-tab="today" aria-selected="true">امروز</button>
+  <button role="tab" data-tab="goals">اهداف</button>
+  <button role="tab" data-tab="income">منابع درآمد</button>
+  <button role="tab" data-tab="review">بازبینی هفتگی</button>
+  <button role="tab" data-tab="coach">مربی هوش مصنوعی</button>
+  <button role="tab" data-tab="settings">تنظیمات</button>
+</nav>
+
+<div id="sampleBanner" class="banner" hidden style="margin-top:16px">
+  <div><b>این‌ها عددهای نمونه‌اند، نه عدد واقعی تو.</b><div class="muted" style="color:inherit">منابع درآمد و اهداف پیشنهادی نگه داشته می‌شوند؛ مبالغ و تیک‌ها پاک می‌شوند تا عدد واقعی خودت را وارد کنی.</div></div>
+  <button class="btn primary" id="clearSample">شروع با عددهای خودم</button>
+</div>
+
+<!-- TODAY -->
+<section class="pane" data-pane="today">
+  <div class="grid2">
+    <div class="card">
+      <div class="row spread"><h2>۳ کار مهم امروز</h2><span class="pill num" id="taskCount"></span></div>
+      <p class="muted" style="margin:0">فقط کارهایی که مستقیم درآمد یا مهارت فروش می‌سازند. بیشتر از ۳ تا ننویس.</p>
+      <div class="tasks" id="taskList"></div>
+      <form class="form" id="taskForm"><label class="f" style="flex:1 1 200px">کار جدید<input type="text" id="taskInput" placeholder="مثلاً: مراجعه به ۵ سوپرمارکت جدید برای تیچای"></label><button class="btn primary">افزودن</button></form>
+      <div class="grid" style="display:grid;gap:6px">
+        <div class="row spread"><span class="eyebrow">۲۱ روز اخیر</span><span class="muted num" id="streakLabel"></span></div>
+        <div class="streak" id="streak"></div>
+      </div>
+    </div>
+    <div class="card">
+      <h2>هشدارهای صادقانه</h2>
+      <p class="muted" style="margin:0">از روی عددهای خودت ساخته می‌شود. تعارف ندارد.</p>
+      <div class="insights" id="insights"></div>
+    </div>
+  </div>
+  <div class="card">
+    <div class="row spread"><h2>ثبت سریع درآمد این ماه</h2><span class="muted" id="qMonth"></span></div>
+    <form class="form" id="quickIncome">
+      <label class="f">منبع<select id="qStream"></select></label>
+      <label class="f">مبلغ (تومان)<input type="number" id="qAmount" min="0" step="1000" inputmode="numeric" placeholder="مثلاً 2500000"></label>
+      <button class="btn primary">اضافه به این ماه</button>
+    </form>
+  </div>
+</section>
+
+<!-- GOALS -->
+<section class="pane" data-pane="goals" hidden>
+  <div class="card">
+    <span class="eyebrow">چشم‌انداز</span>
+    <textarea id="vision" aria-label="چشم‌انداز" placeholder="سه سال دیگر کجا هستی؟"></textarea>
+  </div>
+  <div class="row spread"><h2>اهداف قابل اندازه‌گیری</h2><span class="muted">هدف بدون عدد و مهلت، فقط آرزوست.</span></div>
+  <div id="goalList" style="display:grid;gap:12px"></div>
+  <div class="card">
+    <h3>هدف جدید</h3>
+    <form class="form" id="goalForm">
+      <label class="f" style="flex:2 1 260px">عنوان<input type="text" id="gTitle" required placeholder="مثلاً: ۲۰ فروشگاه ثابت تیچای"></label>
+      <label class="f">افق<select id="gHorizon"><option value="year">سالانه</option><option value="quarter">فصلی</option><option value="month">ماهانه</option></select></label>
+      <label class="f">منبع درآمد مرتبط<select id="gStream"></select></label>
+      <label class="f">عدد فعلی<input type="number" id="gCur" value="0"></label>
+      <label class="f">عدد هدف<input type="number" id="gTarget" required></label>
+      <label class="f">واحد<input type="text" id="gUnit" placeholder="فروشگاه / میلیون تومان / مشتری"></label>
+      <label class="f">مهلت (سال/ماه شمسی)<input type="text" id="gDeadline" placeholder="1405/12" pattern="\d{4}/\d{1,2}"></label>
+      <button class="btn primary">ثبت هدف</button>
+    </form>
+  </div>
+</section>
+
+<!-- INCOME -->
+<section class="pane" data-pane="income" hidden>
+  <div class="card">
+    <div class="row spread"><h2>درآمد ۶ ماه اخیر</h2><span class="muted">خط‌چین = هدف ماهانه</span></div>
+    <div class="legend" id="legend"></div>
+    <div class="chart" id="chart"></div>
+  </div>
+  <div class="card">
+    <h2>منابع درآمد</h2>
+    <div id="streamList"></div>
+    <form class="form" id="streamForm">
+      <label class="f" style="flex:2 1 220px">نام منبع<input type="text" id="sName" required placeholder="مثلاً: پخش عمده تیچای"></label>
+      <label class="f">نوع<select id="sKind"><option value="active">کسب‌وکار فعال</option><option value="passive">درآمد غیرفعال</option><option value="job">حقوق</option></select></label>
+      <label class="f">هدف ماهانه (تومان)<input type="number" id="sTarget" min="0" step="100000"></label>
+      <button class="btn primary">افزودن منبع</button>
+    </form>
+  </div>
+  <div class="card">
+    <h2>جدول درآمد ماهانه</h2>
+    <p class="muted" style="margin:0">هر خانه را مستقیم ویرایش کن. مبالغ به تومان.</p>
+    <div class="tablewrap" id="incomeTable"></div>
+  </div>
+</section>
+
+<!-- REVIEW -->
+<section class="pane" data-pane="review" hidden>
+  <div class="card">
+    <div class="row spread"><h2>بازبینی این هفته</h2><span class="muted" id="lastReview"></span></div>
+    <form id="reviewForm" style="display:grid;gap:10px">
+      <label class="f">این هفته دقیقاً چه کار کردم؟<textarea id="rDid"></textarea></label>
+      <label class="f">نتیجه با عدد (فروش، مشتری جدید، مذاکره)<textarea id="rResult"></textarea></label>
+      <label class="f">چه چیزی جواب نداد و چرا؟<textarea id="rFail"></textarea></label>
+      <label class="f">درس این هفته<textarea id="rLesson"></textarea></label>
+      <label class="f">تنها تمرکز هفته بعد (یک جمله)<input type="text" id="rFocus"></label>
+      <div class="row"><button class="btn primary">ثبت بازبینی</button></div>
+    </form>
+  </div>
+  <div class="card">
+    <h2>بازبینی‌های قبلی</h2>
+    <div id="reviewList"></div>
+  </div>
+</section>
+
+<!-- COACH -->
+<section class="pane" data-pane="coach" hidden>
+  <div class="card">
+    <h2>مربی هوش مصنوعی</h2>
+    <p class="muted" style="margin:0" id="coachNote">مربی کل عددها، اهداف و بازبینی‌هایت را می‌خواند و بدون تعارف تحلیل می‌کند.</p>
+    <div id="coachUi" style="display:grid;gap:12px">
+      <div class="chips">
+        <button class="btn" data-ask="audit">تحلیل صادقانه وضعیت</button>
+        <button class="btn" data-ask="week">برنامه هفته بعد</button>
+        <button class="btn" data-ask="cut">چه چیزی را باید کنار بگذارم؟</button>
+        <button class="btn" data-ask="sales">اسکریپت فروش تیچای</button>
+      </div>
+      <form class="form" id="coachForm"><label class="f" style="flex:1 1 260px">سؤال خودت<input type="text" id="coachQ" placeholder="مثلاً: با ۲۰ میلیون سرمایه کدام مسیر را اول ببرم جلو؟"></label><button class="btn primary">بپرس</button><button class="btn ghost" type="button" id="coachStop" hidden>توقف</button></form>
+      <div class="coach-out" id="coachOut">یکی از دکمه‌ها را بزن یا سؤالت را بنویس.</div>
+    </div>
+    <div id="coachOff" hidden class="muted">مربی فقط وقتی این صفحه داخل Claude باز شود کار می‌کند. در نسخه مستقل، از تب تنظیمات «کپی داده‌ها» را بزن و خروجی را برای Claude بفرست.</div>
+  </div>
+</section>
+
+<!-- SETTINGS -->
+<section class="pane" data-pane="settings" hidden>
+  <div class="card">
+    <h2>هدف اصلی (ستاره شمالی)</h2>
+    <form class="form" id="profileForm">
+      <label class="f">نام<input type="text" id="pName"></label>
+      <label class="f">هدف درآمد ماهانه (تومان)<input type="number" id="pTarget" min="0" step="1000000"></label>
+      <label class="f">تا تاریخ (سال/ماه شمسی)<input type="text" id="pDeadline" placeholder="1406/12" pattern="\d{4}/\d{1,2}"></label>
+      <label class="f" style="flex-basis:100%">درباره من (مربی این را می‌خواند)<textarea id="pAbout"></textarea></label>
+      <button class="btn primary">ذخیره</button>
+    </form>
+  </div>
+  <div class="card">
+    <h2>پشتیبان‌گیری</h2>
+    <p class="muted" style="margin:0">کل داده‌ها به صورت متن JSON. کپی کن و جایی امن نگه دار؛ برای بازگردانی، متن را اینجا بچسبان.</p>
+    <textarea id="backup" style="min-height:120px;direction:ltr;text-align:left;font-size:.8rem"></textarea>
+    <div class="row"><button class="btn" id="copyData">کپی داده‌ها</button><button class="btn" id="importData">بازگردانی از متن بالا</button><button class="btn danger" id="resetAll">پاک کردن همه</button></div>
+    <div id="resetConfirm" hidden class="banner" style="background:var(--crit-bg);border-color:var(--crit)"><span>همه اهداف، درآمدها و بازبینی‌ها پاک شود؟</span><div class="row"><button class="btn danger" id="resetYes">بله، پاک کن</button><button class="btn ghost" id="resetNo">نه</button></div></div>
+  </div>
+</section>
+
+</div>
+<div class="toast" id="toast" hidden></div>
+
+<script>
+(function(){
+"use strict";
+// ---------- تاریخ شمسی ----------
+const MONTHS=["فروردین","اردیبهشت","خرداد","تیر","مرداد","شهریور","مهر","آبان","آذر","دی","بهمن","اسفند"];
+function jNow(d){
+  const p=new Intl.DateTimeFormat("en-u-ca-persian-nu-latn",{year:"numeric",month:"numeric",day:"numeric"}).formatToParts(d||new Date());
+  const g=t=>parseInt((p.find(x=>x.type===t)||{}).value,10);
+  return {y:g("year"),m:g("month"),d:g("day")};
+}
+const pad=n=>String(n).padStart(2,"0");
+const mKey=(y,m)=>y+"-"+pad(m);
+function shiftMonth(y,m,k){let t=y*12+(m-1)+k;return {y:Math.floor(t/12),m:t%12+1};}
+function dayKey(d){const j=jNow(d);return j.y+"-"+pad(j.m)+"-"+pad(j.d);}
+function daysAgo(n){const d=new Date();d.setDate(d.getDate()-n);return d;}
+function monthsUntil(str){ // "1406/12" -> months from now
+  const m=/^(\d{4})\/(\d{1,2})$/.exec((str||"").trim()); if(!m) return null;
+  const j=jNow(); return (+m[1]*12+ +m[2])-(j.y*12+j.m);
+}
+const J=jNow(), CUR=mKey(J.y,J.m), TODAY=dayKey();
+
+// ---------- قالب‌بندی عدد ----------
+const fa=n=>Number(n||0).toLocaleString("fa-IR");
+function money(n){
+  n=Number(n)||0; const a=Math.abs(n);
+  if(a>=1e9) return (n/1e9).toLocaleString("fa-IR",{maximumFractionDigits:2})+" میلیارد";
+  if(a>=1e6) return (n/1e6).toLocaleString("fa-IR",{maximumFractionDigits:1})+" میلیون";
+  if(a>=1e3) return (n/1e3).toLocaleString("fa-IR",{maximumFractionDigits:0})+" هزار";
+  return fa(n);
+}
+const uid=()=>Math.random().toString(36).slice(2,9);
+const esc=s=>String(s==null?"":s).replace(/[&<>"]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));
+
+// ---------- داده اولیه (نمونه) ----------
+function seed(){
+  const back=k=>{const t=shiftMonth(J.y,J.m,-k);return mKey(t.y,t.m);};
+  const e=(arr)=>{const o={};arr.forEach((v,i)=>{if(v!=null)o[back(arr.length-1-i)]=v;});return o;};
+  return {
+    v:1, sample:true,
+    profile:{name:"مهرداد",target:100000000,deadline:(J.y+1)+"/12",
+      about:"سرپرست واحد سپیا در کارخانه چینی بهداشتی، مدیر تیم ۱۰ نفره. در حال ساخت شبکه پخش عمده قهوه فوری لیوانی تیچای و پروژه‌های نرم‌افزاری (NovaTunnel، VQ Factory). هدف: عبور از درآمد کارمندی، چند منبع درآمد، و تبدیل شدن به متخصص فروش و هوش مصنوعی؛ ساخت سیستمی که فروش را بدون دخالت انسانی انجام دهد. تعارف نمی‌خواهم؛ واقعیت و چالش‌ها را می‌خواهم."},
+    vision:"سه سال دیگر: درآمد ماهانه پایدار از چند منبع، که بیشترش به حضور روزانه من وابسته نیست. یک سیستم فروش مبتنی بر هوش مصنوعی که محصولات مختلف را خودکار می‌فروشد، و شناخته شدن به عنوان متخصص فروش با AI.",
+    streams:[
+      {id:"s_job",name:"حقوق (سرپرست سپیا)",kind:"job",target:0,entries:e([30e6,30e6,30e6,30e6,32e6,32e6])},
+      {id:"s_tch",name:"پخش تیچای",kind:"active",target:30e6,entries:e([0,1.5e6,3e6,2e6,4.5e6,6e6])},
+      {id:"s_nova",name:"NovaTunnel",kind:"active",target:20e6,entries:e([0,0,0,0.8e6,1.2e6,0])},
+      {id:"s_ai",name:"سیستم فروش هوش مصنوعی",kind:"passive",target:50e6,entries:{}}
+    ],
+    goals:[
+      {id:uid(),title:"فروشگاه ثابت و تکراری برای تیچای",horizon:"quarter",streamId:"s_tch",cur:7,target:30,unit:"فروشگاه",deadline:J.y+"/"+Math.min(12,J.m+3),
+        ms:[{t:"لیست ۱۰۰ فروشگاه هدف در ۳ محله",done:true},{t:"اسکریپت مذاکره و قیمت عمده نهایی",done:true},{t:"۵ مراجعه در هفته، ثبت نتیجه هر مراجعه",done:false},{t:"اولین قرارداد با یک عمده‌فروش",done:false}]},
+      {id:uid(),title:"درآمد جانبی ماهانه غیر از حقوق",horizon:"year",streamId:"",cur:6,target:50,unit:"میلیون تومان",deadline:J.y+1+"/06",ms:[]},
+      {id:uid(),title:"نسخه اول دستیار فروش خودکار (تحلیل بازار → پیام → پیگیری)",horizon:"quarter",streamId:"s_ai",cur:1,target:4,unit:"مرحله",deadline:J.y+"/12",
+        ms:[{t:"جمع‌آوری داده ۵۰ مشتری تیچای در یک جدول",done:true},{t:"پیام پیگیری خودکار در تلگرام",done:false},{t:"تست روی ۱۰ مشتری واقعی",done:false},{t:"اندازه‌گیری نرخ تبدیل قبل و بعد",done:false}]}
+    ],
+    today:{date:TODAY,tasks:[{t:"۵ مراجعه حضوری به فروشگاه‌های جدید تیچای",done:true,carried:false},{t:"پیگیری تلفنی ۳ مشتری که نمونه گرفته‌اند",done:false,carried:false},{t:"۴۵ دقیقه کار روی سیستم فروش AI",done:false,carried:false}]},
+    history:(()=>{const h={};[1,1,0.66,1,0,1,1,0.33,1,1,1,0.66,1].forEach((r,i)=>{h[dayKey(daysAgo(i+1))]={done:Math.round(r*3),total:3};});return h;})(),
+    reviews:[{id:uid(),date:dayKey(daysAgo(6)),did:"۱۸ مراجعه حضوری، ۴ نمونه رایگان، ۲ جلسه کار روی NovaTunnel",result:"۳ فروشگاه جدید، مجموعاً ۱۲ کارتن",fail:"فروشگاه‌های بزرگ زنجیره‌ای بدون معرف جواب ندادند",lesson:"سوپرمارکت‌های محله‌ای با نمونه رایگان راحت‌تر قبول می‌کنند",focus:"فقط تیچای: ۲۵ مراجعه و ۵ مشتری جدید"}]
+  };
+}
+function blank(){
+  return {v:1,sample:false,profile:{name:"",target:0,deadline:"",about:""},vision:"",streams:[],goals:[],today:{date:TODAY,tasks:[]},history:{},reviews:[]};
+}
+
+// ---------- ذخیره‌سازی ----------
+const LS="ghotbnama.v1";
+let S=null, dbRef=null, saveT=null;
+function lsGet(){try{const r=localStorage.getItem(LS);return r?JSON.parse(r):null;}catch(e){return null;}}
+function lsSet(){try{localStorage.setItem(LS,JSON.stringify(S));}catch(e){}}
+function save(){
+  lsSet();
+  clearTimeout(saveT);
+  if(dbRef) saveT=setTimeout(()=>{
+    dbRef.set({state:JSON.stringify(S),updated:Date.now()}).then(()=>setSync("ذخیره در حساب Claude")).catch(()=>setSync("ذخیره ابری ناموفق؛ روی دستگاه ذخیره شد"));
+  },700);
+}
+function setSync(t){document.getElementById("syncLabel").textContent=t;}
+function valid(o){return o&&typeof o==="object"&&Array.isArray(o.streams)&&Array.isArray(o.goals)&&o.profile;}
+
+function rollDay(){
+  if(S.today.date===TODAY) return;
+  const t=S.today.tasks;
+  if(t.length) S.history[S.today.date]={done:t.filter(x=>x.done).length,total:t.length};
+  S.today={date:TODAY,tasks:t.filter(x=>!x.done).map(x=>({t:x.t,done:false,carried:true}))};
+}
+
+// ---------- محاسبات ----------
+const monthTotal=k=>S.streams.reduce((a,s)=>a+(Number(s.entries[k])||0),0);
+const sideTotal=k=>S.streams.filter(s=>s.kind!=="job").reduce((a,s)=>a+(Number(s.entries[k])||0),0);
+function lastMonths(n){const r=[];for(let i=n-1;i>=0;i--){const t=shiftMonth(J.y,J.m,-i);r.push({k:mKey(t.y,t.m),label:MONTHS[t.m-1]});}return r;}
+function streakDays(){
+  let n=0; const tt=S.today.tasks;
+  const todayFull=tt.length&&tt.every(x=>x.done);
+  for(let i=1;i<400;i++){const h=S.history[dayKey(daysAgo(i))]; if(h&&h.total&&h.done===h.total) n++; else break;}
+  return n+(todayFull?1:0);
+}
+
+function insights(){
+  const out=[]; const p=S.profile;
+  const prev=shiftMonth(J.y,J.m,-1), prevK=mKey(prev.y,prev.m);
+  const cur=monthTotal(CUR), last=monthTotal(prevK);
+  if(!p.target) out.push(["warn","هدف","هنوز عدد هدف درآمد ماهانه را در تنظیمات مشخص نکرده‌ای. بدون عدد، هیچ برنامه‌ای قابل سنجش نیست."]);
+  const mu=monthsUntil(p.deadline);
+  if(p.target&&mu!=null&&mu>0){
+    const base=Math.max(cur,last);
+    const gap=p.target-base;
+    if(gap>0){
+      const perMonth=gap/mu;
+      out.push([perMonth>base*0.15&&base>0?"crit":"warn","شکاف",`تا ${p.deadline} باید ماهی حدود ${money(perMonth)} تومان به درآمد ماهانه‌ات اضافه شود (${fa(mu)} ماه فرصت). ${base>0?`یعنی رشد ماهانه ${fa(Math.round(perMonth/base*100))}٪ نسبت به الان.`:""}`]);
+    } else out.push(["good","هدف","درآمد ماهانه‌ات به هدف رسیده. وقت بالا بردن هدف است."]);
+  }
+  const side=S.streams.filter(s=>s.kind!=="job");
+  const job=S.streams.filter(s=>s.kind==="job").reduce((a,s)=>a+(Number(s.entries[CUR]||s.entries[prevK])||0),0);
+  const sideNow=Math.max(sideTotal(CUR),sideTotal(prevK));
+  if(job>0&&sideNow>0) out.push([sideNow<job*0.25?"warn":"good","وابستگی",`درآمد جانبی ${fa(Math.round(sideNow/job*100))}٪ حقوق است. ${sideNow<job*0.25?"هنوز کاملاً به حقوق وابسته‌ای؛ اول یک منبع را به ۲۵٪ حقوق برسان.":"در مسیر درستی."}`]);
+  const active=side.filter(s=>{const m=lastMonths(3);return m.some(x=>Number(s.entries[x.k])>0)||s.target>0;});
+  if(active.length>2) out.push(["warn","تمرکز",`${fa(active.length)} مسیر درآمدی موازی داری. تا وقتی یکی به درآمد پایدار نرسیده، پخش شدن انرژی بزرگ‌ترین ریسک توست. یکی را «اصلی» کن و بقیه را حداقلی نگه دار.`]);
+  side.forEach(s=>{
+    if(!s.target) return;
+    const m=lastMonths(3).map(x=>Number(s.entries[x.k])||0);
+    if(m.every(v=>v===0)) out.push(["crit","صفر",`«${s.name}» سه ماه درآمد صفر داشته. یا این هفته یک قدم فروش مشخص برایش بردار، یا آگاهانه کنارش بگذار.`]);
+    else if(m[2]<m[1]&&m[1]<m[0]) out.push(["warn","افت",`درآمد «${s.name}» دو ماه پشت سر هم کم شده.`]);
+  });
+  const lr=S.reviews[0]; const lrDays=lr?Math.round((Date.now()-new Date(lr.ts||0).getTime())/864e5):null;
+  if(!lr) out.push(["warn","بازبینی","هنوز هیچ بازبینی هفتگی ثبت نکرده‌ای. کسی که نتیجه‌اش را نمی‌سنجد، همان اشتباه را تکرار می‌کند."]);
+  else if(lr.ts&&lrDays>8) out.push(["warn","بازبینی",`${fa(lrDays)} روز از آخرین بازبینی گذشته.`]);
+  if(S.reviews.length>=3){const f=S.reviews.slice(0,3).map(r=>(r.focus||"").trim());if(new Set(f).size===3&&f.every(Boolean))out.push(["warn","تمرکز","تمرکز سه هفته اخیرت هر هفته عوض شده. نتیجه در فروش از تکرار یک کار می‌آید، نه تغییر مداوم."]);}
+  S.goals.forEach(g=>{
+    const mu=monthsUntil(g.deadline); const pr=g.target?g.cur/g.target:0;
+    if(!g.deadline||!g.target) out.push(["warn","هدف",`هدف «${g.title}» عدد یا مهلت ندارد.`]);
+    else if(mu!=null&&mu<0&&pr<1) out.push(["crit","عقب",`مهلت «${g.title}» گذشته و ${fa(Math.round(pr*100))}٪ انجام شده. مهلت را واقع‌بینانه کن یا هدف را بشکن.`]);
+  });
+  const st=streakDays(); if(st>=5) out.push(["good","پیوستگی",`${fa(st)} روز پشت سر هم هر ۳ کار مهم را انجام داده‌ای.`]);
+  return out;
+}
+
+// ---------- رندر ----------
+const $=id=>document.getElementById(id);
+function goalStatus(g){
+  const pr=g.target?Math.min(1,g.cur/g.target):0; if(pr>=1) return ["ok","انجام شد"];
+  const mu=monthsUntil(g.deadline); if(mu==null) return ["","بدون مهلت"];
+  if(mu<0) return ["late","عقب از مهلت"]; if(mu<=1&&pr<0.7) return ["risk","در خطر"]; return ["",fa(mu)+" ماه مانده"];
+}
+function renderHero(){
+  const p=S.profile, cur=monthTotal(CUR);
+  $("hello").textContent=p.name?("برنامه "+p.name):"برنامه‌ریزی اهداف و درآمد";
+  $("todayLabel").textContent=fa(J.d)+" "+MONTHS[J.m-1]+" "+J.y.toLocaleString("fa-IR",{useGrouping:false});
+  $("nfNow").textContent=money(cur);
+  $("nfOf").textContent=p.target?("از "+money(p.target)+" تومان"):"هدف ماهانه را در تنظیمات بگذار";
+  const pr=p.target?Math.min(100,cur/p.target*100):0;
+  $("nfTrack").style.width=pr+"%"; $("nfTrackWrap").setAttribute("aria-valuenow",Math.round(pr));
+  const prev=shiftMonth(J.y,J.m,-1); const last=monthTotal(mKey(prev.y,prev.m));
+  const mu=monthsUntil(p.deadline);
+  $("nfMeta").innerHTML=`<span>ماه قبل: <b>${money(last)}</b></span><span>جانبی این ماه: <b>${money(sideTotal(CUR))}</b></span>${mu!=null?`<span>مهلت: <b>${esc(p.deadline)}</b> (${fa(mu)} ماه)</span>`:""}<span>پیوستگی: <b>${fa(streakDays())} روز</b></span>`;
+  $("sampleBanner").hidden=!S.sample;
+}
+function renderToday(){
+  const t=S.today.tasks;
+  $("taskCount").textContent=fa(t.filter(x=>x.done).length)+" از "+fa(t.length);
+  $("taskList").innerHTML=t.length?t.map((x,i)=>`<label class="task${x.done?" done":""}"><input type="checkbox" data-ti="${i}" ${x.done?"checked":""}><span>${esc(x.t)}</span>${x.carried?'<span class="carried">از دیروز</span>':""}<button type="button" class="x" data-tdel="${i}" aria-label="حذف">×</button></label>`).join(""):'<div class="muted">کار امروز را بنویس.</div>';
+  $("taskForm").querySelector("button").disabled=t.length>=3;
+  $("taskInput").disabled=t.length>=3;
+  $("taskInput").placeholder=t.length>=3?"۳ کار کافی است. اول این‌ها را تمام کن.":"مثلاً: مراجعه به ۵ سوپرمارکت جدید برای تیچای";
+  let cells="";
+  for(let i=20;i>=0;i--){const k=i?dayKey(daysAgo(i)):TODAY;const h=i?S.history[k]:{done:t.filter(x=>x.done).length,total:t.length};
+    const cls=h&&h.total?(h.done===h.total?"full":h.done?"part":""):"";cells+=`<i class="${cls}" title="${k}${h&&h.total?": "+h.done+"/"+h.total:""}"></i>`;}
+  $("streak").innerHTML=cells;
+  $("streakLabel").textContent="پیوستگی: "+fa(streakDays())+" روز";
+  $("insights").innerHTML=insights().map(([c,tag,msg])=>`<div class="ins ${c}"><span class="tag">${tag}</span><span>${esc(msg)}</span></div>`).join("")||'<div class="muted">فعلاً هشداری نیست.</div>';
+  $("qMonth").textContent=MONTHS[J.m-1];
+  $("qStream").innerHTML=S.streams.map(s=>`<option value="${s.id}">${esc(s.name)}</option>`).join("");
+}
+function streamOpts(sel){return '<option value="">—</option>'+S.streams.map(s=>`<option value="${s.id}"${s.id===sel?" selected":""}>${esc(s.name)}</option>`).join("");}
+function renderGoals(){
+  if(document.activeElement!==$("vision")) $("vision").value=S.vision||"";
+  $("gStream").innerHTML=streamOpts("");
+  const H={year:"سالانه",quarter:"فصلی",month:"ماهانه"};
+  $("goalList").innerHTML=S.goals.length?S.goals.map(g=>{
+    const pr=g.target?Math.min(100,g.cur/g.target*100):0; const [c,l]=goalStatus(g);
+    const st=S.streams.find(s=>s.id===g.streamId);
+    return `<div class="goal" data-gid="${g.id}">
+      <div class="row spread"><h3>${esc(g.title)}</h3><div class="row"><span class="pill">${H[g.horizon]||""}</span><span class="pill ${c}">${l}</span><button class="x" data-gdel="${g.id}" aria-label="حذف هدف">×</button></div></div>
+      ${st?`<span class="muted">منبع: ${esc(st.name)}</span>`:""}
+      <div class="row spread num"><span><b>${fa(g.cur)}</b> از ${fa(g.target)} ${esc(g.unit)}</span><span class="muted">${fa(Math.round(pr))}٪ · مهلت ${esc(g.deadline||"—")}</span></div>
+      <div class="bar"><i style="width:${pr}%"></i></div>
+      <div class="row"><label class="f" style="flex:0 1 160px">به‌روزرسانی عدد فعلی<input type="number" data-gcur="${g.id}" value="${g.cur}"></label></div>
+      ${g.ms.map((m,i)=>`<label class="ms"><input type="checkbox" data-ms="${g.id}:${i}" ${m.done?"checked":""}><span style="${m.done?"text-decoration:line-through;color:var(--ink3)":""}">${esc(m.t)}</span></label>`).join("")}
+      <form class="form" data-msadd="${g.id}"><label class="f" style="flex:1 1 200px">قدم بعدی<input type="text" placeholder="یک قدم کوچک و مشخص"></label><button class="btn">افزودن قدم</button></form>
+    </div>`;}).join(""):'<div class="card muted">هنوز هدفی نداری. اولین هدف را پایین همین صفحه بنویس.</div>';
+}
+function colorOf(i){return "var(--s"+(i%4+1)+")";}
+function renderIncome(){
+  const months=lastMonths(6);
+  const ss=S.streams.slice(0,4);
+  $("legend").innerHTML=ss.map((s,i)=>`<span><i class="dot" style="background:${colorOf(i)}"></i>${esc(s.name)}</span>`).join("")+(S.streams.length>4?'<span class="muted">(فقط ۴ منبع اول در نمودار)</span>':"");
+  // نمودار ستونی انباشته
+  const W=640,H=250,L=58,R=12,T=14,B=30, pw=W-L-R, ph=H-T-B;
+  const totals=months.map(m=>ss.reduce((a,s)=>a+(Number(s.entries[m.k])||0),0));
+  const target=S.profile.target||0;
+  let max=Math.max(1,...totals,target); const step=niceStep(max/4); max=Math.ceil(max/step)*step;
+  const y=v=>T+ph-(v/max)*ph; const bw=pw/months.length*0.52;
+  let g=`<svg viewBox="0 0 ${W} ${H}" role="img" aria-label="نمودار درآمد ماهانه" style="direction:ltr">`;
+  for(let v=0;v<=max+1;v+=step){g+=`<line x1="${L}" x2="${W-R}" y1="${y(v)}" y2="${y(v)}" stroke="var(--line)" stroke-width="1"/><text x="${L-8}" y="${y(v)+4}" text-anchor="end" font-size="11" fill="var(--ink3)">${money(v)}</text>`;}
+  months.forEach((m,i)=>{
+    const cx=L+pw/months.length*(i+.5); let acc=0;
+    const segs=ss.map((s,si)=>({v:Number(s.entries[m.k])||0,si})).filter(x=>x.v>0);
+    segs.forEach((sg,j)=>{
+      const y0=y(acc), y1=y(acc+sg.v); acc+=sg.v; const top=j===segs.length-1;
+      const h=Math.max(0,y0-y1-(top?0:2));
+      g+=top?`<path d="M${cx-bw/2},${y0} V${y0-h+4} Q${cx-bw/2},${y0-h} ${cx-bw/2+4},${y0-h} H${cx+bw/2-4} Q${cx+bw/2},${y0-h} ${cx+bw/2},${y0-h+4} V${y0} Z" fill="${colorOf(sg.si)}"/>`:`<rect x="${cx-bw/2}" y="${y0-h}" width="${bw}" height="${h}" fill="${colorOf(sg.si)}"/>`;
+    });
+    g+=`<text x="${cx}" y="${H-10}" text-anchor="middle" font-size="12" fill="var(--ink2)" font-family="Vazirmatn,Tahoma,sans-serif">${m.label}</text>`;
+    g+=`<rect x="${cx-pw/months.length/2}" y="${T}" width="${pw/months.length}" height="${ph}" fill="transparent" data-mi="${i}"/>`;
+  });
+  if(target) g+=`<line x1="${L}" x2="${W-R}" y1="${y(target)}" y2="${y(target)}" stroke="var(--gold)" stroke-width="2" stroke-dasharray="6 5"/>`;
+  g+=`</svg><div class="tip" id="tip" hidden></div>`;
+  $("chart").innerHTML=g;
+  $("chart").querySelectorAll("[data-mi]").forEach(r=>{
+    r.addEventListener("pointerenter",ev=>{const i=+r.dataset.mi,m=months[i];const tip=$("tip");
+      tip.innerHTML=`<b>${m.label}</b> · ${money(totals[i])}<br>`+ss.map(s=>`${esc(s.name)}: ${money(s.entries[m.k]||0)}`).join("<br>");
+      const box=$("chart").getBoundingClientRect(), rb=r.getBoundingClientRect();
+      tip.style.right="auto"; tip.style.left=(rb.left-box.left+rb.width/2)+"px"; tip.style.top=(rb.top-box.top+30)+"px"; tip.style.transform="translate(-50%,0)"; tip.hidden=false;});
+    r.addEventListener("pointerleave",()=>{$("tip").hidden=true;});
+  });
+  // لیست منابع
+  const K={job:"حقوق",active:"کسب‌وکار فعال",passive:"غیرفعال"};
+  $("streamList").innerHTML=S.streams.map((s,i)=>{const c=Number(s.entries[CUR])||0;const pr=s.target?Math.min(100,c/s.target*100):0;
+    return `<div class="stream"><i class="dot" style="background:${i<4?colorOf(i):"var(--ink3)"}"></i><div style="display:grid;gap:4px"><div class="row"><b>${esc(s.name)}</b><span class="pill">${K[s.kind]}</span></div>
+    <div class="muted num">این ماه ${money(c)}${s.target?` از هدف ${money(s.target)}`:""}</div>${s.target?`<div class="bar"><i style="width:${pr}%"></i></div>`:""}</div>
+    <button class="x" data-sdel="${s.id}" aria-label="حذف منبع">×</button></div>`;}).join("")||'<div class="muted">منبع درآمدی تعریف نشده.</div>';
+  // جدول
+  const tm=lastMonths(6);
+  $("incomeTable").innerHTML=`<table class="num"><thead><tr><th>منبع</th>${tm.map(m=>`<th>${m.label}</th>`).join("")}</tr></thead><tbody>${
+    S.streams.map(s=>`<tr><td>${esc(s.name)}</td>${tm.map(m=>`<td><input type="number" min="0" step="100000" data-cell="${s.id}|${m.k}" value="${s.entries[m.k]!=null?s.entries[m.k]:""}" aria-label="${esc(s.name)} ${m.label}"></td>`).join("")}</tr>`).join("")
+  }<tr><td><b>جمع</b></td>${tm.map(m=>`<td><b>${money(monthTotal(m.k))}</b></td>`).join("")}</tr></tbody></table>`;
+}
+function niceStep(x){const p=Math.pow(10,Math.floor(Math.log10(x||1)));const f=x/p;return (f<=1?1:f<=2?2:f<=5?5:10)*p;}
+function renderReview(){
+  const lr=S.reviews[0];
+  $("lastReview").textContent=lr?("آخرین: "+lr.date.replace(/-/g,"/")):"";
+  $("reviewList").innerHTML=S.reviews.map(r=>`<div class="review"><div class="row spread"><b class="num">${r.date.replace(/-/g,"/")}</b><button class="x" data-rdel="${r.id}" aria-label="حذف">×</button></div>
+    ${r.focus?`<div><span class="pill ok">تمرکز بعدی</span> ${esc(r.focus)}</div>`:""}
+    ${r.did?`<div><b>انجام شد:</b> ${esc(r.did)}</div>`:""}${r.result?`<div><b>نتیجه:</b> ${esc(r.result)}</div>`:""}
+    ${r.fail?`<div><b>جواب نداد:</b> ${esc(r.fail)}</div>`:""}${r.lesson?`<div><b>درس:</b> ${esc(r.lesson)}</div>`:""}</div>`).join("")||'<div class="muted">هنوز بازبینی ثبت نشده.</div>';
+}
+function renderSettings(){
+  const p=S.profile; const a=document.activeElement;
+  [["pName",p.name],["pTarget",p.target||""],["pDeadline",p.deadline],["pAbout",p.about]].forEach(([id,v])=>{if(a!==$(id))$(id).value=v||"";});
+}
+function render(){renderHero();renderToday();renderGoals();renderIncome();renderReview();renderSettings();}
+
+let toastT;
+function toast(msg){const t=$("toast");t.textContent=msg;t.hidden=false;clearTimeout(toastT);toastT=setTimeout(()=>t.hidden=true,2200);}
+function commit(msg){save();render();if(msg)toast(msg);}
+
+// ---------- رویدادها ----------
+$("tabs").addEventListener("click",e=>{const b=e.target.closest("button[data-tab]");if(!b)return;showTab(b.dataset.tab);});
+function showTab(t){
+  document.querySelectorAll("#tabs button").forEach(b=>b.setAttribute("aria-selected",String(b.dataset.tab===t)));
+  document.querySelectorAll("section.pane").forEach(p=>p.hidden=p.dataset.pane!==t);
+  try{localStorage.setItem(LS+".tab",t);}catch(e){}
+}
+$("clearSample").onclick=()=>{
+  S.streams.forEach(s=>s.entries={}); S.goals.forEach(g=>{g.cur=0;g.ms.forEach(m=>m.done=false);});
+  S.today={date:TODAY,tasks:[]}; S.history={}; S.reviews=[]; S.sample=false; commit("عددهای نمونه پاک شد. حالا عدد واقعی خودت را وارد کن.");
+};
+$("taskForm").onsubmit=e=>{e.preventDefault();const v=$("taskInput").value.trim();if(!v||S.today.tasks.length>=3)return;S.today.tasks.push({t:v,done:false,carried:false});$("taskInput").value="";commit();};
+$("taskList").addEventListener("change",e=>{const i=e.target.dataset.ti;if(i==null)return;S.today.tasks[i].done=e.target.checked;const all=S.today.tasks.every(x=>x.done);commit(all?"هر ۳ کار امروز انجام شد.":"");});
+$("taskList").addEventListener("click",e=>{const i=e.target.dataset.tdel;if(i==null)return;e.preventDefault();S.today.tasks.splice(i,1);commit();});
+$("quickIncome").onsubmit=e=>{e.preventDefault();const s=S.streams.find(x=>x.id===$("qStream").value);const a=Number($("qAmount").value);if(!s||!a)return;s.entries[CUR]=(Number(s.entries[CUR])||0)+a;$("qAmount").value="";commit(money(a)+" تومان به «"+s.name+"» اضافه شد.");};
+
+$("vision").addEventListener("input",e=>{S.vision=e.target.value;save();});
+$("goalForm").onsubmit=e=>{e.preventDefault();S.goals.push({id:uid(),title:$("gTitle").value.trim(),horizon:$("gHorizon").value,streamId:$("gStream").value,cur:Number($("gCur").value)||0,target:Number($("gTarget").value)||0,unit:$("gUnit").value.trim(),deadline:$("gDeadline").value.trim(),ms:[]});e.target.reset();commit("هدف ثبت شد.");};
+$("goalList").addEventListener("change",e=>{
+  const t=e.target;
+  if(t.dataset.gcur){const g=S.goals.find(x=>x.id===t.dataset.gcur);g.cur=Number(t.value)||0;commit("عدد هدف به‌روز شد.");}
+  if(t.dataset.ms){const [gid,i]=t.dataset.ms.split(":");S.goals.find(x=>x.id===gid).ms[i].done=t.checked;commit();}
+});
+$("goalList").addEventListener("click",e=>{const id=e.target.dataset.gdel;if(!id)return;S.goals=S.goals.filter(g=>g.id!==id);commit("هدف حذف شد.");});
+$("goalList").addEventListener("submit",e=>{e.preventDefault();const id=e.target.dataset.msadd;const inp=e.target.querySelector("input");if(!inp.value.trim())return;S.goals.find(g=>g.id===id).ms.push({t:inp.value.trim(),done:false});commit();});
+
+$("streamForm").onsubmit=e=>{e.preventDefault();S.streams.push({id:"s_"+uid(),name:$("sName").value.trim(),kind:$("sKind").value,target:Number($("sTarget").value)||0,entries:{}});e.target.reset();commit("منبع درآمد اضافه شد.");};
+$("streamList").addEventListener("click",e=>{const id=e.target.dataset.sdel;if(!id)return;S.streams=S.streams.filter(s=>s.id!==id);S.goals.forEach(g=>{if(g.streamId===id)g.streamId="";});commit("منبع حذف شد.");});
+$("incomeTable").addEventListener("change",e=>{const c=e.target.dataset.cell;if(!c)return;const [sid,k]=c.split("|");const s=S.streams.find(x=>x.id===sid);if(e.target.value==="")delete s.entries[k];else s.entries[k]=Number(e.target.value)||0;commit();});
+
+$("reviewForm").onsubmit=e=>{e.preventDefault();const r={id:uid(),date:TODAY,ts:Date.now(),did:$("rDid").value.trim(),result:$("rResult").value.trim(),fail:$("rFail").value.trim(),lesson:$("rLesson").value.trim(),focus:$("rFocus").value.trim()};
+  if(!r.did&&!r.result){toast("حداقل بنویس چه کار کردی و چه نتیجه‌ای گرفتی.");return;}S.reviews.unshift(r);e.target.reset();commit("بازبینی ثبت شد.");};
+$("reviewList").addEventListener("click",e=>{const id=e.target.dataset.rdel;if(!id)return;S.reviews=S.reviews.filter(r=>r.id!==id);commit();});
+
+$("profileForm").onsubmit=e=>{e.preventDefault();Object.assign(S.profile,{name:$("pName").value.trim(),target:Number($("pTarget").value)||0,deadline:$("pDeadline").value.trim(),about:$("pAbout").value.trim()});commit("ذخیره شد.");};
+$("copyData").onclick=()=>{const txt=JSON.stringify(S);$("backup").value=txt;
+  const done=()=>toast("داده‌ها کپی شد.");
+  try{navigator.clipboard.writeText(txt).then(done,()=>{$("backup").select();toast("متن انتخاب شد؛ خودت کپی کن.");});}catch(err){$("backup").select();toast("متن انتخاب شد؛ خودت کپی کن.");}};
+$("importData").onclick=()=>{try{const o=JSON.parse($("backup").value);if(!valid(o))throw 0;S=o;rollDay();commit("داده‌ها بازگردانی شد.");}catch(err){toast("متن معتبر نیست. کل متن JSON کپی‌شده را بچسبان.");}};
+$("resetAll").onclick=()=>{$("resetConfirm").hidden=false;};
+$("resetNo").onclick=()=>{$("resetConfirm").hidden=true;};
+$("resetYes").onclick=()=>{S=blank();$("resetConfirm").hidden=true;commit("همه چیز پاک شد.");};
+
+// ---------- مربی هوش مصنوعی ----------
+let sample=null, coachCtl=null;
+const ASKS={
+  audit:"وضعیت فعلی من را بدون تعارف تحلیل کن: بزرگ‌ترین گلوگاه رسیدن به هدف درآمدی‌ام چیست؟ کدام منبع درآمد بیشترین پتانسیل واقعی را دارد و چرا؟ با عدد استدلال کن.",
+  week:"بر اساس داده‌ها و آخرین بازبینی، برنامه ۷ روز آینده را بده: دقیقاً ۳ کار کلیدی برای هر روز کاری (کوتاه)، با یک عدد قابل اندازه‌گیری برای آخر هفته.",
+  cut:"با توجه به زمان محدود من (کار تمام‌وقت + کسب‌وکارهای جانبی)، کدام مسیر یا فعالیت را باید متوقف یا حداقلی کنم؟ صریح بگو و دلیلش را با عددهای خودم بیاور.",
+  sales:"برای فروش قهوه فوری لیوانی تیچای به صاحب یک سوپرمارکت محله‌ای، یک اسکریپت مذاکره حضوری کوتاه بنویس: جمله شروع، ۳ سؤال کشف نیاز، پاسخ به ۳ اعتراض رایج (قیمت، جا ندارم، فروش نمی‌رود)، و جمله بستن. بعد بگو چطور همین اسکریپت را به یک سیستم پیگیری خودکار با هوش مصنوعی تبدیل کنم."
+};
+function context(){
+  const months=lastMonths(6);
+  const inc=S.streams.map(s=>`- ${s.name} (${s.kind==="job"?"حقوق":s.kind==="passive"?"غیرفعال":"فعال"}، هدف ماهانه ${s.target||0}): `+months.map(m=>`${m.label}=${s.entries[m.k]||0}`).join("، ")).join("\n");
+  const goals=S.goals.map(g=>`- ${g.title}: ${g.cur}/${g.target} ${g.unit}، مهلت ${g.deadline||"ندارد"}، قدم‌ها: ${g.ms.map(m=>(m.done?"[✓] ":"[ ] ")+m.t).join(" | ")||"—"}`).join("\n");
+  const rv=S.reviews.slice(0,4).map(r=>`- ${r.date}: انجام=${r.did} | نتیجه=${r.result} | جواب نداد=${r.fail} | درس=${r.lesson} | تمرکز بعدی=${r.focus}`).join("\n");
+  const h=Object.values(S.history).slice(-21); const done=h.filter(x=>x.total&&x.done===x.total).length;
+  return `امروز: ${TODAY} (تقویم شمسی). مبالغ به تومان.
+درباره من: ${S.profile.about||"—"}
+هدف درآمد ماهانه: ${S.profile.target||"تعیین نشده"} تا ${S.profile.deadline||"—"}
+چشم‌انداز: ${S.vision||"—"}
+درآمد ۶ ماه اخیر:
+${inc||"—"}
+اهداف:
+${goals||"—"}
+بازبینی‌های اخیر:
+${rv||"—"}
+کارهای امروز: ${S.today.tasks.map(t=>(t.done?"[✓] ":"[ ] ")+t.t).join(" | ")||"—"}
+در ${h.length} روز ثبت‌شده اخیر، ${done} روز هر ۳ کار مهم کامل شد.${S.sample?"\nتوجه: بخشی از این داده‌ها هنوز داده نمونه است، نه واقعی.":""}`;
+}
+const RULES="تو مربی کسب‌وکار و فروش شخصی من هستی. فارسی، صریح، بدون تعریف و تمجید بی‌دلیل. واقعیت‌ها، مزایا، معایب و ریسک‌ها را بگو. با عددهای خودم استدلال کن و اگر داده کافی نیست بگو دقیقاً چه عددی لازم است. جواب کوتاه و قابل اجرا باشد: حداکثر حدود ۲۵۰ کلمه، با فهرست‌های کوتاه. از Markdown سنگین (جدول، تیتر #) استفاده نکن؛ فقط خط تیره برای فهرست.";
+async function ask(q){
+  if(!sample) return;
+  const out=$("coachOut"); coachCtl=new AbortController(); $("coachStop").hidden=false;
+  document.querySelectorAll("#coachUi button[data-ask], #coachForm button.primary").forEach(b=>b.disabled=true);
+  out.textContent="در حال فکر کردن…";
+  try{
+    await sample(RULES+"\n\n=== داده‌های من ===\n"+context()+"\n\n=== درخواست ===\n"+q,{signal:coachCtl.signal,cache:false,onText:({text})=>{out.textContent=text;}});
+  }catch(e){
+    out.textContent=e.text||"";
+    const M={not_granted:"اجازه استفاده از مربی داده نشد.",rate_limited:"درخواست‌ها زیاد بود. چند دقیقه بعد دوباره امتحان کن.",cancelled:""};
+    const m=M[e.code]!=null?M[e.code]:"پاسخ دریافت نشد. دوباره امتحان کن.";
+    if(m) out.textContent=(out.textContent?out.textContent+"\n\n":"")+m;
+    if(e.code==="not_granted"){$("coachUi").hidden=true;$("coachOff").hidden=false;}
+  }finally{
+    $("coachStop").hidden=true;
+    document.querySelectorAll("#coachUi button[data-ask], #coachForm button.primary").forEach(b=>b.disabled=false);
+  }
+}
+document.querySelectorAll("[data-ask]").forEach(b=>b.onclick=()=>ask(ASKS[b.dataset.ask]));
+$("coachForm").onsubmit=e=>{e.preventDefault();const q=$("coachQ").value.trim();if(q)ask(q);};
+$("coachStop").onclick=()=>coachCtl&&coachCtl.abort();
+
+// ---------- راه‌اندازی ----------
+S=lsGet(); if(!valid(S)) S=seed();
+rollDay(); lsSet(); render();
+let tab="today"; try{tab=localStorage.getItem(LS+".tab")||"today";}catch(e){}
+if(location.hash&&document.querySelector(`[data-pane="${location.hash.slice(1)}"]`)) tab=location.hash.slice(1);
+showTab(tab);
+
+const hasClaude=window.claude&&typeof window.claude.use==="function";
+if(!hasClaude){$("coachUi").hidden=true;$("coachOff").hidden=false;}
+else{
+  window.claude.use("db").then(async db=>{
+    if(!db) return;
+    try{
+      dbRef=db.doc("plan/main");
+      const snap=await dbRef.get();
+      const remote=snap.exists?JSON.parse((snap.data()||{}).state||"null"):null;
+      if(valid(remote)){S=remote;rollDay();lsSet();render();}
+      else save();
+      setSync("ذخیره در حساب Claude");
+    }catch(e){dbRef=null;setSync("ذخیره روی همین دستگاه");}
+  }).catch(()=>{});
+  window.claude.use("sample").then(s=>{sample=s;if(!s){$("coachUi").hidden=true;$("coachOff").hidden=false;}}).catch(()=>{$("coachUi").hidden=true;$("coachOff").hidden=false;});
+}
+})();
+</script>
+</body>
+</html>
