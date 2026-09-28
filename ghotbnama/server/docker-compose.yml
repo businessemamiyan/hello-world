@@ -1,0 +1,37 @@
+# اجرا (از پوشه ghotbnama/server):
+#   docker compose up -d --build                         ← فقط اپ و ربات
+#   docker compose --profile proxy up -d --build         ← + کلاینت Xray برای رسیدن به تلگرام
+#   docker compose --profile proxy --profile https up -d ← + Caddy برای HTTPS
+services:
+  ghotbnama:
+    build:
+      context: ..
+      dockerfile: server/Dockerfile
+      args:
+        BASE_IMAGE: ${BASE_IMAGE:-python:3.11-slim}
+        PIP_INDEX_URL: ${PIP_INDEX_URL:-https://pypi.org/simple}
+    env_file: .env
+    volumes:
+      - ./data:/data
+    ports:
+      - "127.0.0.1:8080:8080"
+    restart: unless-stopped
+
+  xray:
+    profiles: ["proxy"]
+    image: ${XRAY_IMAGE:-teddysun/xray:latest}
+    volumes:
+      - ./xray/config.json:/etc/xray/config.json:ro
+    restart: unless-stopped
+
+  caddy:
+    profiles: ["https"]
+    image: ${CADDY_IMAGE:-caddy:2}
+    env_file: .env
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - ./caddy-data:/data
+    restart: unless-stopped
