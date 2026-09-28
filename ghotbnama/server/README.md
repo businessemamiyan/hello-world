@@ -41,6 +41,12 @@ nano xray/config.json   # SERVER_ADDRESS, UUID, PUBLIC_KEY, SHORT_ID, SNI_DOMAIN
 - **CDN داخلی** (مثلاً آروان‌کلاد) با SSL خودش جلوی پورت 8080. در این حالت پورت 8080 را روی 127.0.0.1 نگذار یا یک reverse proxy جلویش قرار بده.
 
 ## ۵. اجرا
+راه سریع (مراحل ۲ و این مرحله را با هم انجام می‌دهد؛ فقط همین سرویس را در یک پروژه Docker جدا به نام `ghotbnama` بالا می‌آورد، به هیچ کانتینر/سرویس دیگری روی سرور دست نمی‌زند):
+```bash
+./install.sh                  # اگر Docker از قبل نصب است
+./install.sh --install-docker # اگر Docker نیست و می‌خواهی همین‌جا نصب شود
+```
+دستی:
 ```bash
 docker compose --profile proxy up -d --build              # بدون Caddy
 docker compose --profile proxy --profile https up -d --build

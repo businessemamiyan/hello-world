@@ -1,0 +1,10 @@
+<resources>
+    <style name="Theme.Ghotbnama" parent="Theme.MaterialComponents.DayNight.NoActionBar">
+        <item name="colorPrimary">#E3B35C</item>
+        <item name="colorPrimaryDark">#0A0F18</item>
+        <item name="colorAccent">#E3B35C</item>
+        <item name="android:windowBackground">#0A0F18</item>
+        <item name="android:statusBarColor">#0A0F18</item>
+        <item name="android:navigationBarColor">#0A0F18</item>
+    </style>
+</resources>
