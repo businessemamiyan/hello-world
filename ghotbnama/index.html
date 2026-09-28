@@ -225,6 +225,8 @@ td input{width:104px;padding:4px 6px;min-height:34px}
     <section class="pane" data-pane="income" hidden></section>
     <section class="pane" data-pane="review" hidden></section>
     <section class="pane" data-pane="reality" hidden></section>
+    <section class="pane" data-pane="life" hidden></section>
+    <section class="pane" data-pane="health" hidden></section>
     <section class="pane" data-pane="money" hidden></section>
     <section class="pane" data-pane="settings" hidden></section>
   </main>
@@ -325,14 +327,40 @@ const SSTAT={active:"فعال",paused:"متوقف",stopped:"بسته‌شده"};
 const KINDS={job:"حقوق",active:"کسب‌وکار فعال",passive:"درآمد غیرفعال"};
 const SC_LABELS={inc:"اثر روی درآمد",goal:"اثر روی هدف اصلی",imp:"اهمیت",urg:"فوریت",prob:"احتمال نتیجه"};
 const STATUS_FA={todo:"انجام‌نشده",done:"انجام شد",partial:"نیمه‌کاره",skipped:"انجام نشد"};
+// دسته‌های سلامت روزانه — فقط برای خودآگاهی شخصی، نه تشخیص یا مشاوره پزشکی
+const SUBST_TYPES={alcohol:"الکل",smoke:"سیگار/تنباکو",caffeine:"کافئین",drug:"سایر مواد",med:"دارو یا مکمل"};
+const MEAL_TIMES=["صبحانه","ناهار","شام","میان‌وعده"];
+const HABIT_FREQ={daily:"روزانه",weekly:"هفتگی"};
+// مصاحبه رشد — برنامه با جزئیات کامل سؤال می‌کند؛ هر سؤال قابل رد کردن است
+const LIFE_Q=[
+  {k:"dayRoutine",g:"کار و روزمره",q:"یک روز عادی کاری‌ات را با جزئیات توصیف کن؛ از ساعت بیدار شدن تا خواب.",ph:"مثلاً: ۷ بیدار می‌شوم، ۸ می‌رسم کارخانه، ظهر ناهار..."},
+  {k:"productiveShare",g:"کار و روزمره",q:"از کل ساعت‌های بیداری‌ات، چند درصد واقعاً مولد است و چقدر تلف می‌شود؟ چرا؟"},
+  {k:"sleep",g:"سلامت جسمی",q:"معمولاً چند ساعت می‌خوابی و کیفیت خوابت چطور است؟"},
+  {k:"exercise",g:"سلامت جسمی",q:"ورزش می‌کنی؟ چند بار در هفته و چه نوع؟"},
+  {k:"diet",g:"سلامت جسمی",q:"الگوی غذایی‌ات چطور است؟ (نظم وعده‌ها، فست‌فود، آشپزی خانگی)"},
+  {k:"substanceUse",g:"سلامت جسمی",q:"سیگار، الکل یا ماده دیگری مصرف می‌کنی؟ نوع، مقدار تقریبی و تناوبش را بگو.",ph:"مثلاً: هفته‌ای ۲ بار سیگار، الکل ندارم — یا: ندارم","note":"این فقط برای خودت و تحلیل AI است؛ قضاوت نمی‌شود و جای مشورت با پزشک را نمی‌گیرد."},
+  {k:"meds",g:"سلامت جسمی",q:"قرص، دارو یا مکملی مصرف می‌کنی؟ نام، دلیل و دوز تقریبی.",ph:"مثلاً: قرص فشار خون صبح‌ها — یا: ندارم"},
+  {k:"healthIssue",g:"سلامت جسمی",q:"مشکل سلامتی خاصی داری که باید در برنامه‌ریزی در نظر گرفته شود؟"},
+  {k:"stress",g:"روان و انرژی",q:"سطح استرس روزمره‌ات از ۱ (کم) تا ۵ (زیاد) چقدر است؟ بزرگ‌ترین منبع استرس چیست؟"},
+  {k:"energyTime",g:"روان و انرژی",q:"چه زمانی از روز بیشترین انرژی ذهنی را داری؟"},
+  {k:"relationship",g:"شخصی و روابط",q:"وضعیت خانوادگی یا رابطه‌ات چطور است؟ (فقط اگر راحتی بگو؛ قابل رد کردن است)"},
+  {k:"support",g:"شخصی و روابط",q:"چه کسانی بیشترین حمایت را از تو می‌کنند؟"},
+  {k:"interests",g:"علایق و ارزش‌ها",q:"بیرون از کار به چه چیزهایی علاقه داری؟"},
+  {k:"values",g:"علایق و ارزش‌ها",q:"مهم‌ترین ارزش‌های زندگی‌ات چیستند؟"},
+  {k:"strengths",g:"علایق و ارزش‌ها",q:"بزرگ‌ترین نقطه قوتت چیست؟"},
+  {k:"pastAttempts",g:"موانع و تجربه گذشته",q:"قبلاً برای رسیدن به اهدافت چه تلاش‌هایی کردی که جواب نداد؟ چرا؟"},
+  {k:"giveUpPattern",g:"موانع و تجربه گذشته",q:"چه چیزی معمولاً باعث می‌شود برنامه‌هایت را رها کنی؟"},
+  {k:"successMeaning",g:"تعریف موفقیت",q:"موفقیت واقعی برای تو یعنی چه؟ در یک جمله بگو."}
+];
 // دسته‌های پول — همان فهرست سرور (server/app/model.py)
 const EXP_CATS=["خوراک","حمل‌ونقل","قبض و شارژ","خانه و اجاره","قسط و وام","خرید","سلامت","آموزش","تفریح","کسب‌وکار","خانواده","سایر"];
 const SELF="انتقال به خودم", IN_OTHER=["قرض/بازگشت پول","سایر واریز"];
 
 function emptyData(){
-  return {profile:{name:"مهرداد",about:ABOUT,target:0,targetEnd:"",freeHours:0,mainPriority:"",mainProjectId:"",mainGoalId:"",reviewMonths:3},
+  return {profile:{name:"مهرداد",about:ABOUT,target:0,targetEnd:"",freeHours:0,mainPriority:"",mainProjectId:"",mainGoalId:"",reviewMonths:3,life:{}},
     vision:{text:"",target:0,unit:"",end:""},
-    goals:[],projects:[],streams:[],incomeLog:[],txns:[],days:{},reviews:[],coachLog:[],ai:{reality:{}}};
+    goals:[],projects:[],streams:[],incomeLog:[],txns:[],days:{},reviews:[],coachLog:[],ai:{reality:{}},
+    health:{checkins:{},subst:[],meals:[]},habits:[],growthPlans:[]};
 }
 function newProject(o){return Object.assign({id:"p_"+uid(),name:"",desc:"",goalId:"",stage:"",progress:0,hours:0,weeklyHours:0,incomePotential:0,cost:0,status:"backlog",nextAction:"",start:"",deadline:"",deps:"",sc:{inc:3,goal:3,imp:3,urg:3,prob:3},log:[{n:TN,v:0,init:true}],created:TN},o||{});}
 function newGoal(o){return Object.assign({id:"g_"+uid(),level:"quarter",title:"",why:"",target:0,cur:0,unit:"",start:jStr(TN),end:"",status:"draft",priority:2,projectId:"",ms:[],log:[{n:TN,v:0,init:true}],created:TN},o||{});}
@@ -353,7 +381,13 @@ function normalize(d){
   d.profile=Object.assign(emptyData().profile,d.profile||{});
   d.vision=Object.assign(emptyData().vision,d.vision||{});
   d.ai=Object.assign({reality:{}},d.ai||{}); if(!d.ai.reality) d.ai.reality={};
-  ["goals","projects","streams","incomeLog","reviews","coachLog","txns"].forEach(k=>{if(!Array.isArray(d[k]))d[k]=[];});
+  ["goals","projects","streams","incomeLog","reviews","coachLog","txns","habits","growthPlans"].forEach(k=>{if(!Array.isArray(d[k]))d[k]=[];});
+  if(!d.profile.life||typeof d.profile.life!=="object") d.profile.life={};
+  if(!d.health||typeof d.health!=="object") d.health={checkins:{},subst:[],meals:[]};
+  if(!d.health.checkins||typeof d.health.checkins!=="object") d.health.checkins={};
+  if(!Array.isArray(d.health.subst)) d.health.subst=[];
+  if(!Array.isArray(d.health.meals)) d.health.meals=[];
+  d.habits=d.habits.map(h=>Object.assign({id:"h_"+uid(),title:"",freq:"daily",why:"",active:true,created:TN,log:{}},h,{log:(h&&h.log&&typeof h.log==="object")?h.log:{}}));
   if(!d.days||typeof d.days!=="object") d.days={};
   Object.keys(d.days).forEach(k=>{const x=d.days[k];if(!x||!Array.isArray(x.actions))delete d.days[k];});
   d.projects=d.projects.map(p=>{const q=newProject(p);q.sc=Object.assign({inc:3,goal:3,imp:3,urg:3,prob:3},p.sc||{});if(!Array.isArray(q.log))q.log=[];return q;});
@@ -660,7 +694,21 @@ function opportunity(){const R=rankProjects().filter(r=>r.exp>0).sort((a,b)=>b.e
    ۷. مربی هوش مصنوعی
    ===================================================================== */
 let SAMPLE=null, AI_CTL=null, AI_BUSY=false;
-const RULES="تو مربی مدیریتی و کسب‌وکار شخصی صاحب این اپ هستی. فارسی بنویس. مستقیم، صادق و عملی باش؛ بدون تعریف بی‌دلیل و بدون جملات انگیزشی کلیشه‌ای. فقط بر اساس داده‌های ثبت‌شده حرف بزن؛ عدد نساز و حدس نزن. اگر داده کافی نیست، دقیقاً بگو چه داده‌ای لازم است. تصمیم نهایی با خود کاربر است؛ پیشنهاد بده، حکم نکن. کوتاه و قابل اقدام: فهرست‌های کوتاه با خط تیره، بدون جدول و تیتر Markdown.";
+const RULES="تو مربی مدیریتی و کسب‌وکار شخصی صاحب این اپ هستی. فارسی بنویس. مستقیم، صادق و عملی باش؛ بدون تعریف بی‌دلیل و بدون جملات انگیزشی کلیشه‌ای. فقط بر اساس داده‌های ثبت‌شده حرف بزن؛ عدد نساز و حدس نزن. اگر داده کافی نیست، دقیقاً بگو چه داده‌ای لازم است. تصمیم نهایی با خود کاربر است؛ پیشنهاد بده، حکم نکن. کوتاه و قابل اقدام: فهرست‌های کوتاه با خط تیره، بدون جدول و تیتر Markdown. اگر در داده‌های سلامت، خواب یا مصرف سیگار/الکل/مواد/دارو الگوی نگران‌کننده دیدی، مؤدبانه و بدون قضاوت اشاره کن و پیشنهاد بده حتماً با پزشک یا متخصص واقعی هم مشورت شود؛ خودت هرگز تشخیص پزشکی یا روان‌شناسی نده و نسخه دارویی پیشنهاد نکن — تو مربی برنامه‌ریزی و موفقیتی، نه درمانگر.";
+function habitStreak(h){
+  let n=0;
+  for(let i=(h.log&&h.log[dk(TN)]?0:1);;i++){const k=dk(TN-i);if(h.log&&h.log[k]){n++;}else break;if(i>3650)break;}
+  return n;
+}
+function healthSummary(days){
+  const from=TN-days+1; let sSum=0,sN=0,mSum=0,mN=0,eSum=0,eN=0,stSum=0,stN=0,dCount=0;
+  for(let n=from;n<=TN;n++){const c=D.health.checkins[dk(n)];if(!c)continue;dCount++;
+    if(c.sleepHours!=null&&c.sleepHours!==""){sSum+=Number(c.sleepHours);sN++;}
+    if(c.mood){mSum+=Number(c.mood);mN++;} if(c.energy){eSum+=Number(c.energy);eN++;} if(c.stress){stSum+=Number(c.stress);stN++;}}
+  const subst=D.health.subst.filter(x=>x.n>=from&&x.n<=TN);
+  const byType={}; subst.forEach(x=>{byType[x.type]=(byType[x.type]||0)+1;});
+  return {days:dCount,sleepAvg:sN?sSum/sN:null,moodAvg:mN?mSum/mN:null,energyAvg:eN?eSum/eN:null,stressAvg:stN?stSum/stN:null,substCount:subst.length,substByType:byType,mealCount:D.health.meals.filter(x=>x.n>=from&&x.n<=TN).length};
+}
 function context(){
   const P=D.profile, rep=incomeReport(), w=weekStats(weekStart(TN)), lw=weekStats(weekStart(TN)-7);
   const L=[];
@@ -686,6 +734,18 @@ function context(){
     L.push(`${jStr(n)}${d.closed?"":" (باز)"} امتیاز ${s?s.total:"—"}: `+d.actions.map(a=>{const p=byId(D.projects,a.projectId);return `[${CATS[a.cat]}|${p?p.name:"بدون پروژه"}|${a.status}] ${a.title}${a.result?" → "+a.result:""}${a.actualMin?` (${a.actualMin}د)`:""}${a.reason?` چرا نشد: ${a.reason}`:""}`;}).join(" ؛ "));}
   L.push("\n# بازبینی‌های اخیر");
   D.reviews.slice().sort((a,b)=>b.week-a.week).slice(0,4).forEach(r=>L.push(`- هفته ${jStr(r.week)}: بهترین نتیجه=${r.best} | شکست=${r.fail} | درس=${r.lesson} | توقف=${r.stop} | تمرکز بعد=${r.focus}`));
+  const life=D.profile.life||{};
+  if(Object.values(life).some(v=>String(v||"").trim())){
+    L.push("\n# پروفایل عمیق (از مصاحبه رشد)");
+    LIFE_Q.forEach(q=>{const v=life[q.k];if(v&&String(v).trim())L.push(`- ${q.q} ← ${v}`);});
+  }
+  const hs=healthSummary(7);
+  if(hs.days||hs.substCount||D.habits.length){
+    L.push("\n# سلامت و عادت‌های ۷ روز اخیر (فقط اطلاعات خودثبتی کاربر؛ تشخیص پزشکی نیست)");
+    L.push(`میانگین خواب: ${hs.sleepAvg!=null?hs.sleepAvg.toFixed(1)+" ساعت":"ثبت نشده"} | میانگین خلق: ${hs.moodAvg!=null?hs.moodAvg.toFixed(1)+"/۵":"—"} | میانگین انرژی: ${hs.energyAvg!=null?hs.energyAvg.toFixed(1)+"/۵":"—"} | میانگین استرس: ${hs.stressAvg!=null?hs.stressAvg.toFixed(1)+"/۵":"—"} | روزهای ثبت‌شده: ${hs.days}`);
+    if(hs.substCount) L.push("مصرف ثبت‌شده: "+Object.entries(hs.substByType).map(([t,c])=>`${SUBST_TYPES[t]||t}=${c} بار`).join("، "));
+    if(D.habits.length) L.push("عادت‌ها: "+D.habits.map(h=>`${h.title} [${HABIT_FREQ[h.freq]}${h.active?"":"، غیرفعال"}] پیوستگی ${habitStreak(h)} روز`).join("؛ "));
+  }
   L.push("\n# هشدارهای محاسبه‌شده"); issues().slice(0,8).forEach(i=>L.push(`- (${i.sev}) ${i.text}`));
   return L.join("\n");
 }
@@ -721,7 +781,7 @@ function setAiButtons(b){document.querySelectorAll("[data-ai]").forEach(x=>x.dis
 /* =====================================================================
    ۸. رندر
    ===================================================================== */
-let TAB="home", VIEWDAY=TN, GFILTER="all", PFILTER="open", OPENRES=new Set(), CONFIRM="", REVWEEK=null, TOMORROW_PLAN=null, EDIT={goal:null,project:null,stream:null};
+let TAB="home", VIEWDAY=TN, GFILTER="all", PFILTER="open", OPENRES=new Set(), CONFIRM="", REVWEEK=null, TOMORROW_PLAN=null, EDIT={goal:null,project:null,stream:null}, EDIT_LIFE_KEY=null, PENDING_PLAN=null;
 let COACH_OUT="یکی از دکمه‌ها را بزن یا سؤالت را بنویس. مربی اهداف، پروژه‌ها، اقدامات، درآمد، زمان و بازبینی‌هایت را می‌خواند.", COACH_TURNS=[];
 const $pane=t=>document.querySelector(`section[data-pane="${t}"]`);
 function renderTop(){
@@ -1154,6 +1214,118 @@ function renderReality(){
   ${aiBlock("aiReality","جمع‌بندی هفتگی AI",c,"بررسی این هفته","ai-reality","جمع‌بندی AI این هفته هنوز ساخته نشده.")}`;
 }
 
+/* ---------- مصاحبه رشد و موفقیت ---------- */
+function questionCard(q,v){
+  return `<div class="card" style="border-color:var(--ai-line)">
+    <span class="eyebrow">${esc(q.g)}</span>
+    <h2>${esc(q.q)}</h2>
+    ${q.note?`<p class="small" style="color:var(--warn)">${esc(q.note)}</p>`:""}
+    <form class="stack6" data-form="life-ans" data-k="${q.k}"><textarea id="life-a" placeholder="${esc(q.ph||"")}">${esc(v||"")}</textarea>
+    <div class="row"><button class="btn primary">ثبت و بعدی</button><button type="button" class="btn ghost" data-act="life-skip" data-k="${q.k}">رد کن</button></div></form>
+  </div>`;
+}
+function lifeSummaryHtml(){
+  const life=D.profile.life, groups={};
+  LIFE_Q.forEach(q=>{(groups[q.g]=groups[q.g]||[]).push(q);});
+  return Object.entries(groups).map(([g,qs])=>`<div class="stack6"><span class="eyebrow">${esc(g)}</span>${qs.map(q=>{
+    const v=life[q.k], seen=life.__seen&&life.__seen[q.k];
+    return `<div class="item" style="padding:8px 10px;gap:4px"><div class="row spread"><b class="small">${esc(q.q)}</b><button class="btn ghost sm" data-act="life-edit" data-k="${q.k}">${seen?"ویرایش":"پاسخ بده"}</button></div>${v?`<div class="small" style="color:var(--ink2)">${esc(v)}</div>`:seen?'<div class="muted small">رد شده</div>':""}</div>`;}).join("")}</div>`).join("");
+}
+function growthPlanCard(){
+  const last=D.growthPlans[D.growthPlans.length-1];
+  if(PENDING_PLAN){
+    const p=PENDING_PLAN;
+    return `<div class="card ai"><div class="row spread"><h2>برنامه رشد پیشنهادی</h2><span class="pill ai">AI</span></div>
+      <p>${esc(p.reflection)}</p>
+      ${p.cautions.length?`<div class="issue warn"><span class="tag">توجه</span><div>${p.cautions.map(esc).join("<br>")}</div></div>`:""}
+      <span class="eyebrow">اهداف پیشنهادی — انتخاب کن کدام‌ها اضافه شود</span>
+      <div class="stack6">${p.goals.map((g,i)=>`<label class="ms" style="align-items:flex-start"><input type="checkbox" data-chg="life-goal-sel" data-i="${i}" ${g.sel?"checked":""}><span><b>${esc(g.title)}</b> <span class="pill">${LEVELS[g.level]}</span><div class="muted small num">${fa(g.target)} ${esc(g.unit)}${g.end?" تا "+esc(g.end):""} — ${esc(g.why)}</div></span></label>`).join("")||'<p class="muted small">پیشنهادی نداد.</p>'}</div>
+      <span class="eyebrow">عادت‌های پیشنهادی</span>
+      <div class="stack6">${p.habits.map((h,i)=>`<label class="ms"><input type="checkbox" data-chg="life-habit-sel" data-i="${i}" ${h.sel?"checked":""}><span><b>${esc(h.title)}</b> <span class="pill">${HABIT_FREQ[h.freq]}</span> — ${esc(h.why)}</span></label>`).join("")||'<p class="muted small">پیشنهادی نداد.</p>'}</div>
+      <div class="row"><button class="btn primary" data-act="life-plan-add">افزودن موارد انتخاب‌شده</button><button class="btn ghost" data-act="life-plan-discard">رد کردن</button></div>
+    </div>`;
+  }
+  return `<div class="card ai"><div class="row spread"><h2>برنامه رشد و موفقیت</h2><span class="pill ai">AI</span></div>
+    ${last?`<p class="small" style="color:var(--ink2)">آخرین بار ${faDay(last.n)}: ${esc(last.reflection)} <span class="muted">(${fa(last.goalsAdded)} هدف، ${fa(last.habitsAdded)} عادت اضافه شد)</span></p>`:'<p class="muted">هنوز برنامه رشدی ساخته نشده. هرچه به سؤال‌های بالا کامل‌تر جواب بدهی، این برنامه دقیق‌تر می‌شود.</p>'}
+    ${SAMPLE?`<button class="btn ai" data-ai data-act="life-plan">${last?"ساخت دوباره":"ساخت برنامه رشد و موفقیت"}</button>`:'<p class="muted small">این بخش فقط داخل Claude با هوش مصنوعی کار می‌کند.</p>'}
+    <div class="ai-out small" id="lifeOut"></div>
+  </div>`;
+}
+function renderLife(){
+  const life=D.profile.life;
+  const seen=k=>life.__seen&&life.__seen[k];
+  const done=LIFE_Q.filter(q=>seen(q.k)).length, total=LIFE_Q.length;
+  const remaining=LIFE_Q.filter(q=>!seen(q.k));
+  const current=EDIT_LIFE_KEY?LIFE_Q.find(q=>q.k===EDIT_LIFE_KEY):remaining[0];
+  $pane("life").innerHTML=`
+  <div class="pane-title"><h1>مصاحبه رشد و موفقیت</h1><span class="muted num">${fa(done)} از ${fa(total)} سؤال</span></div>
+  <div class="banner info" style="margin-top:0"><span>این بخش برای خودشناسی و برنامه‌ریزی شخصی است، نه مشاوره پزشکی یا روان‌شناسی. جواب‌ها فقط برای خودت و تحلیل AI است؛ هر سؤال قابل رد کردن است.</span></div>
+  <div class="bar"><i style="width:${total?done/total*100:0}%"></i></div>
+  ${current?questionCard(current,life[current.k]):'<div class="card"><h2>مصاحبه کامل شد</h2><p class="muted">از لیست پایین هر جواب را می‌توانی ویرایش کنی.</p></div>'}
+  ${growthPlanCard()}
+  <div class="card"><h2>خلاصه جواب‌ها</h2>${lifeSummaryHtml()}</div>`;
+}
+
+/* ---------- سلامت و عادت روزانه ---------- */
+function renderHealth(){
+  const hs=healthSummary(7), today=D.health.checkins[dk(TN)]||{};
+  const substRecent=D.health.subst.slice().sort((a,b)=>b.ts-a.ts).slice(0,10);
+  const mealsRecent=D.health.meals.slice().sort((a,b)=>b.ts-a.ts).slice(0,10);
+  const scaleOpts=(cur)=>[1,2,3,4,5].map(v=>`<option value="${v}"${Number(cur)===v?" selected":""}>${fa(v)}</option>`).join("");
+  $pane("health").innerHTML=`
+  <div class="pane-title"><h1>سلامت و عادت روزانه</h1><span class="muted">فقط خودثبتی؛ نه تشخیص پزشکی</span></div>
+  <div class="banner info" style="margin-top:0"><span>این بخش کمک می‌کند الگوهای روزمره‌ات را ببینی؛ جای مشورت با پزشک یا متخصص را نمی‌گیرد.</span></div>
+  <div class="card"><h2>ثبت امروز</h2>
+    <form class="form" data-form="checkin">
+      <label class="f">خواب (ساعت)<input type="number" min="0" max="16" step="0.5" id="hk-sleep" value="${today.sleepHours!=null?today.sleepHours:""}"></label>
+      <label class="f">خلق (۱-۵)<select id="hk-mood"><option value="">—</option>${scaleOpts(today.mood)}</select></label>
+      <label class="f">انرژی (۱-۵)<select id="hk-energy"><option value="">—</option>${scaleOpts(today.energy)}</select></label>
+      <label class="f">استرس (۱-۵)<select id="hk-stress"><option value="">—</option>${scaleOpts(today.stress)}</select></label>
+      <label class="f">ورزش (دقیقه)<input type="number" min="0" id="hk-ex" value="${today.exerciseMin!=null?today.exerciseMin:""}"></label>
+      <label class="f">آب (لیوان)<input type="number" min="0" id="hk-water" value="${today.water!=null?today.water:""}"></label>
+      <button class="btn primary">ثبت امروز</button></form></div>
+  <div class="kpis">
+    ${kpi("میانگین خواب (۷ روز)",hs.sleepAvg!=null?fa(hs.sleepAvg,1)+" ساعت":"—","")}
+    ${kpi("میانگین خلق",hs.moodAvg!=null?fa(hs.moodAvg,1)+"/۵":"—","")}
+    ${kpi("میانگین انرژی",hs.energyAvg!=null?fa(hs.energyAvg,1)+"/۵":"—","")}
+    ${kpi("میانگین استرس",hs.stressAvg!=null?fa(hs.stressAvg,1)+"/۵":"—","",hs.stressAvg!=null&&hs.stressAvg>=4?"warn":"")}
+  </div>
+  <div class="card"><h2>مصرف (سیگار، الکل، کافئین، مواد، دارو)</h2><p class="muted small">فقط برای خودآگاهی؛ قضاوت نمی‌شود.</p>
+    <form class="form" data-form="subst-add">
+      <label class="f">نوع<select id="sb-type">${Object.keys(SUBST_TYPES).map(k=>`<option value="${k}">${SUBST_TYPES[k]}</option>`).join("")}</select></label>
+      <label class="f">آیتم<input type="text" id="sb-item" placeholder="مثلاً سیگار، ویسکی، قهوه"></label>
+      <label class="f">مقدار<input type="text" id="sb-qty" placeholder="مثلاً ۱ نخ، ۲ لیوان"></label>
+      <label class="f">دلیل (اختیاری)<input type="text" id="sb-reason"></label>
+      <button class="btn primary">ثبت</button></form>
+    ${substRecent.length?`<div class="stack6">${substRecent.map(x=>`<div class="row spread small"><span>${esc(SUBST_TYPES[x.type]||x.type)} — ${esc(x.item)}${x.qty?" ("+esc(x.qty)+")":""}${x.reason?" · "+esc(x.reason):""}</span><span class="muted num">${faDay(x.n)} <button class="x" data-act="subst-del" data-id="${x.id}" aria-label="حذف">×</button></span></div>`).join("")}</div>`:'<p class="muted small">هنوز ثبت نشده.</p>'}
+    ${hs.substCount?`<p class="small" style="color:var(--ink2)">۷ روز اخیر: ${Object.entries(hs.substByType).map(([t,c])=>`${esc(SUBST_TYPES[t]||t)} ${fa(c)} بار`).join("، ")}</p>`:""}
+  </div>
+  <div class="card"><h2>وعده‌های غذایی</h2>
+    <form class="form" data-form="meal-add">
+      <label class="f">زمان<select id="ml-time">${MEAL_TIMES.map(t=>`<option>${t}</option>`).join("")}</select></label>
+      <label class="f full">توضیح<input type="text" id="ml-desc" placeholder="چی خوردی؟"></label>
+      <button class="btn primary">ثبت</button></form>
+    ${mealsRecent.length?`<div class="stack6">${mealsRecent.map(x=>`<div class="row spread small"><span>${esc(x.time)}: ${esc(x.desc)}</span><span class="muted num">${faDay(x.n)} <button class="x" data-act="meal-del" data-id="${x.id}" aria-label="حذف">×</button></span></div>`).join("")}</div>`:'<p class="muted small">هنوز ثبت نشده.</p>'}
+  </div>
+  <div class="card"><h2>عادت‌ها</h2>
+    ${D.habits.length?D.habits.map(h=>`<div class="row spread"><label class="ms"><input type="checkbox" data-chg="habit-today" data-id="${h.id}" ${h.log[dk(TN)]?"checked":""}><span>${esc(h.title)} <span class="pill">${HABIT_FREQ[h.freq]}</span></span></label><span class="muted num">پیوستگی ${fa(habitStreak(h))} روز <button class="x" data-act="habit-del" data-id="${h.id}" aria-label="حذف">×</button></span></div>`).join(""):'<p class="muted small">عادتی نداری؛ از «مصاحبه رشد» یکی بساز یا پایین اضافه کن.</p>'}
+    <form class="form" data-form="habit-add"><label class="f full">عادت جدید<input type="text" id="hb-title"></label><label class="f">تناوب<select id="hb-freq">${Object.keys(HABIT_FREQ).map(k=>`<option value="${k}">${HABIT_FREQ[k]}</option>`).join("")}</select></label><button class="btn">افزودن</button></form>
+  </div>`;
+}
+async function generateGrowthPlan(){
+  if(AI_BUSY||!SAMPLE) return; AI_BUSY=true; setAiButtons(true);
+  const out=$("lifeOut"); if(out) out.textContent="در حال تحلیل و ساخت برنامه رشد…";
+  try{
+    const r=await SAMPLE.json(firstTurn('بر اساس «پروفایل عمیق (از مصاحبه رشد)» و کل داده‌های من، یک برنامه رشد و موفقیت شخصی بساز. صادق و مستقیم باش؛ تعریف و تمجید بی‌دلیل نکن.\nفقط JSON برگردان دقیقاً به این شکل:\n{"reflection":"یک پاراگراف کوتاه (حداکثر ۹۰ کلمه): تحلیل صادقانه از وضعیت من، نقاط قوت، بزرگ‌ترین مانع، و چرا تلاش‌های قبلی جواب نداده","cautions":["حداکثر ۲ نکته کوتاه؛ اگر در خواب/استرس/مصرف الگوی قابل توجهی دیدی مؤدبانه و بدون قضاوت اشاره کن و توصیه به مشورت با متخصص واقعی بکن؛ در غیر این‌صورت آرایه خالی"],"goals":[{"level":"year یا quarter یا month یا week","title":"...","why":"...","target":عدد,"unit":"...","end":"تاریخ شمسی مثل 1405/12/29"}],"habits":[{"title":"...","freq":"daily یا weekly","why":"..."}]}\nبین ۳ تا ۵ هدف با اعداد واقع‌بینانه بر اساس داده‌های واقعی من بده؛ بین ۲ تا ۴ عادت کوچک و مشخص بده.'),{cache:false});
+    const goals=(Array.isArray(r&&r.goals)?r.goals:[]).slice(0,6).map(g=>({level:LEVELS[g.level]?g.level:"quarter",title:String(g.title||"").slice(0,140),why:String(g.why||"").slice(0,220),target:Number(g.target)||0,unit:String(g.unit||"").slice(0,40),end:parseJ(g.end,true)?g.end:"",sel:true})).filter(g=>g.title);
+    const habits=(Array.isArray(r&&r.habits)?r.habits:[]).slice(0,6).map(h=>({title:String(h.title||"").slice(0,140),freq:h.freq==="weekly"?"weekly":"daily",why:String(h.why||"").slice(0,220),sel:true})).filter(h=>h.title);
+    if(!goals.length&&!habits.length) throw {code:"invalid_json"};
+    PENDING_PLAN={reflection:String((r&&r.reflection)||""),cautions:(Array.isArray(r&&r.cautions)?r.cautions:[]).slice(0,3).map(String).filter(Boolean),goals,habits};
+    render();
+  }catch(e){const o=$("lifeOut");if(o)o.textContent=aiErr(e);}
+  finally{AI_BUSY=false;setAiButtons(false);}
+}
+
 /* ---------- مربی ---------- */
 function renderCoach(){
   const log=D.coachLog.slice(-6).reverse();
@@ -1178,7 +1350,7 @@ function planHtml(plan){
 
 /* ---------- بیشتر ---------- */
 function renderMore(){
-  const items=[["command","مرکز فرمان","مهم‌ترین مسئله، امروز تا این فصل"],["goals","اهداف","چشم‌انداز تا هفتگی · "+fa(activeGoals().length)+" فعال"],["projects","پروژه‌ها","اولویت‌بندی و ظرفیت · "+fa(activeProjects().length)+" فعال"],["income","منابع درآمد","روند، سهم، درآمد هر ساعت"],["review","بازبینی هفتگی","عددهای هفته + گزارش AI"],["money","پول و تراکنش‌ها","واریز، برداشت، هزینه به تفکیک دسته"],["reality","واقعیت بدون تعارف","۸ سؤال با جواب عددی"],["settings","تنظیمات","پروفایل، داده‌ها، پشتیبان"]];
+  const items=[["command","مرکز فرمان","مهم‌ترین مسئله، امروز تا این فصل"],["goals","اهداف","چشم‌انداز تا هفتگی · "+fa(activeGoals().length)+" فعال"],["projects","پروژه‌ها","اولویت‌بندی و ظرفیت · "+fa(activeProjects().length)+" فعال"],["income","منابع درآمد","روند، سهم، درآمد هر ساعت"],["review","بازبینی هفتگی","عددهای هفته + گزارش AI"],["money","پول و تراکنش‌ها","واریز، برداشت، هزینه به تفکیک دسته"],["reality","واقعیت بدون تعارف","۸ سؤال با جواب عددی"],["life","مصاحبه رشد و موفقیت","پروفایل عمیق + برنامه رشد با AI"],["health","سلامت و عادت روزانه","خواب، ورزش، غذا، مصرف، عادت‌ها"],["settings","تنظیمات","پروفایل، داده‌ها، پشتیبان"]];
   $pane("more").innerHTML=`<div class="pane-title"><h1>همه بخش‌ها</h1></div><div class="menu">${items.map(i=>`<button data-act="go" data-tab="${i[0]}"><b>${i[1]}</b><span>${esc(i[2])}</span></button>`).join("")}</div>`;
 }
 
@@ -1268,7 +1440,7 @@ function renderSettings(){
 
 function render(){
   TN=nowN(); renderTop();
-  const map={money:renderMoney,home:renderHome,command:renderCommand,today:renderToday,coach:renderCoach,more:renderMore,goals:renderGoals,projects:renderProjects,income:renderIncome,review:renderReview,reality:renderReality,settings:renderSettings};
+  const map={money:renderMoney,home:renderHome,command:renderCommand,today:renderToday,coach:renderCoach,more:renderMore,goals:renderGoals,projects:renderProjects,income:renderIncome,review:renderReview,reality:renderReality,life:renderLife,health:renderHealth,settings:renderSettings};
   (map[TAB]||renderHome)();
   const main=["home","command","today","coach"].indexOf(TAB)>=0?TAB:"more";
   document.querySelectorAll("nav.bottom button").forEach(b=>{if(b.dataset.tab===main)b.setAttribute("aria-current","page");else b.removeAttribute("aria-current");});
@@ -1345,6 +1517,18 @@ const ACT={
   "ai-today"(){aiInto("یک تحلیل خیلی کوتاه (حداکثر ۷۰ کلمه) با عنوان «واقعیت امروز من» بنویس: وضعیت امروز با عدد، مشکل اصلی، و یک کار که امروز باید انجام شود.","aiToday",t=>{D.ai.today={n:TN,text:t};saveAI();});},
   "ai-command"(){aiInto("الان مهم‌ترین مسئله من چیست؟ فقط بر اساس داده‌های ثبت‌شده، یک مسئله را نام ببر، با عدد توضیح بده چرا مهم‌ترین است، و اولین قدم را بگو. حداکثر ۹۰ کلمه.","aiCmd",t=>{D.ai.command={n:TN,text:t};saveAI();});},
   "ai-reality"(){const facts=realityFacts().map(f=>`- ${f.q} → ${f.v[1]}: ${f.a}`).join("\n");aiInto("بررسی هفتگی «واقعیت بدون تعارف». این واقعیت‌های محاسبه‌شده را در نظر بگیر:\n"+facts+"\nخروجی: حداکثر ۶ خط کوتاه و عددی، و در آخر ۲ اقدام مشخص برای هفته بعد.","aiReality",t=>{D.ai.reality[weekStart(TN)]={n:TN,text:t};saveAI();});},
+  "life-edit"(el){EDIT_LIFE_KEY=el.dataset.k;render();const t=document.querySelector('section[data-pane="life"] textarea');if(t)t.scrollIntoView({block:"center"});},
+  "life-skip"(el){const life=D.profile.life;life.__seen=life.__seen||{};life.__seen[el.dataset.k]=true;if(life[el.dataset.k]==null)life[el.dataset.k]="";EDIT_LIFE_KEY=null;commit();},
+  "life-plan"(){generateGrowthPlan();},
+  "life-plan-discard"(){PENDING_PLAN=null;render();},
+  "life-plan-add"(){if(!PENDING_PLAN)return;let gc=0,hc=0;
+    PENDING_PLAN.goals.filter(g=>g.sel).forEach(g=>{const ng=newGoal({title:g.title,why:g.why,level:g.level,target:g.target,unit:g.unit,end:g.end,cur:0});ng.log=[{n:TN,v:0,init:true}];ng.status=goalComplete(ng)?"active":"draft";D.goals.push(ng);gc++;});
+    PENDING_PLAN.habits.filter(h=>h.sel).forEach(h=>{D.habits.push({id:"h_"+uid(),title:h.title,freq:h.freq,why:h.why,active:true,created:TN,log:{}});hc++;});
+    D.growthPlans.push({id:uid(),n:TN,reflection:PENDING_PLAN.reflection,cautions:PENDING_PLAN.cautions,goalsAdded:gc,habitsAdded:hc});
+    PENDING_PLAN=null;commit(`${fa(gc)} هدف و ${fa(hc)} عادت اضافه شد.`);},
+  "subst-del"(el){D.health.subst=D.health.subst.filter(x=>x.id!==el.dataset.id);commit();},
+  "meal-del"(el){D.health.meals=D.health.meals.filter(x=>x.id!==el.dataset.id);commit();},
+  "habit-del"(el){D.habits=D.habits.filter(h=>h.id!==el.dataset.id);commit("عادت حذف شد.");},
   "ai-review"(el){const r=D.reviews.find(x=>x.id===el.dataset.id);if(!r)return;const a=r.auto||{};
     aiInto(`یک گزارش مدیریتی کوتاه برای هفته ${jStr(r.week)} بنویس (حداکثر ۱۲۰ کلمه): خلاصه عملکرد با عدد، چه چیزی کار کرد، چه چیزی نه، یک تصمیم برای هفته بعد.\nعددهای خودکار هفته: درآمد ${a.income||0}، اجرا ${a.exec!=null?Math.round(a.exec*100)+"%":"—"}، ساعت مؤثر ${a.hours!=null?Number(a.hours).toFixed(1):"—"}، امتیاز ${a.score??"—"}، پروژه‌های پیشرفت‌کرده: ${(a.projects||[]).join("، ")||"هیچ"}.\nپاسخ‌های کاربر: مهم‌ترین نتیجه=${r.best}؛ بزرگ‌ترین شکست=${r.fail}؛ یاد گرفتم=${r.lesson}؛ باید متوقف شود=${r.stop}؛ تمرکز هفته بعد=${r.focus}`,"rvai-"+r.id,t=>{r.ai=t;saveAI();});},
   "coach-preset"(el){const p=PRESETS.find(x=>x[0]===el.dataset.k);if(!p)return;if(p[0]==="tomorrow")return planTomorrow();coachAsk(p[1],p[2],true);},
@@ -1429,6 +1613,11 @@ const FORMS={
     D.txns.push({id:"t_"+uid(),n,ts:Date.now(),dir:val("tx-dir")==="in"?"in":"out",amount:Math.round(amt),cat:"",streamId:"",note:val("tx-note"),src:"app",bank:"",balance:null,hash:""});
     MONEYM=mkOf(n);MFILTER="uncat";commit("ثبت شد؛ دسته‌اش را انتخاب کن.");},
   coach(){const q=val("coachQ");if(!q||!SAMPLE)return;$("coachQ").value="";coachAsk(q,q,false);},
+  "life-ans"(f){const k=f.dataset.k,v=$("life-a").value.trim(),life=D.profile.life;life[k]=v;life.__seen=life.__seen||{};life.__seen[k]=true;EDIT_LIFE_KEY=null;commit();},
+  checkin(){const k=dk(TN);D.health.checkins[k]={sleepHours:val("hk-sleep")===""?null:num(val("hk-sleep")),mood:val("hk-mood")?+val("hk-mood"):null,energy:val("hk-energy")?+val("hk-energy"):null,stress:val("hk-stress")?+val("hk-stress"):null,exerciseMin:val("hk-ex")===""?null:num(val("hk-ex")),water:val("hk-water")===""?null:num(val("hk-water"))};commit("ثبت امروز ذخیره شد.");},
+  "subst-add"(){const item=val("sb-item");if(!item){toast("آیتم مصرف را بنویس.");return;}D.health.subst.push({id:uid(),n:TN,ts:Date.now(),type:val("sb-type"),item,qty:val("sb-qty"),reason:val("sb-reason")});commit("ثبت شد.");},
+  "meal-add"(){const desc=val("ml-desc");if(!desc){toast("توضیح غذا را بنویس.");return;}D.health.meals.push({id:uid(),n:TN,ts:Date.now(),time:val("ml-time"),desc});commit("ثبت شد.");},
+  "habit-add"(){const t=val("hb-title");if(!t){toast("عنوان عادت را بنویس.");return;}D.habits.push({id:"h_"+uid(),title:t,freq:val("hb-freq"),why:"",active:true,created:TN,log:{}});commit("عادت اضافه شد.");},
   profile(){const P=ROOT.real.profile,end=val("sp-end");if(end&&parseJ(end,true)==null){toast("تاریخ معتبر نیست (مثل 1406/12).");return;}
     Object.assign(P,{name:val("sp-name"),target:num(val("sp-target")),targetEnd:end,freeHours:num(val("sp-free")),reviewMonths:clamp(num(val("sp-rm"))||3,1,6),mainProjectId:val("sp-mp"),mainGoalId:val("sp-mg"),mainPriority:val("sp-pri"),about:val("sp-about")});
     persist();render();toast("ذخیره شد.");}
@@ -1445,7 +1634,10 @@ const CHG={
   cell(el){const s=byId(D.streams,el.dataset.id),k=el.dataset.k,old=Number(s.entries[k])||0;
     if(el.value==="")delete s.entries[k];else s.entries[k]=num(el.value);
     const nw=Number(s.entries[k])||0; if(k===CURM()&&nw!==old) D.incomeLog.push({id:uid(),n:TN,streamId:s.id,amount:nw-old});
-    commit();}
+    commit();},
+  "life-goal-sel"(el){if(PENDING_PLAN)PENDING_PLAN.goals[+el.dataset.i].sel=el.checked;},
+  "life-habit-sel"(el){if(PENDING_PLAN)PENDING_PLAN.habits[+el.dataset.i].sel=el.checked;},
+  "habit-today"(el){const h=byId(D.habits,el.dataset.id);if(!h)return;const k=dk(TN);if(el.checked)h.log[k]=true;else delete h.log[k];commit();}
 };
 document.addEventListener("click",ev=>{const el=ev.target.closest("[data-act]");if(!el||el.disabled)return;const inWz=!!el.closest("#wizard");const f=inWz?WZ[el.dataset.act]:ACT[el.dataset.act];if(f){ev.preventDefault();f(el);}});
 document.addEventListener("submit",ev=>{const f=ev.target.closest("form[data-form]");if(!f)return;ev.preventDefault();const h=f.closest("#wizard")?WZF[f.dataset.form]:FORMS[f.dataset.form];if(h)h(f);});

@@ -16,7 +16,12 @@ window.claude = { use: async (name) => {
   })};
   if (name === 'sample') {
     const f = async (input, opts) => { window.__aiCalls.push(input); const t = 'تحلیل آزمایشی: مشکل اصلی تمرکز است.'; opts && opts.onText && opts.onText({text:t, delta:t}); return {text:t, truncated:false}; };
-    f.json = async (input) => { window.__aiCalls.push(input); const m = String(input).match(/idهای پروژه فعال: (p_[a-z0-9]+)/); return { actions: [
+    f.json = async (input) => { window.__aiCalls.push(input);
+      if (String(input).includes('"reflection"')) return { reflection: 'تحلیل آزمایشی: پراکندگی بین چند پروژه بزرگ‌ترین مانع توست.', cautions: ['خواب کمتر از حد کافی ثبت شده؛ با پزشک هم مشورت کن.'],
+        goals: [ {level:'quarter', title:'اولین مشتری پولی VQ', why:'اثبات محصول', target:1, unit:'قرارداد', end:'1405/12/29'},
+                 {level:'month', title:'هدف بدون تاریخ', why:'تست ناقص', target:0, unit:'', end:''} ],
+        habits: [ {title:'۳۰ دقیقه پیاده‌روی', freq:'daily', why:'انرژی بیشتر'}, {title:'بازبینی هفتگی مالی', freq:'weekly', why:'کنترل هزینه'} ] };
+      const m = String(input).match(/idهای پروژه فعال: (p_[a-z0-9]+)/); return { actions: [
       {cat:'income', title:'تماس با ۳ مدیر کارخانه', projectId: m ? m[1] : '', goalId:'', estMin:60, expected:'۱ جلسه'},
       {cat:'future', title:'ماژول گزارش VQ', projectId:'bogus', goalId:'', estMin:90, expected:'نسخه اول'},
       {cat:'growth', title:'مطالعه مذاکره', projectId:'', goalId:'', estMin:30, expected:'یادداشت'}], note:'تست' }; };
@@ -37,9 +42,10 @@ window.claude = { use: async (name) => {
   await page.goto(URL); await page.waitForTimeout(400);
   ok(await page.isVisible('#wizard'), 'ویزارد در اولین اجرا باز می‌شود');
   const sub = await page.textContent('#topSub');
-  const expDay = await page.evaluate(() => new Intl.DateTimeFormat('fa-IR-u-ca-persian', { day: 'numeric', month: 'long' }).format(new Date()));
-  ok(sub.includes(expDay.split(' ')[0]) && sub.includes('مهر'), 'تاریخ شمسی درست است: ' + sub + ' (انتظار: ' + expDay + ')');
-  ok(sub.includes('یکشنبه'), 'روز هفته درست است (یکشنبه)');
+  const expDay = new Intl.DateTimeFormat('fa-IR-u-ca-persian', { day: 'numeric', month: 'long' }).format(new Date());
+  const expWd = new Intl.DateTimeFormat('fa-IR-u-ca-persian', { weekday: 'long' }).format(new Date());
+  ok(sub.includes(expDay.split(' ')[0]) && sub.includes(expDay.split(' ')[1]), 'تاریخ شمسی درست است: ' + sub + ' (انتظار: ' + expDay + ')');
+  ok(sub.includes(expWd), 'روز هفته درست است (' + expWd + ')');
   // مرحله ۱
   await page.fill('#wz-name', 'مهرداد');
   await page.click('[data-act=wz-next]');
@@ -315,14 +321,57 @@ window.claude = { use: async (name) => {
   await page.click('nav.bottom [data-tab=more]'); await page.click('.menu [data-tab=reality]');
   await page.click('[data-act=ai-reality]'); await page.waitForTimeout(150);
   ok((await page.textContent('#aiReality')).includes('تحلیل آزمایشی'), 'جمع‌بندی هفتگی AI ساخته شد');
+
+  // ---------- ۱۳. مصاحبه رشد و برنامه موفقیت ----------
+  console.log('\n# مصاحبه رشد و موفقیت');
+  await page.click('nav.bottom [data-tab=more]'); await page.click('.menu [data-tab=life]');
+  ok((await page.textContent('section[data-pane=life]')).includes('نه مشاوره پزشکی'), 'هشدار «نه مشاوره پزشکی» نمایش داده شد');
+  ok((await page.textContent('section[data-pane=life]')).includes('۰ از ۱۸'), 'شمارنده سؤال از صفر شروع می‌شود');
+  await page.fill('#life-a', 'هفته‌ای دو بار سیگار می‌کشم، الکل مصرف نمی‌کنم.');
+  await page.click('form[data-form=life-ans] button.primary');
+  ok((await page.textContent('section[data-pane=life]')).includes('۱ از ۱۸'), 'اولین جواب ثبت شد و شمارنده بالا رفت');
+  await page.click('[data-act=life-skip]');
+  ok((await page.textContent('section[data-pane=life]')).includes('۲ از ۱۸'), 'رد کردن سؤال هم شمارنده را بالا می‌برد');
+  const lifeEditBtns = await page.$$('[data-act=life-edit]');
+  ok(lifeEditBtns.length === 18, 'همه ۱۸ سؤال در خلاصه لیست شده‌اند');
+  await page.click('[data-act=life-plan]'); await page.waitForTimeout(200);
+  let lifeText = await page.textContent('section[data-pane=life]');
+  ok(lifeText.includes('پراکندگی بین چند پروژه') && lifeText.includes('با پزشک هم مشورت کن'), 'تحلیل AI و هشدار سلامت نمایش داده شد');
+  ok((await page.$$('[data-chg=life-goal-sel]')).length === 2 && (await page.$$('[data-chg=life-habit-sel]')).length === 2, 'اهداف و عادت‌های پیشنهادی با تیک قابل انتخاب‌اند');
+  await page.click('[data-chg=life-goal-sel][data-i="1"]'); // هدف ناقص را از انتخاب خارج کن
+  await page.click('[data-act=life-plan-add]');
+  ok((await page.textContent('#toast')).includes('۱ هدف و ۲ عادت'), 'فقط موارد تیک‌خورده اضافه شد: ۱ هدف و ۲ عادت');
+  await page.click('nav.bottom [data-tab=more]'); await page.click('.menu [data-tab=goals]');
+  ok((await page.textContent('section[data-pane=goals]')).includes('اولین مشتری پولی VQ'), 'هدف پیشنهادی AI به لیست اهداف اضافه شد');
+
+  console.log('\n# سلامت و عادت روزانه');
+  await page.click('nav.bottom [data-tab=more]'); await page.click('.menu [data-tab=health]');
+  ok((await page.textContent('section[data-pane=health]')).includes('۳۰ دقیقه پیاده‌روی'), 'عادت پیشنهادی AI در بخش سلامت نمایش داده شد');
+  await page.fill('#hk-sleep', '6.5'); await page.selectOption('#hk-mood', '4'); await page.selectOption('#hk-stress', '5');
+  await page.click('form[data-form=checkin] button');
+  ok((await page.textContent('#toast')).includes('ذخیره شد'), 'چک‌این امروز ثبت شد');
+  await page.selectOption('#sb-type', 'alcohol'); await page.fill('#sb-item', 'ویسکی'); await page.fill('#sb-qty', '۲ پیک');
+  await page.click('form[data-form=subst-add] button');
+  let healthText = await page.textContent('section[data-pane=health]');
+  ok(healthText.includes('الکل') && healthText.includes('ویسکی'), 'مصرف ثبت شد و در لیست نمایش داده شد');
+  await page.fill('#ml-desc', 'چلوکباب'); await page.click('form[data-form=meal-add] button');
+  ok((await page.textContent('section[data-pane=health]')).includes('چلوکباب'), 'وعده غذایی ثبت شد');
+  const habitCk = await page.$('[data-chg=habit-today]');
+  await habitCk.click();
+  healthText = await page.textContent('section[data-pane=health]');
+  ok(healthText.includes('پیوستگی ۱ روز'), 'تیک زدن عادت امروز پیوستگی را ۱ روز کرد');
+  await page.waitForTimeout(800);
+  const dbState2 = await page.evaluate(() => JSON.parse(window.__db['plan/main'].state));
+  ok(dbState2.real.health.subst.some(x => x.item === 'ویسکی'), 'مصرف ثبت‌شده در db ذخیره شد');
+  ok(dbState2.real.habits.length === 2 && Object.values(dbState2.real.habits[0].log).length === 1, 'عادت‌های AI و تیک امروز در db ذخیره شد');
   await ctx.close();
 
-  // ---------- ۱۳. عرض کم و اسکرول افقی ----------
+  // ---------- ۱۴. عرض کم و اسکرول افقی ----------
   ctx = await browser.newContext({ viewport: { width: 360, height: 780 } });
   await ctx.addInitScript(`localStorage.setItem('ghotbnama.v2', ${JSON.stringify(backup)});`);
   page = await newPage(ctx);
   await page.goto(URL); await page.waitForTimeout(300);
-  for (const t of ['home', 'command', 'today', 'coach', 'goals', 'projects', 'income', 'review', 'reality', 'settings']) {
+  for (const t of ['home', 'command', 'today', 'coach', 'goals', 'projects', 'income', 'review', 'reality', 'life', 'health', 'settings']) {
     await page.evaluate(t => { document.querySelector('nav.bottom [data-tab=home]').click(); }, t);
     await page.evaluate(t => { const b = document.createElement('button'); b.dataset.act = 'go'; b.dataset.tab = t; document.body.appendChild(b); b.click(); b.remove(); }, t);
     const sw = await page.evaluate(() => document.documentElement.scrollWidth);
