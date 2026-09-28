@@ -134,9 +134,22 @@ window.claude = { use: async (name) => {
   ok(home.includes('۳۷ میلیون'), 'درآمد این ماه = ۳۲ + ۵ = ۳۷ میلیون');
   ok(home.includes('۴۶٪'), 'درصد تحقق ۳۷/۸۰ = ۴۶٪');
   ok(home.includes('۴۳ میلیون'), 'فاصله تا هدف = ۴۳ میلیون');
-  ok(home.includes('الان کجا هستم؟') && home.includes('مشکل اصلی') && home.includes('امروز چه کنم؟'), 'سه سؤال اصلی نمایش داده می‌شود');
+  ok(home.includes('برنامه امروز') && home.includes('۳ از ۳') && home.includes('بسته شد'), 'داشبورد پیش‌نمایش برنامه امروز (بسته‌شده) را نشان می‌دهد');
+  ok(home.includes('دمو برای مدیر تولید') && home.includes('کار بی‌ربط') && home.includes('مطالعه'), 'هر ۳ اقدام امروز در داشبورد دیده می‌شوند');
+  ok(!home.includes('الان کجا هستم؟') && !home.includes('مهم‌ترین‌ها'), 'کارت‌های تکراری قدیمی از داشبورد حذف شدند');
   ok(home.includes('واقعیت امروز من'), 'کارت «واقعیت امروز من» وجود دارد');
   ok(await page.$('#homeChart svg') !== null, 'نمودار ۶ ماهه رسم شد');
+  const kpiCount = (await page.$$('section[data-pane=home] .kpis .kpi')).length;
+  ok(kpiCount <= 6, `شبکه شاخص‌ها جمع‌وجورتر شد (${kpiCount} کارت، قبلاً ۱۰ تا بود)`);
+  await page.click('nav.bottom [data-tab=more]'); await page.click('.menu [data-tab=settings]');
+  ok((await page.$$('[data-act=theme]')).length === 4, '۴ گزینه تم در تنظیمات نمایش داده شد');
+  await page.click('[data-act=theme][data-v=amber]');
+  ok(await page.evaluate(() => document.documentElement.getAttribute('data-theme')) === 'amber', 'تم کهربایی روی صفحه اعمال شد');
+  await page.reload(); await page.waitForTimeout(300);
+  ok(await page.evaluate(() => document.documentElement.getAttribute('data-theme')) === 'amber', 'انتخاب تم بعد از reload ماند');
+  await page.click('[data-act=theme][data-v=night]');
+  ok(await page.evaluate(() => document.documentElement.hasAttribute('data-theme')) === false, 'برگشت به تم «شب» = بدون data-theme (پیش‌فرض)');
+  await page.click('nav.bottom [data-tab=home]');
   await page.screenshot({ path: OUT + '/v2-home.png', fullPage: true });
 
   // ---------- ۴. اهداف ----------
@@ -218,7 +231,7 @@ window.claude = { use: async (name) => {
   ok((await page.$$('section[data-pane=reality] .cmd')).length === 8, '۸ سؤال واقعیت نمایش داده شد');
   const real = await page.textContent('section[data-pane=reality]');
   ok(real.includes('۳ پروژه فعال') && real.includes('ظرفیت محاسبه‌شده ۲'), 'سؤال ظرفیت با عدد واقعی جواب داده شد');
-  await page.click('nav.bottom [data-tab=command]');
+  await page.click('nav.bottom [data-tab=more]'); await page.click('.menu [data-tab=command]');
   const cmd = await page.textContent('section[data-pane=command]');
   ok(cmd.includes('بزرگ‌ترین ریسک') && cmd.includes('فرصت') && cmd.includes('Focus Guard'), 'مرکز فرمان کامل رندر شد');
   ok(cmd.includes('درآمد و فروش'), 'فرصت = پروژه با بیشترین درآمد مورد انتظار');
@@ -237,7 +250,7 @@ window.claude = { use: async (name) => {
   await page.screenshot({ path: OUT + '/v2-demo-home.png', fullPage: true });
   await page.click('nav.bottom [data-tab=today]');
   await page.screenshot({ path: OUT + '/v2-demo-today.png', fullPage: true });
-  await page.click('nav.bottom [data-tab=command]');
+  await page.click('nav.bottom [data-tab=more]'); await page.click('.menu [data-tab=command]');
   await page.screenshot({ path: OUT + '/v2-demo-command.png', fullPage: true });
   const stored = await page.evaluate(() => localStorage.getItem('ghotbnama.v2'));
   ok(!stored.includes('مشاوره سیستم (فریلنس)'), 'داده نمونه در ذخیره‌سازی واقعی نوشته نشد');
@@ -371,7 +384,7 @@ window.claude = { use: async (name) => {
   await ctx.addInitScript(`localStorage.setItem('ghotbnama.v2', ${JSON.stringify(backup)});`);
   page = await newPage(ctx);
   await page.goto(URL); await page.waitForTimeout(300);
-  for (const t of ['home', 'command', 'today', 'coach', 'goals', 'projects', 'income', 'review', 'reality', 'life', 'health', 'settings']) {
+  for (const t of ['home', 'command', 'today', 'money', 'coach', 'goals', 'projects', 'income', 'review', 'reality', 'life', 'health', 'settings']) {
     await page.evaluate(t => { document.querySelector('nav.bottom [data-tab=home]').click(); }, t);
     await page.evaluate(t => { const b = document.createElement('button'); b.dataset.act = 'go'; b.dataset.tab = t; document.body.appendChild(b); b.click(); b.remove(); }, t);
     const sw = await page.evaluate(() => document.documentElement.scrollWidth);

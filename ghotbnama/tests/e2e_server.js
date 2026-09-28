@@ -51,7 +51,7 @@ function initData(uid) {
     let r = await fetch(BASE + '/sms/' + SMS, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ from: 'BankMelli', text: 'بانک ملی ایران\nواريز:+320,000,000\nحساب:0123456789001\nمانده:330,000,000\n07/07-08:01' }) });
     ok((await r.json()).status === 'ok', 'پیامک واریز پذیرفته شد');
     await page.evaluate(() => document.dispatchEvent(new Event('visibilitychange'))); await sleep(600);
-    await page.click('nav.bottom [data-tab=more]'); await page.click('.menu [data-tab=money]');
+    await page.click('nav.bottom [data-tab=money]');
     let money = await page.textContent('section[data-pane=money]');
     ok(money.includes('۳۲٬۰۰۰٬۰۰۰') || money.includes('۳۲,۰۰۰,۰۰۰'), 'واریز ۳۲ میلیون تومانی (۳۲۰ میلیون ریال) در اپ دیده شد');
     ok(money.includes('ملی') && money.includes('پیامک'), 'بانک و منبع «پیامک» نمایش داده شد');
@@ -67,11 +67,13 @@ function initData(uid) {
     await page.click('nav.bottom [data-tab=home]');
     await page.evaluate(() => document.dispatchEvent(new Event('visibilitychange'))); await sleep(600);
     const home = await page.textContent('section[data-pane=home]');
-    ok(home.includes('هزینه این ماه') && home.includes('۲۵۰ هزار'), 'هزینه تلگرام در داشبورد: ۲۵۰ هزار');
+    ok(home.includes('خالص نقدی ماه'), 'هزینه تلگرام روی خالص نقدی داشبورد اثر گذاشت');
     ok(home.includes('۶۲ میلیون'), 'درآمد ماه در داشبورد: ۶۲ میلیون');
+    await page.click('nav.bottom [data-tab=money]');
+    ok((await page.textContent('section[data-pane=money]')).includes('۲۵۰٬۰۰۰'), 'هزینه تلگرام در پنل پول: ۲۵۰ هزار');
 
     console.log('\n# تعارض: ربات و اپ همزمان');
-    await page.click('nav.bottom [data-tab=more]'); await page.click('.menu [data-tab=money]');
+    await page.click('nav.bottom [data-tab=money]');
     await api('/__test/msg?text=' + encodeURIComponent('۸۰ اسنپ'), { method: 'POST' });
     await page.fill('#tx-amt', '10000'); await page.click('form[data-form=txn-add] button'); await sleep(800);
     ok((await page.textContent('#toast')).includes('ربات در همین فاصله'), 'تعارض تشخیص داده شد و کاربر مطلع شد (بی‌صدا رونویسی نشد)');

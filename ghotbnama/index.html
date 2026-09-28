@@ -8,7 +8,7 @@
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Vazirmatn:wght@400;500;700;900&display=swap">
 <style>
-/* طراحی عمداً تک‌تم (دارک) است */
+/* چهار تم انتخابی (نه سیستم‌محور) — پیش‌فرض «شب». تعویض با data-theme روی <html> */
 :root{
   color-scheme:dark;
   --bg:#0A0F18; --surface:#111A28; --surface2:#16223A; --sunk:#0C1421; --line:#22324A; --line2:#2C3F5C;
@@ -18,7 +18,41 @@
   --good:#4CC08E; --warn:#E6A246; --crit:#EE7466; --info:#8FA6C4;
   --good-bg:#11302A; --warn-bg:#33270F; --crit-bg:#3A1A18; --info-bg:#172338;
   --s1:#3987e5; --s2:#d95926; --s3:#199e70; --s4:#c98500;
+  --hero1:#16283F; --hero2:#0F1B2D; --hero-line:#243B5A; --hero-fig:#F0C674; --hero-sub:#C9D4E2; --hero-track:#24405F;
   --r:12px;
+}
+:root[data-theme="day"]{
+  color-scheme:light;
+  --bg:#F3F1EA; --surface:#FFFFFF; --surface2:#FBF9F3; --sunk:#EFEBE0; --line:#E2DCC9; --line2:#D2C9AE;
+  --ink:#211C10; --ink2:#5B5236; --ink3:#8B8264;
+  --gold:#8A5B12; --gold-ink:#FFFFFF; --gold-soft:#F2E3C2;
+  --ai:#1D5FD1; --ai-soft:#E9F0FE; --ai-line:#A9C4F5;
+  --good:#1E8A5F; --warn:#B4780C; --crit:#C0392B; --info:#5B6E8C;
+  --good-bg:#DFF1E7; --warn-bg:#FBEBD3; --crit-bg:#F8DEDA; --info-bg:#E7ECF4;
+  --s1:#2a78d6; --s2:#c85a1e; --s3:#188363; --s4:#a86c00;
+  --hero1:#EFE3C4; --hero2:#F4EEDD; --hero-line:#D9C89A; --hero-fig:#8A5B12; --hero-sub:#5B5236; --hero-track:#E2D2A6;
+}
+:root[data-theme="amber"]{
+  color-scheme:dark;
+  --bg:#080604; --surface:#14100A; --surface2:#1C160D; --sunk:#0B0904; --line:#2E2413; --line2:#3D3014;
+  --ink:#F3EAD6; --ink2:#C2B08A; --ink3:#8A7A5A;
+  --gold:#F0A93C; --gold-ink:#1A0F02; --gold-soft:#33220A;
+  --ai:#E8A6FF; --ai-soft:#241426; --ai-line:#4A2A54;
+  --good:#8FC53E; --warn:#F0A93C; --crit:#EE5A4C; --info:#C2A876;
+  --good-bg:#20280F; --warn-bg:#33220A; --crit-bg:#331410; --info-bg:#241C10;
+  --s1:#e07b1a; --s2:#d1381f; --s3:#8fc53e; --s4:#f0a93c;
+  --hero1:#1C1206; --hero2:#0E0902; --hero-line:#3D2A0E; --hero-fig:#F0A93C; --hero-sub:#C2B08A; --hero-track:#3D2A0E;
+}
+:root[data-theme="ocean"]{
+  color-scheme:dark;
+  --bg:#061A1F; --surface:#0B2831; --surface2:#0F3540; --sunk:#051419; --line:#164450; --line2:#1E5865;
+  --ink:#E4F5F7; --ink2:#9DC9D0; --ink3:#5E8E96;
+  --gold:#3FD0C9; --gold-ink:#04201D; --gold-soft:#0E3F3A;
+  --ai:#7EC9FF; --ai-soft:#0C2C3F; --ai-line:#215577;
+  --good:#3FD0A5; --warn:#E6B24A; --crit:#EE7B6E; --info:#7FB8C4;
+  --good-bg:#0C3128; --warn-bg:#332A0F; --crit-bg:#3A1F1A; --info-bg:#0E2E38;
+  --s1:#3fa9d0; --s2:#d97a3f; --s3:#3fd0a5; --s4:#c9a83f;
+  --hero1:#0B333D; --hero2:#062024; --hero-line:#1E5865; --hero-fig:#3FD0C9; --hero-sub:#9DC9D0; --hero-track:#164450;
 }
 *{box-sizing:border-box}
 [hidden]{display:none!important}
@@ -92,14 +126,14 @@ label.f{display:grid;gap:4px;font-size:.8rem;color:var(--ink2);flex:1 1 140px;mi
 .bar>i{display:block;height:100%;background:var(--gold);border-radius:5px}
 .bar.good>i{background:var(--good)} .bar.warn>i{background:var(--warn)} .bar.crit>i{background:var(--crit)}
 
-.north{background:linear-gradient(160deg,#16283F,#0F1B2D);border:1px solid #243B5A;border-radius:var(--r);padding:16px;display:grid;gap:8px}
+.north{background:linear-gradient(160deg,var(--hero1),var(--hero2));border:1px solid var(--hero-line);border-radius:var(--r);padding:16px;display:grid;gap:8px}
 .north .fig{display:flex;align-items:baseline;gap:10px;flex-wrap:wrap}
-.north .fig strong{font-size:clamp(1.7rem,7vw,2.3rem);font-weight:900;color:#F0C674;line-height:1.1}
-.north .fig span{color:#C9D4E2}
-.north .track{height:10px;background:#24405F;border-radius:6px;overflow:hidden}
-.north .track>i{display:block;height:100%;background:#F0C674;border-radius:6px}
-.north .meta{display:flex;gap:14px;flex-wrap:wrap;font-size:.8rem;color:#C9D4E2}
-.north .meta b{color:#fff}
+.north .fig strong{font-size:clamp(1.7rem,7vw,2.3rem);font-weight:900;color:var(--hero-fig);line-height:1.1}
+.north .fig span{color:var(--hero-sub)}
+.north .track{height:10px;background:var(--hero-track);border-radius:6px;overflow:hidden}
+.north .track>i{display:block;height:100%;background:var(--hero-fig);border-radius:6px}
+.north .meta{display:flex;gap:14px;flex-wrap:wrap;font-size:.8rem;color:var(--hero-sub)}
+.north .meta b{color:var(--ink)}
 
 .now{display:grid;gap:0;padding:0;overflow:hidden}
 .now>div{display:grid;grid-template-columns:92px 1fr;gap:10px;padding:12px 14px;border-bottom:1px solid var(--line);align-items:start}
@@ -234,7 +268,7 @@ td input{width:104px;padding:4px 6px;min-height:34px}
 
 <nav class="bottom" aria-label="بخش‌های اصلی">
   <button data-act="go" data-tab="home"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 11l9-7 9 7"/><path d="M5 10v10h14V10"/></svg>خانه</button>
-  <button data-act="go" data-tab="command"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="12" cy="12" r="9"/><circle cx="12" cy="12" r="4"/><path d="M12 3v3M12 18v3M3 12h3M18 12h3"/></svg>فرمان</button>
+  <button data-act="go" data-tab="money"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="6" width="18" height="13" rx="2"/><path d="M3 10h18"/><circle cx="16" cy="14.5" r="1.4" fill="currentColor" stroke="none"/></svg>پول</button>
   <button data-act="go" data-tab="today"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 11l3 3 8-8"/><path d="M20 12v7a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h9"/></svg>امروز</button>
   <button data-act="go" data-tab="coach"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3l1.8 4.6L18 9.4l-4.2 1.8L12 16l-1.8-4.8L6 9.4l4.2-1.8z"/><path d="M19 15l.8 2 2 .8-2 .8-.8 2-.8-2-2-.8 2-.8z"/></svg>مربی</button>
   <button data-act="go" data-tab="more"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><rect x="4" y="4" width="6" height="6" rx="1.5"/><rect x="14" y="4" width="6" height="6" rx="1.5"/><rect x="4" y="14" width="6" height="6" rx="1.5"/><rect x="14" y="14" width="6" height="6" rx="1.5"/></svg>بیشتر</button>
@@ -319,6 +353,7 @@ const val=id=>{const e=$(id);return e?e.value.trim():"";};
    ===================================================================== */
 const ABOUT="مدیر با چند سال سابقه در مدیریت و سرپرستی، فروش و مذاکره، برنامه‌ریزی، IT و راه‌اندازی سیستم‌های سازمانی (در حال حاضر سرپرست واحد سپیا در یک کارخانه چینی بهداشتی با تیم ۱۰ نفره). علایق: هوش مصنوعی، نرم‌افزار و برنامه‌نویسی، راه‌اندازی کسب‌وکار، ساخت محصول نرم‌افزاری، سرمایه‌گذاری و سیستم‌های قابل توسعه. پروژه اصلی: VQ / Vista Quantum — نرم‌افزار مدیریتی و ERP بر پایه تجربه واقعی کارخانه، با هدف تبدیل به محصول قابل فروش. نقطه ضعف شناخته‌شده: پخش شدن روی پروژه‌های زیاد. تعارف نمی‌خواهم؛ واقعیت، عدد و اقدام می‌خواهم.";
 const CATS={income:"درآمدساز",future:"ساخت آینده",growth:"شخصی/یادگیری"};
+const THEMES={night:"شب",day:"روز",amber:"کهربایی",ocean:"اقیانوسی"};
 const LEVELS={year:"سالانه",quarter:"فصلی",month:"ماهانه",week:"هفتگی"};
 const GSTAT={active:"فعال",draft:"پیش‌نویس (ناقص)",done:"انجام‌شده",paused:"متوقف",dropped:"کنار گذاشته"};
 const PSTAT={backlog:"Backlog",active:"Active",paused:"Paused",completed:"Completed",cancelled:"Cancelled"};
@@ -357,7 +392,7 @@ const EXP_CATS=["خوراک","حمل‌ونقل","قبض و شارژ","خانه 
 const SELF="انتقال به خودم", IN_OTHER=["قرض/بازگشت پول","سایر واریز"];
 
 function emptyData(){
-  return {profile:{name:"مهرداد",about:ABOUT,target:0,targetEnd:"",freeHours:0,mainPriority:"",mainProjectId:"",mainGoalId:"",reviewMonths:3,life:{}},
+  return {profile:{name:"مهرداد",about:ABOUT,target:0,targetEnd:"",freeHours:0,mainPriority:"",mainProjectId:"",mainGoalId:"",reviewMonths:3,theme:"night",life:{}},
     vision:{text:"",target:0,unit:"",end:""},
     goals:[],projects:[],streams:[],incomeLog:[],txns:[],days:{},reviews:[],coachLog:[],ai:{reality:{}},
     health:{checkins:{},subst:[],meals:[]},habits:[],growthPlans:[]};
@@ -383,6 +418,7 @@ function normalize(d){
   d.ai=Object.assign({reality:{}},d.ai||{}); if(!d.ai.reality) d.ai.reality={};
   ["goals","projects","streams","incomeLog","reviews","coachLog","txns","habits","growthPlans"].forEach(k=>{if(!Array.isArray(d[k]))d[k]=[];});
   if(!d.profile.life||typeof d.profile.life!=="object") d.profile.life={};
+  if(!THEMES[d.profile.theme]) d.profile.theme="night";
   if(!d.health||typeof d.health!=="object") d.health={checkins:{},subst:[],meals:[]};
   if(!d.health.checkins||typeof d.health.checkins!=="object") d.health.checkins={};
   if(!Array.isArray(d.health.subst)) d.health.subst=[];
@@ -806,46 +842,37 @@ function aiBlock(id,title,cached,btnLabel,act,fallback){
 }
 
 /* ---------- خانه: داشبورد وضعیت من ---------- */
+function homeTodayPreview(){
+  const A=dayActs(TN), d=getDay(TN);
+  if(!A.length) return `<div class="card"><div class="row spread"><h2>برنامه امروز</h2></div><p class="muted">هنوز اقدامی برای امروز انتخاب نکرده‌ای.</p><button class="btn primary" data-act="go" data-tab="today">شروع برنامه‌ریزی امروز</button></div>`;
+  const rows=A.map(a=>`<div class="row spread" style="padding:7px 0;border-bottom:1px solid var(--line)"><div class="row" style="gap:8px;min-width:0"><span class="catpill cat-${a.cat}">${CATS[a.cat]}</span><span${a.status!=="todo"?' style="color:var(--ink3);text-decoration:line-through"':""} class="small">${esc(a.title)}</span></div>${a.status!=="todo"?`<span class="pill ${a.status==="done"?"good":a.status==="partial"?"warn":"crit"}">${STATUS_FA[a.status]}</span>`:'<span class="pill">⏳</span>'}</div>`).join("");
+  const doneN=A.filter(a=>a.status!=="todo").length;
+  return `<div class="card" style="cursor:pointer" data-act="go" data-tab="today"><div class="row spread"><h2>برنامه امروز</h2><span class="pill ${d&&d.closed?"good":""} num">${fa(doneN)} از ۳${d&&d.closed?" · بسته شد":""}</span></div><div style="margin-top:-4px">${rows}</div><button class="btn ghost sm" style="margin-top:8px" data-act="go" data-tab="today">${d&&d.closed?"مشاهده":"ثبت نتیجه و بستن روز"} ←</button></div>`;
+}
 function renderHome(){
-  const rep=incomeReport(), w=weekStats(weekStart(TN)), iss=issues(), ta=topActionToday(), tp=topProject(), tg=topGoal(), ts=dayScore(TN);
-  const P=D.profile, AP=activeProjects().length, AG=activeGoals().length;
-  const where=P.target?`درآمد این ماه <b>${money(rep.curT)}</b> از <b>${money(P.target)}</b> (${pct(rep.ach)}). اجرای برنامه این هفته <b>${pct(w.exec)}</b> با <b>${fa(w.effective)}</b> روز مؤثر.`:`درآمد این ماه <b>${money(rep.curT)}</b>؛ هدف ماهانه ثبت نشده. اجرای برنامه این هفته <b>${pct(w.exec)}</b>.`;
-  const prob=iss[0]?`<b>${esc(iss[0].text)}</b> ${goBtn(iss[0])}`:"از روی داده‌ها مشکل جدی‌ای دیده نمی‌شود.";
-  const todo=ta?`<b>${esc(ta.title)}</b> <span class="muted">(${CATS[ta.cat]}${ta.estMin?"، "+fa(ta.estMin)+" دقیقه":""})</span>`:(dayActs(TN).length?"نتیجه همه اقدام‌های امروز ثبت شده.":"هنوز اقدامی برای امروز انتخاب نکرده‌ای.");
+  const rep=incomeReport(), w=weekStats(weekStart(TN)), iss=issues(), ts=dayScore(TN);
+  const P=D.profile, AP=activeProjects().length;
+  const prob=iss[0]?`<div class="issue ${iss[0].sev}"><span class="tag">${esc(iss[0].tag)}</span><div>${esc(iss[0].text)}${goBtn(iss[0])?` ${goBtn(iss[0])}`:""}</div></div>`:"";
   const tr=P.target?clamp(rep.curT/P.target*100,0,100):0;
-  const wdays=Math.min(7,TN-weekStart(TN)+1);
   $pane("home").innerHTML=`
   <div class="north">
-    <span class="eyebrow" style="color:#C9D4E2">درآمد ${MONTHS[d2j(TN).jm-1]} در برابر هدف ماه</span>
+    <span class="eyebrow" style="color:var(--hero-sub)">درآمد ${MONTHS[d2j(TN).jm-1]} در برابر هدف ماه</span>
     <div class="fig num"><strong>${money(rep.curT)}</strong><span>${P.target?"از "+money(P.target)+" تومان":"هدف ماهانه ثبت نشده"}</span></div>
     <div class="track" role="progressbar" aria-valuenow="${Math.round(tr)}" aria-valuemin="0" aria-valuemax="100" aria-label="تحقق هدف ماهانه"><i style="width:${tr}%"></i></div>
-    <div class="meta num"><span>تحقق: <b>${pct(rep.ach)}</b></span><span>فاصله: <b>${rep.gap!=null?money(rep.gap):"—"}</b></span><span>برآورد پایان ماه: <b>${money(rep.pace)}</b></span><span>روز ${fa(rep.dayOfMonth)} از ${fa(rep.monthLen)}</span></div>
+    <div class="meta num"><span>تحقق: <b>${pct(rep.ach)}</b></span><span>فاصله: <b>${rep.gap!=null?money(rep.gap):"—"}</b></span><span>روز ${fa(rep.dayOfMonth)} از ${fa(rep.monthLen)}</span></div>
   </div>
-  <div class="card now">
-    <div><span class="q">الان کجا هستم؟</span><span class="a">${where}</span></div>
-    <div><span class="q">مشکل اصلی</span><span class="a">${prob}</span></div>
-    <div><span class="q">امروز چه کنم؟</span><span class="a">${todo} <button class="link" data-act="go" data-tab="today">برنامه امروز ←</button></span></div>
-  </div>
-  ${aiBlock("aiToday","واقعیت امروز من",D.ai.today,"تحلیل تازه","ai-today",iss.length?esc(iss.slice(0,2).map(i=>"- "+i.text).join("\n")):"از روی داده‌ها هشدار جدی‌ای نیست.")}
+  ${prob}
+  ${homeTodayPreview()}
   <div class="kpis">
     ${kpi("درآمد این ماه",money(rep.curT),rep.vsPrev!=null?`نسبت به ماه قبل ${spct(rep.vsPrev)}`:"")}
-    ${kpi("هدف درآمد ماه",P.target?money(P.target):"—",P.targetEnd?"تا "+esc(P.targetEnd):"")}
     ${kpi("درصد تحقق",pct(rep.ach),"",rep.ach==null?"":rep.ach>=1?"good":rep.ach>=0.6?"warn":"crit")}
-    ${kpi("فاصله تا هدف",rep.gap!=null?money(rep.gap):"—","")}
     ${kpi("پروژه‌های فعال",fa(AP),"ظرفیت: "+fa(capacity()),AP>capacity()?"crit":"")}
-    ${kpi("اهداف فعال",fa(AG),D.goals.filter(g=>g.status==="draft").length?fa(D.goals.filter(g=>g.status==="draft").length)+" ناقص":"")}
     ${kpi("اجرای برنامه هفته",pct(w.exec),fa(Math.round(w.doneW*10)/10)+" از "+fa(w.total)+" اقدام",w.exec==null?"":w.exec>=0.7?"good":w.exec>=0.4?"warn":"crit")}
-    ${kpi("روزهای مؤثر هفته",fa(w.effective)+" از "+fa(wdays),"")}
     ${kpi("امتیاز امروز",ts?fa(ts.total):"—","از ۱۰۰",ts?(ts.total>=70?"good":ts.total>=40?"warn":"crit"):"")}
     ${kpi("امتیاز هفته",w.score!=null?fa(w.score):"—","نتیجه‌محور",w.score==null?"":w.score>=70?"good":w.score>=40?"warn":"crit")}
-    ${D.txns.length?(()=>{const mm=monthMoney(CURM());return kpi("هزینه این ماه",money(mm.expense),mm.uncat.length?fa(mm.uncat.length)+" بدون دسته":"","")+kpi("خالص نقدی ماه",money(mm.income+mm.otherIn-mm.expense),"واریز − هزینه",mm.income+mm.otherIn-mm.expense<0?"crit":"good");})():""}
+    ${D.txns.length?(()=>{const mm=monthMoney(CURM());return kpi("خالص نقدی ماه",money(mm.income+mm.otherIn-mm.expense),"واریز − هزینه",mm.income+mm.otherIn-mm.expense<0?"crit":"good");})():""}
   </div>
-  <div class="card">
-    <h2>مهم‌ترین‌ها</h2>
-    <div class="cmd"><span class="k">هدف فعلی</span><span>${tg?goalLine(tg):'<span class="muted">هدف فعالی نداری.</span> <button class="link" data-act="go" data-tab="goals">تعریف هدف ←</button>'}</span></div>
-    <div class="cmd"><span class="k">پروژه فعلی</span><span>${tp?`<b>${esc(tp.name)}</b><div class="muted num">پیشرفت ${fa(tp.progress)}٪ · ارزش ${fa(valueScore(tp))}</div>${tp.nextAction?`<div class="small">اقدام بعدی: ${esc(tp.nextAction)}</div>`:""}`:'<span class="muted">پروژه فعالی نداری.</span>'}</span></div>
-    <div class="cmd"><span class="k">اقدام امروز</span><span>${ta?`<b>${esc(ta.title)}</b>`:'<span class="muted">—</span>'}</span></div>
-  </div>
+  ${aiBlock("aiToday","واقعیت امروز من",D.ai.today,"تحلیل تازه","ai-today",iss.length?esc(iss.slice(0,2).map(i=>"- "+i.text).join("\n")):"از روی داده‌ها هشدار جدی‌ای نیست.")}
   <div class="card"><div class="row spread"><h2>درآمد ۶ ماه اخیر</h2><span class="muted">خط‌چین = هدف ماهانه</span></div><div id="homeChart"></div></div>`;
   drawChart($("homeChart"),6);
 }
@@ -853,7 +880,9 @@ function renderHome(){
 /* ---------- نمودار ستونی انباشته ---------- */
 function colorOf(i){return "var(--s"+(i%4+1)+")";}
 function niceStep(x){const p=Math.pow(10,Math.floor(Math.log10(x||1)));const f=x/p;return (f<=1?1:f<=2?2:f<=5?5:10)*p;}
+function themeVar(name){return getComputedStyle(document.documentElement).getPropertyValue(name).trim()||"#888";}
 function drawChart(host,k){
+  const cLine=themeVar("--line"), cInk3=themeVar("--ink3"), cInk2=themeVar("--ink2"), cGold=themeVar("--gold");
   const months=lastMonths(k), all=D.streams.filter(s=>months.some(m=>Number(s.entries[m.k])>0));
   const ss=all.slice(0,3), rest=all.slice(3);
   const series=ss.map((s,i)=>({name:s.name,color:colorOf(i),val:m=>Number(s.entries[m.k])||0}));
@@ -864,14 +893,14 @@ function drawChart(host,k){
   let max=Math.max(1,...totals,target); const step=niceStep(max/4); max=Math.ceil(max/step)*step;
   const y=v=>T+ph-(v/max)*ph, slot=pw/months.length, bw=Math.min(46,slot*0.55);
   let g=`<div class="legend">${series.map(s=>`<span><i class="dot" style="background:${s.color}"></i>${esc(s.name)}</span>`).join("")}</div><div class="chart"><svg viewBox="0 0 ${W} ${H}" role="img" aria-label="درآمد ماهانه به تفکیک منبع" style="direction:ltr">`;
-  for(let v=0;v<=max+1;v+=step) g+=`<line x1="${L}" x2="${W-R}" y1="${y(v)}" y2="${y(v)}" stroke="#1C2A40" stroke-width="1"/><text x="${L-8}" y="${y(v)+4}" text-anchor="end" font-size="11" fill="#71809A" font-family="Vazirmatn,Tahoma,sans-serif">${money(v)}</text>`;
+  for(let v=0;v<=max+1;v+=step) g+=`<line x1="${L}" x2="${W-R}" y1="${y(v)}" y2="${y(v)}" stroke="${cLine}" stroke-width="1"/><text x="${L-8}" y="${y(v)+4}" text-anchor="end" font-size="11" fill="${cInk3}" font-family="Vazirmatn,Tahoma,sans-serif">${money(v)}</text>`;
   months.forEach((m,i)=>{
     const cx=L+slot*(i+.5); let acc=0; const segs=series.map(s=>({v:s.val(m),c:s.color})).filter(x=>x.v>0);
     segs.forEach((sg,j)=>{const y0=y(acc),y1=y(acc+sg.v);acc+=sg.v;const top=j===segs.length-1;const h=Math.max(1,y0-y1-(top?0:2));const r=Math.min(4,h);
       g+=top?`<path d="M${cx-bw/2},${y0} V${y0-h+r} Q${cx-bw/2},${y0-h} ${cx-bw/2+r},${y0-h} H${cx+bw/2-r} Q${cx+bw/2},${y0-h} ${cx+bw/2},${y0-h+r} V${y0} Z" fill="${sg.c}"/>`:`<rect x="${cx-bw/2}" y="${y0-h}" width="${bw}" height="${h}" fill="${sg.c}"/>`;});
-    g+=`<text x="${cx}" y="${H-9}" text-anchor="middle" font-size="12" fill="#A7B3C5" font-family="Vazirmatn,Tahoma,sans-serif">${m.label}</text><rect x="${cx-slot/2}" y="${T}" width="${slot}" height="${ph}" fill="transparent" data-mi="${i}"/>`;
+    g+=`<text x="${cx}" y="${H-9}" text-anchor="middle" font-size="12" fill="${cInk2}" font-family="Vazirmatn,Tahoma,sans-serif">${m.label}</text><rect x="${cx-slot/2}" y="${T}" width="${slot}" height="${ph}" fill="transparent" data-mi="${i}"/>`;
   });
-  if(target) g+=`<line x1="${L}" x2="${W-R}" y1="${y(target)}" y2="${y(target)}" stroke="#E3B35C" stroke-width="2" stroke-dasharray="6 5"/>`;
+  if(target) g+=`<line x1="${L}" x2="${W-R}" y1="${y(target)}" y2="${y(target)}" stroke="${cGold}" stroke-width="2" stroke-dasharray="6 5"/>`;
   g+=`</svg><div class="tip" hidden></div></div>`;
   host.innerHTML=g;
   const tip=host.querySelector(".tip"), box=host.querySelector(".chart");
@@ -1350,7 +1379,7 @@ function planHtml(plan){
 
 /* ---------- بیشتر ---------- */
 function renderMore(){
-  const items=[["command","مرکز فرمان","مهم‌ترین مسئله، امروز تا این فصل"],["goals","اهداف","چشم‌انداز تا هفتگی · "+fa(activeGoals().length)+" فعال"],["projects","پروژه‌ها","اولویت‌بندی و ظرفیت · "+fa(activeProjects().length)+" فعال"],["income","منابع درآمد","روند، سهم، درآمد هر ساعت"],["review","بازبینی هفتگی","عددهای هفته + گزارش AI"],["money","پول و تراکنش‌ها","واریز، برداشت، هزینه به تفکیک دسته"],["reality","واقعیت بدون تعارف","۸ سؤال با جواب عددی"],["life","مصاحبه رشد و موفقیت","پروفایل عمیق + برنامه رشد با AI"],["health","سلامت و عادت روزانه","خواب، ورزش، غذا، مصرف، عادت‌ها"],["settings","تنظیمات","پروفایل، داده‌ها، پشتیبان"]];
+  const items=[["command","مرکز فرمان","مهم‌ترین مسئله، ریسک و فرصت"],["goals","اهداف","چشم‌انداز تا هفتگی · "+fa(activeGoals().length)+" فعال"],["projects","پروژه‌ها","اولویت‌بندی و ظرفیت · "+fa(activeProjects().length)+" فعال"],["income","منابع درآمد","روند، سهم، درآمد هر ساعت"],["review","بازبینی هفتگی","عددهای هفته + گزارش AI"],["reality","واقعیت بدون تعارف","۸ سؤال با جواب عددی"],["life","مصاحبه رشد و موفقیت","پروفایل عمیق + برنامه رشد با AI"],["health","سلامت و عادت روزانه","خواب، ورزش، غذا، مصرف، عادت‌ها"],["settings","تنظیمات","پروفایل، داده‌ها، پشتیبان و تم"]];
   $pane("more").innerHTML=`<div class="pane-title"><h1>همه بخش‌ها</h1></div><div class="menu">${items.map(i=>`<button data-act="go" data-tab="${i[0]}"><b>${i[1]}</b><span>${esc(i[2])}</span></button>`).join("")}</div>`;
 }
 
@@ -1412,6 +1441,9 @@ function renderSettings(){
   const R=ROOT.real, P=R.profile;
   $pane("settings").innerHTML=`
   <div class="pane-title"><h1>تنظیمات</h1></div>
+  <div class="card"><h2>تم</h2>
+    <div class="chips">${Object.keys(THEMES).map(k=>`<button data-act="theme" data-v="${k}" aria-pressed="${(P.theme||"night")===k}">${THEMES[k]}</button>`).join("")}</div>
+  </div>
   <div class="card"><h2>داده فعال</h2>
     <div class="seg"><button data-act="mode" data-v="real" aria-pressed="${!isDemo()}">داده واقعی من</button><button data-act="mode" data-v="demo" aria-pressed="${isDemo()}">Sample Data</button></div>
     <p class="muted small">Sample Data فقط برای دیدن امکانات است؛ ذخیره نمی‌شود و هیچ‌وقت با داده واقعی قاطی نمی‌شود.</p>
@@ -1438,11 +1470,12 @@ function renderSettings(){
   </div>`;
 }
 
+function applyTheme(){const t=(D&&D.profile&&D.profile.theme)||"night";document.documentElement.setAttribute("data-theme",t==="night"?"":t);if(!t||t==="night")document.documentElement.removeAttribute("data-theme");}
 function render(){
-  TN=nowN(); renderTop();
+  TN=nowN(); applyTheme(); renderTop();
   const map={money:renderMoney,home:renderHome,command:renderCommand,today:renderToday,coach:renderCoach,more:renderMore,goals:renderGoals,projects:renderProjects,income:renderIncome,review:renderReview,reality:renderReality,life:renderLife,health:renderHealth,settings:renderSettings};
   (map[TAB]||renderHome)();
-  const main=["home","command","today","coach"].indexOf(TAB)>=0?TAB:"more";
+  const main=["home","today","money","coach"].indexOf(TAB)>=0?TAB:"more";
   document.querySelectorAll("nav.bottom button").forEach(b=>{if(b.dataset.tab===main)b.setAttribute("aria-current","page");else b.removeAttribute("aria-current");});
   setAiButtons(AI_BUSY);
 }
@@ -1482,6 +1515,7 @@ const ACT={
   "notice-x"(){NOTICE="";render();},
   "to-real"(){ROOT.mode="real";useData();persist();if(!ROOT.setupDone)openWizard();else showTab("home");},
   mode(el){ROOT.mode=el.dataset.v==="demo"?"demo":"real";useData();persist();showTab(TAB,true);toast(isDemo()?"حالت Sample Data فعال شد.":"داده واقعی فعال شد.");},
+  theme(el){D.profile.theme=THEMES[el.dataset.v]?el.dataset.v:"night";commit("تم عوض شد.");},
   wizard(){openWizard();},
   day(el){VIEWDAY=+el.dataset.n;OPENRES.clear();if(TAB!=="today")showTab("today");else render();},
   sug(el){const i=el.dataset.i,p=byId(D.projects,el.dataset.pid);if(!p)return;$("na-title-"+i).value=p.nextAction;$("na-proj-"+i).value=p.id;if(p.goalId&&$("na-goal-"+i).querySelector(`option[value="${p.goalId}"]`))$("na-goal-"+i).value=p.goalId;$("na-cat-"+i).value=el.dataset.cat;$("na-est-"+i).focus();},
