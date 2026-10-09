@@ -1,0 +1,24 @@
+# اجرا (از پوشه mehrdad/server):
+#   docker compose up -d --build                  ← فقط مغز
+#   docker compose --profile proxy up -d --build  ← + کلاینت Xray برای رسیدن به تلگرام
+services:
+  mehrdad:
+    build:
+      context: ..
+      dockerfile: server/Dockerfile
+      args:
+        BASE_IMAGE: ${BASE_IMAGE:-python:3.11-slim}
+        PIP_INDEX_URL: ${PIP_INDEX_URL:-https://pypi.org/simple}
+    env_file: .env
+    volumes:
+      - ./data:/data
+    ports:
+      - "127.0.0.1:8081:8081"
+    restart: unless-stopped
+
+  xray:
+    profiles: ["proxy"]
+    image: ${XRAY_IMAGE:-teddysun/xray:latest}
+    volumes:
+      - ./xray/config.json:/etc/xray/config.json:ro
+    restart: unless-stopped
