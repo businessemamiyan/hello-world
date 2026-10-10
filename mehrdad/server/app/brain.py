@@ -88,10 +88,14 @@ SYSTEM_PROMPT = """تو «مهرداد» هستی — مغز دومِ کاربر
   maybe («احتمالاً»، «شاید»). planned/maybe هنوز در جمع پول و زمان نمی‌آیند؛ برای آن‌ها هم amount و when را بگذار تا بعداً «انجام شد» بشوند.
 - هر خرجی که وسط روایت گفت جدا ثبت شود (مثلاً «سرویس هر رفت ۲۵۰ هزار» = یک خرج done برای رفت + یک خرج maybe برای برگشت اگر گفت «احتمالاً برگشت هم دارم»).
 - **ابهام**: اگر نفهمیدی (مثلاً «گاز زدم شدم ۶۶۰۰» که ممکن است پر کردن باک CNG یا چیز دیگری باشد)، بهترین حدس را با "uncertain": true ثبت کن و در reply یک سؤال کوتاه و مشخص بپرس. حدس‌های بی‌پایه نزن.
+- **اصلاح رکورد قبلی**: هر خاطرهٔ اخیر با شناسه (مثل #۱۲) در «خاطرات اخیر» دیده می‌شود. اگر کاربر چیزی را تکمیل/اصلاح کرد
+  (جواب سؤال تو، «سرویس برگشت هم شد»، «آن مبلغ ۶۶ هزار بود»)، رکورد جدید نساز؛ یک ورودی با "update_id": <شناسه> و فقط مقدارهای تازه بده
+  (مثلاً {"update_id": 12, "amount": 66000, "uncertain": false} یا {"update_id": 14, "status": "done"}). برای حذف اشتباه واضح: {"delete_id": <شناسه>}.
+  فقط شناسه‌هایی که در «خاطرات اخیر» می‌بینی مجازند؛ حدس نزن.
 - در پایان reply، اگر روایت چند چیز بود، خلاصهٔ یک‌خطی «چه ثبت شد» بگو و فقط در صورت لزوم یک سؤال بپرس.
 
 **قالب خروجی**: فقط و فقط یک JSON معتبر (بدون ```json و بدون هیچ متن قبل/بعدش) با این شکل:
-{"reply": "<جواب فارسی تو به کاربر>", "memory": [{"type": "<activity|income|expense|meal|smoking|intimacy|workout|sleep|feeling|task|goal|idea|habit|note|other>", "summary": "<خلاصه یک‌خطی>", "detail": "<جزئیات اختیاری>", "amount": <عدد تومان یا null>, "category": "<دسته یا null>", "when": "<YYYY-MM-DD HH:MM یا HH:MM یا null>", "end": "<HH:MM یا null>", "minutes": <عدد یا null>, "status": "<done|ongoing|planned|maybe یا null>", "uncertain": <true یا null>, "fields": {<اختیاری>}}]}
+{"reply": "<جواب فارسی تو به کاربر>", "memory": [{"type": "<activity|income|expense|meal|smoking|intimacy|workout|sleep|feeling|task|goal|idea|habit|note|other>", "summary": "<خلاصه یک‌خطی>", "detail": "<جزئیات اختیاری>", "amount": <عدد تومان یا null>, "category": "<دسته یا null>", "when": "<YYYY-MM-DD HH:MM یا HH:MM یا null>", "end": "<HH:MM یا null>", "minutes": <عدد یا null>, "status": "<done|ongoing|planned|maybe یا null>", "uncertain": <true یا null>, "fields": {<اختیاری>}, "update_id": <شناسهٔ رکورد قبلی یا null>, "delete_id": <شناسه یا null>}]}
 نوع "habit" فقط برای وقتی است که کاربر درباره‌ی عادتی حرف می‌زند بدون اینکه با /habit ثبتش کرده
 باشد (فقط برای حافظه — ساخت ردیف واقعی عادت و استریک فقط با دستور /habit انجام می‌شود، نه این JSON).
 
@@ -110,7 +114,10 @@ def _build_context_block(recent_memory):
     lines = []
     for m in recent_memory[-40:]:
         amt = f" ({int(m['amount']):,} تومان)" if m.get("amount") else ""
-        lines.append(f"- [{m['type']}] {m['summary']}{amt}")
+        f = m.get("fields") or {}
+        flag = (" ؟مبهم" if f.get("uncertain") else "") + (f" [{f['status']}]" if f.get("status") in ("planned", "maybe", "ongoing") else "")
+        ident = f"#{m['id']} " if m.get("id") else ""
+        lines.append(f"- {ident}[{m['type']}] {m['summary']}{amt}{flag}")
     return "\n".join(lines)
 
 
@@ -328,7 +335,12 @@ class Brain:
         entries = parsed.get("memory") or []
         clean = []
         for e in entries:
-            if not isinstance(e, dict) or not e.get("summary"):
+            if isinstance(e, dict) and isinstance(e.get("delete_id"), int) and not isinstance(e.get("delete_id"), bool):
+                clean.append({"delete_id": e["delete_id"]})
+                continue
+            upd = e.get("update_id") if isinstance(e, dict) else None
+            upd = upd if isinstance(upd, int) and not isinstance(upd, bool) else None
+            if not isinstance(e, dict) or (not e.get("summary") and upd is None):
                 continue
             t = e.get("type") if e.get("type") in KINDS else "note"
             amount = e.get("amount")
@@ -350,6 +362,24 @@ class Brain:
                 fields["status"] = e["status"]
             if e.get("uncertain") is True:
                 fields["uncertain"] = True
+            if upd is not None:   # اصلاح یک رکورد قبلی؛ فقط کلیدهایی که مدل گفته
+                patch = {"update_id": upd}
+                if e.get("summary"):
+                    patch["summary"] = str(e["summary"])
+                if "amount" in e:
+                    patch["amount"] = amount
+                if category:
+                    patch["category"] = category
+                if when_ts:
+                    patch["when_ts"] = when_ts
+                if e.get("detail"):
+                    patch["detail"] = e.get("detail")
+                if fields:
+                    patch["fields"] = fields
+                if e.get("uncertain") is False:
+                    patch["fields"] = {**patch.get("fields", {}), "uncertain": False}
+                clean.append(patch)
+                continue
             clean.append({"type": t, "summary": str(e["summary"]), "detail": e.get("detail"), "amount": amount,
                           "category": category, "when_ts": when_ts, "fields": fields or None})
         return parsed["reply"], clean

@@ -455,6 +455,8 @@ class Memory:
         merged_fields = dict(cur["fields"])
         if isinstance(patch.get("fields"), dict):
             merged_fields.update(patch["fields"])
+        if merged_fields.get("uncertain") is False:
+            merged_fields.pop("uncertain")                 # رفع ابهام: نشانهٔ «؟» حذف شود
         new = {
             "summary": patch.get("summary") if patch.get("summary") else cur["summary"],
             "detail": patch["detail"] if "detail" in patch else cur["detail"],
@@ -530,12 +532,17 @@ class Memory:
     async def recent_memory(self, limit=40):
         async with self.lock:
             rows = self.db.execute(
-                "SELECT type, summary, detail, amount, ts FROM memory ORDER BY id DESC LIMIT ?", (limit,)
+                "SELECT type, summary, detail, amount, ts, id, category, fields FROM memory ORDER BY id DESC LIMIT ?", (limit,)
             ).fetchall()
-            return [
-                {"type": r[0], "summary": r[1], "detail": r[2], "amount": r[3], "ts": r[4]}
-                for r in reversed(rows)
-            ]
+        out = []
+        for r in reversed(rows):
+            try:
+                fields = json.loads(r[7]) if r[7] else {}
+            except ValueError:
+                fields = {}
+            out.append({"type": r[0], "summary": r[1], "detail": r[2], "amount": r[3], "ts": r[4],
+                        "id": r[5], "category": r[6], "fields": fields})
+        return out
 
     async def memory_by_type(self, type_, limit=100):
         async with self.lock:

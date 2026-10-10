@@ -82,8 +82,28 @@ class Bot:
             reply, entries = await self.brain.think(history, recent_mem, text, active_habits)
             await self.mem.add_message("assistant", reply)
             if entries:
-                await self.mem.add_memory(entries)
+                await self._apply_entries(entries, {m["id"] for m in recent_mem if m.get("id")})
         return reply
+
+    async def _apply_entries(self, entries, allowed_ids):
+        """ورودی‌های مغز: جدید → ثبت؛ update_id/delete_id → فقط روی رکوردهای اخیری که مغز در همین گفتگو دیده است."""
+        adds = []
+        for e in entries:
+            if "delete_id" in e:
+                if e["delete_id"] in allowed_ids:
+                    await self.mem.delete_event(e["delete_id"])
+                else:
+                    log.warning("delete_id %s خارج از رکوردهای اخیر؛ نادیده", e["delete_id"])
+            elif "update_id" in e:
+                if e["update_id"] in allowed_ids:
+                    patch = {k: v for k, v in e.items() if k != "update_id"}
+                    await self.mem.update_event(e["update_id"], patch)
+                else:
+                    log.warning("update_id %s خارج از رکوردهای اخیر؛ نادیده", e["update_id"])
+            else:
+                adds.append(e)
+        if adds:
+            await self.mem.add_memory(adds)
 
     async def notify_owner(self, text):
         owner = await self.mem.get_owner()
