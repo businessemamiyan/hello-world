@@ -633,7 +633,7 @@ document.addEventListener('change', ev => {
 
 function mic(forId) {
   const ta = $('#' + forId);
-  if (window.MehrdadNative && MehrdadNative.startVoice) { window.onVoiceText = t => { ta.value = t; ta.focus(); }; MehrdadNative.startVoice(); return; }
+  if (window.MehrdadNative && MehrdadNative.startVoice) { window.onVoiceText = t => { ta.value = (ta.value.trim() ? ta.value.trim() + ' ' : '') + t; ta.focus(); }; MehrdadNative.startVoice(); return; }
   const SR = window.SpeechRecognition || window.webkitSpeechRecognition; if (!SR) return toast('گفتار در این مرورگر نیست');
   const rec = new SR(); rec.lang = 'fa-IR'; rec.interimResults = false;
   const btn = $(`[data-act=mic][data-for=${forId}]`); btn.classList.add('on');

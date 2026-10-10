@@ -83,3 +83,4 @@ html,body{overscroll-behavior-y:contain}
 .c-swap{display:grid;gap:4px;padding:10px 0;border-bottom:1px solid var(--line)}
 .c-swap:last-of-type{border-bottom:0}
 .c-q textarea{width:100%;min-height:56px}
+.btn{white-space:nowrap}

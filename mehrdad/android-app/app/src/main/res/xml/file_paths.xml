@@ -2,4 +2,6 @@
 <paths>
     <!-- APK دانلودشدهٔ به‌روزرسانی فقط از این پوشهٔ کش به نصب‌کننده داده می‌شود -->
     <cache-path name="updates" path="updates/" />
+    <!-- عکس دوربین برای ارسال به مهراد (فیش/رسید) -->
+    <cache-path name="images" path="images/" />
 </paths>

@@ -7,10 +7,18 @@
     <uses-permission android:name="android.permission.RECEIVE_SMS" />
     <!-- برای به‌روزرسانی از داخل خود اپ: کاربر یک‌بار «نصب برنامه‌های ناشناس» را برای مهرداد روشن می‌کند -->
     <uses-permission android:name="android.permission.REQUEST_INSTALL_PACKAGES" />
+    <!-- ویس پیوسته: فقط وقتی کاربر دکمهٔ 🎤 را می‌زند و فقط تا زمان «تمام» -->
+    <uses-permission android:name="android.permission.RECORD_AUDIO" />
 
     <queries>
         <intent>
             <action android:name="android.speech.action.RECOGNIZE_SPEECH" />
+        </intent>
+        <intent>
+            <action android:name="android.speech.RecognitionService" />
+        </intent>
+        <intent>
+            <action android:name="android.media.action.IMAGE_CAPTURE" />
         </intent>
     </queries>
 
