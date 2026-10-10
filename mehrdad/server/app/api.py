@@ -1,4 +1,4 @@
-"""API اپ اندروید مهرداد — جفت‌سازی با کد یک‌بارمصرف، چت، تاریخچه، و دریافت پیامک/اعلان مالی.
+"""API اپ اندروید مهراد — جفت‌سازی با کد یک‌بارمصرف، چت، تاریخچه، و دریافت پیامک/اعلان مالی.
 
 احراز هویت: توکن اختصاصی هر دستگاه (Bearer)؛ فقط هش آن در دیتابیس است و با /unpair در تلگرام باطل می‌شود.
 هیچ رمز ثابتی در .env یا داخل اپ نیست. /api/pair با محدودیت تعداد تلاش ناموفق محافظت می‌شود.
@@ -12,7 +12,7 @@ from collections import defaultdict, deque
 from fastapi import APIRouter, Depends, Header, HTTPException, Request
 from pydantic import BaseModel, Field
 
-from . import finance, life
+from . import finance, life, novatunnel, profile
 from .ingest import is_sensitive, memory_entry, parse_bank_text
 
 log = logging.getLogger("api")
@@ -138,6 +138,21 @@ class PayIn(BaseModel):
     record_expense: bool = True
 
 
+class HabitIn(BaseModel):
+    good: str = Field(min_length=1, max_length=120)
+    bad: str | None = Field(default=None, max_length=120)
+
+
+class InviteIn(BaseModel):
+    label: str | None = Field(default=None, max_length=40)
+    days: int = Field(default=14, ge=1, le=60)
+
+
+class WifeIn(BaseModel):
+    answers: dict[str, str] = Field(max_length=20)
+    who: str | None = Field(default=None, max_length=40)
+
+
 class IngestItem(BaseModel):
     kind: str = Field(pattern="^(sms|notification)$")
     source: str = Field(default="", max_length=120)
@@ -157,6 +172,7 @@ def create_router(mem, svc):
     """svc: شیئی با `async chat(text) -> reply` و `async notify_owner(text)` (همان Bot)."""
     router = APIRouter(prefix="/api")
     fails = defaultdict(deque)
+    public_hits = defaultdict(deque)
 
     async def current_device(authorization: str = Header(default="")):
         token = authorization[7:].strip() if authorization.lower().startswith("bearer ") else ""
@@ -192,7 +208,7 @@ def create_router(mem, svc):
             q.append(now)
             raise HTTPException(status_code=403, detail="invalid or expired code")
         device_id, token = await mem.add_device(body.name)
-        await svc.notify_owner(f"📱 دستگاه «{body.name}» به مهرداد وصل شد (#{device_id}). اگر خودت نبودی: /unpair {device_id}")
+        await svc.notify_owner(f"📱 دستگاه «{body.name}» به مهراد وصل شد (#{device_id}). اگر خودت نبودی: /unpair {device_id}")
         return {"token": token, "device_id": device_id}
 
     @router.get("/me")
@@ -251,6 +267,95 @@ def create_router(mem, svc):
         if not await mem.delete_event(event_id):
             raise HTTPException(status_code=404, detail="not found")
         return {"ok": True}
+
+    def _public_limit(request: Request, limit=40, window=600):
+        """لینک‌های عمومی (پرسش‌نامه) را در برابر سوءاستفاده محدود می‌کند."""
+        ip = _client_ip(request)
+        q = public_hits[ip]
+        now = time.time()
+        while q and now - q[0] > window:
+            q.popleft()
+        if len(q) >= limit:
+            raise HTTPException(status_code=429, detail="too many requests")
+        q.append(now)
+
+    @router.get("/profile")
+    async def get_profile(dev=Depends(current_device)):
+        snap = await svc.profile_snapshot()
+        snap["sections"] = list(profile.SECTIONS)
+        snap["next_questions"] = [{"id": q[0], "section": q[1], "text": q[2]} for q in profile.SELF_QUESTIONS]
+        return snap
+
+    @router.post("/goals/suggest")
+    async def suggest_goals(dev=Depends(current_device)):
+        try:
+            return {"goals": await svc.suggest_goals()}
+        except Exception:
+            log.exception("goal suggestion failed")
+            raise HTTPException(status_code=502, detail="brain unavailable")
+
+    @router.post("/habits")
+    async def create_habit(body: HabitIn, dev=Depends(current_device)):
+        return {"id": await mem.add_habit(body.good.strip(), (body.bad or "").strip() or None)}
+
+    @router.post("/invites")
+    async def create_invite(body: InviteIn, dev=Depends(current_device)):
+        cfg = getattr(svc, "cfg", None)
+        base = getattr(cfg, "public_url", "")
+        iid, token = await mem.create_invite("wife", body.label or "همسر", days=body.days, max_uses=3)
+        return {"id": iid, "url": f"{base}/who/{token}", "days": body.days}
+
+    @router.get("/invites")
+    async def list_invites(dev=Depends(current_device)):
+        return {"invites": await mem.list_invites()}
+
+    @router.delete("/invites/{invite_id}")
+    async def revoke_invite(invite_id: int, dev=Depends(current_device)):
+        if not await mem.revoke_invite(invite_id):
+            raise HTTPException(status_code=404, detail="not found")
+        return {"ok": True}
+
+    @router.get("/invite/{token}")
+    async def invite_info(token: str, request: Request):
+        _public_limit(request)
+        inv = await mem.get_invite(token)
+        if not inv:
+            raise HTTPException(status_code=404, detail="invalid or expired")
+        return {"valid": True, "kind": inv["kind"],
+                "questions": [{"id": q[0], "section": q[1], "text": q[2]} for q in profile.WIFE_QUESTIONS]}
+
+    @router.post("/invite/{token}")
+    async def invite_submit(token: str, body: WifeIn, request: Request):
+        _public_limit(request, limit=20)
+        inv = await mem.get_invite(token)
+        if not inv:
+            raise HTTPException(status_code=404, detail="invalid or expired")
+        qmap = {q[0]: q for q in profile.WIFE_QUESTIONS}
+        clean = {}
+        for qid, text in body.answers.items():
+            text = (text or "").strip()
+            if qid in qmap and text:
+                clean[qid] = text[:1500]
+        if not clean:
+            raise HTTPException(status_code=422, detail="no answers")
+        # ارسال دوباره‌ی همان سؤال، پاسخ قبلی را جایگزین می‌کند (نه تکرار)
+        for old in await mem.latest_of_kinds(("profile",), 300):
+            f = old.get("fields") or {}
+            if f.get("source") == "همسر" and f.get("qid") in clean:
+                await mem.delete_event(old["id"])
+        who = (body.who or "").strip()[:40]
+        await mem.add_memory([{
+            "type": "profile", "summary": text if len(text) <= 280 else text[:277] + "…", "detail": text,
+            "category": qmap[qid][1], "fields": {"source": "همسر", "qid": qid, "question": qmap[qid][2], **({"who": who} if who else {})}}
+            for qid, text in clean.items()])
+        await mem.use_invite(inv["id"])
+        await svc.notify_owner(f"✅ همسرت به {life.fa(len(clean))} سؤال دربارهٔ تو جواب داد. در اپ ← هدف‌ها ← پروفایل ببین (و هر چه خواستی حذف کن).")
+        return {"saved": len(clean)}
+
+    @router.get("/novatunnel")
+    async def get_novatunnel(dev=Depends(current_device)):
+        cfg = getattr(svc, "cfg", None)
+        return await novatunnel.snapshot(getattr(cfg, "novatunnel_db_url", ""))
 
     @router.get("/finance")
     async def get_finance(dev=Depends(current_device)):

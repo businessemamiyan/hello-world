@@ -1,0 +1,71 @@
+<!doctype html>
+<html lang="fa" dir="rtl">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="robots" content="noindex,nofollow">
+<meta name="referrer" content="no-referrer">
+<meta name="theme-color" content="#0A0F18">
+<title>چند سؤال دربارهٔ او</title>
+<link rel="stylesheet" href="/app/theme.css">
+<style>
+ .q{display:grid;gap:8px}
+ .q .sec{font-size:.72rem;color:var(--ink3);font-weight:700}
+ textarea{min-height:92px}
+ .prog{height:6px;background:var(--sunk);border-radius:4px;overflow:hidden}
+ .prog>i{display:block;height:100%;background:var(--gold);width:0}
+ .note{background:var(--info-bg);border-radius:10px;padding:10px 12px;font-size:.86rem;color:var(--ink2)}
+ .done{text-align:center;padding:40px 8px}
+ .wrap{padding-bottom:40px}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header class="top"><div class="brand"><b>MEHRAD</b><small>دستیار شخصی</small></div></header>
+  <main id="app" class="pane"><div class="card"><div class="muted">در حال بارگذاری…</div></div></main>
+</div>
+<script>
+(() => {
+  'use strict';
+  const token = location.pathname.split('/').filter(Boolean).pop();
+  const $ = (s, r = document) => r.querySelector(s);
+  const esc = s => String(s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+  const FA = '۰۱۲۳۴۵۶۷۸۹', fa = n => String(n).replace(/\d/g, d => FA[d]);
+  const app = $('#app');
+
+  async function load() {
+    const r = await fetch('/api/invite/' + encodeURIComponent(token));
+    if (!r.ok) { app.innerHTML = `<div class="card"><h2>این لینک معتبر نیست</h2><p class="muted">ممکن است منقضی شده یا باطل شده باشد. از او بخواه لینک تازه بسازد.</p></div>`; return; }
+    const d = await r.json();
+    app.innerHTML = `
+      <div class="card gold"><h2>سلام 👋</h2>
+        <p>من <b>MEHRAD</b> هستم، دستیار شخصی همسرت. او می‌خواهد در رسیدن به هدف‌هایش (سلامت، پول، عادت‌ها، آرامش) کمکش کنم و برای این باید او را <b>واقعاً</b> بشناسم.
+        تو بهتر از همه او را می‌شناسی؛ چند سؤال کوتاه دارم. صادق باش؛ هدف کمک‌کردن به اوست، نه قضاوت.</p></div>
+      <div class="note">🔒 فقط به همین چند سؤال دربارهٔ او جواب می‌دهی و هیچ‌چیزِ او را اینجا نمی‌بینی. <b>پاسخ‌هایت برای خودش قابل‌دیدن است</b> (و می‌تواند حذفشان کند)؛ پس همان‌طور بنویس که اگر بخواند ناراحت نشود.
+        هر سؤال را که نمی‌خواهی جواب نده؛ خالی بگذار.</div>
+      <div class="prog"><i id="bar"></i></div>
+      <form id="f" class="stack">
+        <label class="f"><span>اسمت (اختیاری)</span><input type="text" name="__who" maxlength="40"></label>
+        ${d.questions.map((q, i) => `<div class="card q"><span class="sec">${fa(i + 1)} از ${fa(d.questions.length)} · ${esc(q.section)}</span>
+          <label>${esc(q.text)}</label><textarea name="${esc(q.id)}" maxlength="1500" placeholder="هر چه به ذهنت می‌رسد…"></textarea></div>`).join('')}
+        <button class="btn primary" type="submit" id="send">ارسال برای MEHRAD</button>
+      </form>`;
+    const total = d.questions.length;
+    const upd = () => { const n = [...document.querySelectorAll('textarea')].filter(t => t.value.trim()).length; $('#bar').style.width = (n / total * 100) + '%'; };
+    document.addEventListener('input', upd);
+    $('#f').addEventListener('submit', async ev => {
+      ev.preventDefault();
+      const fd = new FormData(ev.target); const answers = {}; let who = '';
+      for (const [k, v] of fd.entries()) { if (k === '__who') who = v; else if (String(v).trim()) answers[k] = v; }
+      if (!Object.keys(answers).length) return alert('حداقل به یک سؤال جواب بده 🙏');
+      $('#send').disabled = true; $('#send').textContent = 'در حال ارسال…';
+      const r = await fetch('/api/invite/' + encodeURIComponent(token), { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ answers, who }) });
+      if (r.ok) { const j = await r.json(); app.innerHTML = `<div class="card done"><h2>ممنونم 💛</h2><p>${fa(j.saved)} پاسخ ثبت شد. به او کمک می‌کند بهتر به هدف‌هایش برسد.</p><p class="muted">می‌توانی این صفحه را ببندی. اگر چیزی یادت آمد، دوباره همین لینک را باز کن (تا ۳ بار).</p></div>`; }
+      else { $('#send').disabled = false; $('#send').textContent = 'ارسال برای MEHRAD'; alert(r.status === 429 ? 'کمی بعد دوباره امتحان کن' : 'ارسال نشد؛ دوباره امتحان کن'); }
+    });
+  }
+  load().catch(() => { app.innerHTML = '<div class="card"><h2>اتصال برقرار نشد</h2><p class="muted">اینترنت یا فیلترشکن را چک کن و صفحه را دوباره باز کن.</p></div>'; });
+})();
+</script>
+</body>
+</html>

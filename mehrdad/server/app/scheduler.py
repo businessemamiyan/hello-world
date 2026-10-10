@@ -1,4 +1,4 @@
-"""یادآوری فعال شبانه برای چک‌این عادت‌ها — مهرداد منتظر نمی‌ماند تا خودت بپرسی.
+"""یادآوری فعال شبانه برای چک‌این عادت‌ها — مهراد منتظر نمی‌ماند تا خودت بپرسی.
 
 هر دقیقه زمان تهران را چک می‌کند؛ در ساعت تنظیم‌شده (HABIT_CHECKIN_TIME)، برای هر عادت
 فعالی که امروز هنوز چک‌این نشده، یک پیام با دکمه ✅/❌ به صاحب مغز می‌فرستد.
@@ -28,11 +28,20 @@ class Scheduler:
         self.mem = mem
         self.cfg = cfg
         self.fired_date = None
+        self.fired_digest = set()
+
+    async def maybe_digest(self, hhmm, today):
+        times = [t.strip() for t in (getattr(self.cfg, "digest_times", "") or "").split(",") if t.strip()]
+        key = (today, hhmm)
+        if hhmm in times and key not in self.fired_digest:
+            self.fired_digest = {k for k in self.fired_digest if k[0] == today} | {key}
+            await self.bot.send_digest()
 
     async def maybe_fire(self):
         now = now_tehran()
         hhmm = now.strftime("%H:%M")
         today = now.date().isoformat()
+        await self.maybe_digest(hhmm, today)
         if hhmm != self.cfg.habit_checkin_time or self.fired_date == today:
             return
         self.fired_date = today

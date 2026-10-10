@@ -26,7 +26,7 @@ def test_parse_cli_output_errors(bad):
 def test_cli_prompt_includes_history_and_last_message():
     p = _cli_prompt([{"role": "user", "content": "سلام"}, {"role": "assistant", "content": "سلام!"},
                      {"role": "user", "content": "خرجم چقدر شد؟"}])
-    assert p.index("کاربر: سلام") < p.index("مهرداد: سلام!") < p.index("خرجم چقدر شد؟")
+    assert p.index("کاربر: سلام") < p.index("مهراد: سلام!") < p.index("خرجم چقدر شد؟")
     assert "JSON" in p
     assert "گفتگوی اخیر" not in _cli_prompt([{"role": "user", "content": "x"}])
 

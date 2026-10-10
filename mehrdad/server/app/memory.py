@@ -1,4 +1,4 @@
-"""حافظه مهرداد — SQLite.
+"""حافظه مهراد — SQLite.
 
 چهار جدول:
 - messages: کل تاریخچه مکالمه (برای زمینه‌ی مکالمه‌ای کوتاه‌مدت)
@@ -131,6 +131,18 @@ class Memory:
                 note TEXT,
                 created_ts REAL NOT NULL
             );
+            CREATE TABLE IF NOT EXISTS invites(
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                token_hash TEXT NOT NULL UNIQUE,
+                kind TEXT NOT NULL,
+                label TEXT,
+                expires_ts REAL NOT NULL,
+                max_uses INTEGER NOT NULL DEFAULT 3,
+                uses INTEGER NOT NULL DEFAULT 0,
+                created_ts REAL NOT NULL,
+                revoked INTEGER NOT NULL DEFAULT 0
+            );
+            CREATE TABLE IF NOT EXISTS kv(key TEXT PRIMARY KEY, value TEXT);
             CREATE TABLE IF NOT EXISTS habit_log(
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
                 habit_id INTEGER NOT NULL,
@@ -152,6 +164,9 @@ class Memory:
         for name, ddl in (("event_ts", "REAL"), ("category", "TEXT"), ("fields", "TEXT")):
             if name not in cols:
                 self.db.execute(f"ALTER TABLE memory ADD COLUMN {name} {ddl}")
+        icols = {r[1] for r in self.db.execute("PRAGMA table_info(inbox)").fetchall()}
+        if "notified" not in icols:
+            self.db.execute("ALTER TABLE inbox ADD COLUMN notified INTEGER NOT NULL DEFAULT 0")
         self.db.execute("CREATE INDEX IF NOT EXISTS idx_memory_event_ts ON memory(event_ts)")
 
     def _init_fts(self):
@@ -365,20 +380,93 @@ class Memory:
             self.db.commit()
             return cur.rowcount > 0
 
+    # ---------- لینک دعوت (مثلاً پرسش‌نامهٔ همسر) ----------
+    async def create_invite(self, kind, label=None, days=14, max_uses=3):
+        token = secrets.token_urlsafe(24)
+        async with self.lock:
+            cur = self.db.execute(
+                "INSERT INTO invites(token_hash, kind, label, expires_ts, max_uses, created_ts) VALUES(?,?,?,?,?,?)",
+                (_sha(token), kind, (label or "")[:60], time.time() + days * 86400, max_uses, time.time()))
+            self.db.commit()
+            return cur.lastrowid, token
+
+    async def get_invite(self, token):
+        """معتبر = وجود، باطل‌نشده، منقضی‌نشده، و ظرفیت استفاده."""
+        if not token or len(token) > 80:
+            return None
+        async with self.lock:
+            r = self.db.execute("SELECT id, kind, label, expires_ts, max_uses, uses, revoked FROM invites WHERE token_hash=?",
+                                (_sha(token),)).fetchone()
+        if not r or r[6] or r[3] < time.time() or r[5] >= r[4]:
+            return None
+        return {"id": r[0], "kind": r[1], "label": r[2], "expires_ts": r[3], "max_uses": r[4], "uses": r[5]}
+
+    async def use_invite(self, invite_id):
+        async with self.lock:
+            self.db.execute("UPDATE invites SET uses = uses + 1 WHERE id=?", (invite_id,))
+            self.db.commit()
+
+    async def list_invites(self):
+        async with self.lock:
+            rows = self.db.execute("SELECT id, kind, label, expires_ts, max_uses, uses, revoked FROM invites ORDER BY id DESC LIMIT 20").fetchall()
+        return [{"id": r[0], "kind": r[1], "label": r[2], "expires_ts": r[3], "max_uses": r[4], "uses": r[5], "revoked": bool(r[6])} for r in rows]
+
+    async def revoke_invite(self, invite_id):
+        async with self.lock:
+            cur = self.db.execute("UPDATE invites SET revoked=1 WHERE id=?", (invite_id,))
+            self.db.commit()
+            return cur.rowcount > 0
+
+    async def kv_get(self, key, default=None):
+        async with self.lock:
+            r = self.db.execute("SELECT value FROM kv WHERE key=?", (key,)).fetchone()
+        return r[0] if r else default
+
+    async def kv_set(self, key, value):
+        async with self.lock:
+            if value is None:
+                self.db.execute("DELETE FROM kv WHERE key=?", (key,))
+            else:
+                self.db.execute("INSERT INTO kv(key, value) VALUES(?,?) ON CONFLICT(key) DO UPDATE SET value=excluded.value", (key, str(value)))
+            self.db.commit()
+
     # ---------- inbox (پیامک/نوتیفیکیشن ورودی از گوشی) ----------
-    async def add_inbox(self, kind, source, text, ts):
-        """None اگر قبلاً همین مورد ثبت شده باشد (تلاش دوباره‌ی اپ نباید خرج را دوبار ثبت کند)."""
-        dedup = _sha(f"{kind}|{source}|{int(ts)}|{text}")
+    async def add_inbox(self, kind, source, text, ts, dedup_key=None, notified=0):
+        """None اگر قبلاً همین مورد ثبت شده باشد (تلاش دوباره‌ی اپ/ایجنت نباید دوبار ثبت کند)."""
+        dedup = _sha(f"{kind}|key|{dedup_key}") if dedup_key else _sha(f"{kind}|{source}|{int(ts)}|{text}")
         async with self.lock:
             try:
                 cur = self.db.execute(
-                    "INSERT INTO inbox(kind, source, text, ts, dedup) VALUES(?,?,?,?,?)",
-                    (kind, source, text, ts, dedup),
+                    "INSERT INTO inbox(kind, source, text, ts, dedup, notified) VALUES(?,?,?,?,?,?)",
+                    (kind, source, text, ts, dedup, notified),
                 )
             except sqlite3.IntegrityError:
                 return None
             self.db.commit()
             return cur.lastrowid
+
+    async def inbox_unnotified(self, kinds, limit=50):
+        marks = ",".join("?" for _ in kinds)
+        async with self.lock:
+            rows = self.db.execute(
+                f"SELECT id, kind, source, text, ts FROM inbox WHERE notified=0 AND kind IN ({marks}) ORDER BY ts LIMIT ?",
+                (*kinds, limit)).fetchall()
+        return [{"id": r[0], "kind": r[1], "source": r[2], "text": r[3], "ts": r[4]} for r in rows]
+
+    async def recent_inbox(self, kinds, limit=15):
+        marks = ",".join("?" for _ in kinds)
+        async with self.lock:
+            rows = self.db.execute(
+                f"SELECT id, kind, source, text, ts FROM inbox WHERE kind IN ({marks}) ORDER BY id DESC LIMIT ?",
+                (*kinds, limit)).fetchall()
+        return [{"id": r[0], "kind": r[1], "source": r[2], "text": r[3], "ts": r[4]} for r in rows]
+
+    async def mark_notified(self, ids):
+        if not ids:
+            return
+        async with self.lock:
+            self.db.executemany("UPDATE inbox SET notified=1 WHERE id=?", [(i,) for i in ids])
+            self.db.commit()
 
     async def mark_inbox_parsed(self, inbox_id):
         async with self.lock:
@@ -532,7 +620,7 @@ class Memory:
     async def recent_memory(self, limit=40):
         async with self.lock:
             rows = self.db.execute(
-                "SELECT type, summary, detail, amount, ts, id, category, fields FROM memory ORDER BY id DESC LIMIT ?", (limit,)
+                "SELECT type, summary, detail, amount, ts, id, category, fields FROM memory WHERE type != 'profile' ORDER BY id DESC LIMIT ?", (limit,)
             ).fetchall()
         out = []
         for r in reversed(rows):

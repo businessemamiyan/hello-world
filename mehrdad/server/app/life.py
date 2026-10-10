@@ -11,11 +11,11 @@ TEHRAN = ZoneInfo("Asia/Tehran")
 STATUSES = ("done", "ongoing", "planned", "maybe")          # وضعیت واقعیِ یک رویداد (کارها: open/done جدا هستند)
 PENDING = ("planned", "maybe")                               # هنوز اتفاق نیفتاده؛ در جمع‌ها حساب نمی‌شود
 
-KINDS = ("activity", "expense", "income", "meal", "intimacy", "smoking", "workout", "sleep",
+KINDS = ("profile", "activity", "expense", "income", "meal", "intimacy", "smoking", "workout", "sleep",
          "feeling", "task", "goal", "idea", "habit", "note", "other")
 
 LABELS = {
-    "activity": "فعالیت", "expense": "خرج", "income": "درآمد", "meal": "غذا", "intimacy": "رابطهٔ زناشویی",
+    "profile": "پروفایل", "activity": "فعالیت", "expense": "خرج", "income": "درآمد", "meal": "غذا", "intimacy": "رابطهٔ زناشویی",
     "smoking": "قلیان/سیگار", "workout": "ورزش", "sleep": "خواب", "feeling": "حال‌وحال",
     "task": "کار", "goal": "هدف", "idea": "ایده", "habit": "عادت", "note": "یادداشت", "other": "سایر",
 }
@@ -184,6 +184,8 @@ def build_dashboard(rows, habits, label, now=None):
         day += datetime.timedelta(days=1)
     for r in sorted(rows, key=lambda x: x["when_ts"]):
         kind = r["type"]
+        if kind == "profile":          # پروفایل در تایم‌لاین/جمع‌ها نمی‌آید؛ صفحهٔ خودش را دارد
+            continue
         fields = r.get("fields") or {}
         status = fields.get("status") if kind != "task" else None
         pending = status in PENDING

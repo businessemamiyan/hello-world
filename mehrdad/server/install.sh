@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# نصب یک‌دستوری مهرداد روی سرور — فقط همین سرویس را اضافه می‌کند.
+# نصب یک‌دستوری مهراد روی سرور — فقط همین سرویس را اضافه می‌کند.
 #
 # این اسکریپت را خودت روی سرور اجرا کن. هیچ سرویس دیگری روی سرور را لمس نمی‌کند:
 #   - همه‌چیز داخل همین پوشه (mehrdad/server) با Docker Compose بالا می‌آید،
@@ -49,7 +49,7 @@ if ! grep -q '^BOT_TOKEN=.\+' .env || ! { grep -q '^ANTHROPIC_API_KEY=.\+' .env 
   echo
   echo "این مقادیر را در .env پر کن، بعد دوباره همین اسکریپت را اجرا کن:"
   echo "  BOT_TOKEN                ← از @BotFather در تلگرام (یک ربات تازه، جدا از ربات قطب‌نما)"
-  echo "  و یکی از این دو (مغز مهرداد):"
+  echo "  و یکی از این دو (مغز مهراد):"
   echo "  CLAUDE_CODE_OAUTH_TOKEN  ← بدون هزینهٔ API، با اشتراک خودت: روی سیستم خودت «claude setup-token»"
   echo "  ANTHROPIC_API_KEY        ← پولی، از https://console.anthropic.com"
   echo
@@ -63,10 +63,10 @@ chown 10001:10001 data 2>/dev/null || sudo chown 10001:10001 data 2>/dev/null \n
 
 if grep -q '^\(TELEGRAM\|ANTHROPIC\)_PROXY=.\+' .env; then
   [ -f xray/config.json ] || die "پروکسی در .env فعال است ولی xray/config.json نیست (xray/config.example.json را کپی و پر کن)."
-  log "بالا آوردن مهرداد (با پروفایل proxy — سرور داخل ایران)"
+  log "بالا آوردن مهراد (با پروفایل proxy — سرور داخل ایران)"
   docker compose --profile proxy up -d --build
 else
-  log "بالا آوردن مهرداد (اتصال مستقیم — سرور خارج از ایران)"
+  log "بالا آوردن مهراد (اتصال مستقیم — سرور خارج از ایران)"
   docker compose up -d --build
 fi
 

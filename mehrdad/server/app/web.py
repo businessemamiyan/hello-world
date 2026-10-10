@@ -23,6 +23,14 @@ def create_app(mem, started_at, svc=None):
             resp.headers["Cache-Control"] = "no-store, no-cache, must-revalidate, max-age=0"   # نه مرورگر، نه Cloudflare نسخهٔ قدیمی نگه ندارد
         return resp
 
+    @app.get("/who/{token}", include_in_schema=False)
+    async def who_page(token: str):
+        path = os.path.join(static_dir, "who.html")
+        if not os.path.isfile(path):
+            raise HTTPException(status_code=404, detail="not found")
+        return FileResponse(path, media_type="text/html; charset=utf-8",
+                            headers={"Cache-Control": "no-store", "Referrer-Policy": "no-referrer", "X-Robots-Tag": "noindex"})
+
     @app.get("/", include_in_schema=False)
     async def root():
         return RedirectResponse("/app/")

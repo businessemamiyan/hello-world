@@ -1,4 +1,4 @@
-"""حلقه‌ی ربات تلگرام مهرداد — فقط به صاحبش جواب می‌دهد.
+"""حلقه‌ی ربات تلگرام مهراد — فقط به صاحبش جواب می‌دهد.
 
 فاز ۱: متن + سیستم عادت (ساخت/جایگزینی عادت، چک‌این روزانه با استریک).
 ویس (فاز ۲) بعداً اضافه می‌شود — پیام ویس فعلاً با یک توضیح کوتاه رد می‌شود.
@@ -6,13 +6,16 @@
 import asyncio
 import logging
 
-from . import finance, life
+import json
+import re
+
+from . import agents, finance, life, novatunnel, profile
 from .memory import today_str
 from .telegram import TGError, btn
 
 log = logging.getLogger("bot")
 
-HELP = """من مهرداد‌ام — مغز دومت.
+HELP = """من مهراد‌ام — مغز دومت.
 
 هر چی بگی رو به‌خاطر می‌سپارم: خرج، درآمد، ایده، کار، حس‌وحال، هرچی.
 فقط باهام حرف بزن، مثل یه رفیق. فرم و دکمه لازم نیست.
@@ -25,6 +28,7 @@ HELP = """من مهرداد‌ام — مغز دومت.
 اپ اندروید:
 /today /week /month — خلاصهٔ خرج و درآمد، غذا، قلیان، کارها و عادت‌ها
 
+/onboard — مصاحبهٔ ۱۵ سؤالی تا بیشتر بشناسمت\n/goals — هدف‌های پیشنهادی بر اساس آنچه از تو می‌دانم\n/inbox — آخرین پیام‌های ایمیل/تلگرامِ ایجنت‌ها (و /mailtest برای تست اتصال ایمیل)\n/wife — لینک پرسش‌نامه برای همسرت (درباره‌ی تو جواب می‌دهد)\n/invites — لینک‌های ساخته‌شده و ابطال\n/nova — فروش و درآمد NovaTunnel (فقط‌خواندنی)
 /finance — موجودی حساب‌ها، بدهی و اقساط، و هشدارها
 
 /pair — کد یک‌بارمصرف برای وصل‌کردن اپ (۱۰ دقیقه اعتبار)
@@ -71,6 +75,7 @@ class Bot:
         self.brain = brain
         self.cfg = cfg
         self.brain_lock = asyncio.Lock()  # تلگرام و اپ هم‌زمان یک پروسهٔ مغز را نگیرند
+        self._ctx_ids = set()             # شناسهٔ پروفایل/هدف‌هایی که در آخرین چکیده به مغز نشان داده شد
 
     async def chat(self, text):
         """یک نوبت مکالمه (هم تلگرام هم اپ): تاریخچه و حافظه را می‌خواند، می‌پرسد، و ذخیره می‌کند."""
@@ -79,11 +84,64 @@ class Bot:
             recent_mem = await self.mem.recent_memory(40)
             active_habits = await self.mem.list_habits("active")
             await self.mem.add_message("user", text)
-            reply, entries = await self.brain.think(history, recent_mem, text, active_habits)
+            pending_q = await self.mem.kv_get("onboard_q")
+            brain_text = text
+            if pending_q:      # جواب یک سؤال مصاحبه است: به مغز بگو تا درست در پروفایل ثبتش کند
+                q = profile.question_by_id(pending_q)
+                if q:
+                    brain_text = f"[کاربر دارد به سؤال مصاحبه «{q[2]}» (بخش {q[1]}) جواب می‌دهد؛ جواب را در پروفایل ثبت کن]\n{text}"
+            reply, entries = await self.brain.think(history, recent_mem, brain_text, active_habits)
             await self.mem.add_message("assistant", reply)
             if entries:
-                await self._apply_entries(entries, {m["id"] for m in recent_mem if m.get("id")})
+                await self._apply_entries(entries, {m["id"] for m in recent_mem if m.get("id")} | self._ctx_ids)
         return reply
+
+    async def profile_snapshot(self):
+        """پروفایل، روتین‌ها، عادت‌های دیده‌شده و هدف‌ها (از ۳۰ روز اخیر) — بدون مدل."""
+        import time as _t
+        end = _t.time()
+        rows = await self.mem.events_between(end - 30 * 86400, end + 86400)
+        prof = await self.mem.latest_of_kinds(("profile",), 300)
+        goals = await self.mem.latest_of_kinds(("goal",), 20)
+        return {"profile": prof, "routines": profile.routines(rows), "habits": profile.habit_stats(rows),
+                "goals": goals, "completeness": profile.completeness(prof)}
+
+    async def context_prompt(self):
+        """وضعیت مالی + چکیدهٔ شناخت کاربر؛ هر نوبت به پرامپت مغز اضافه می‌شود."""
+        parts = []
+        fin = await self.finance_prompt()
+        if fin:
+            parts.append("### وضعیت مالی واقعی کاربر (برای مشاوره و بررسی حساب‌ها؛ عددها را از همین بخش بگیر، حدس نزن):\n" + fin)
+        snap = await self.profile_snapshot()
+        digest = profile.build_digest(snap["profile"], snap["routines"], snap["habits"], snap["goals"])
+        self._ctx_ids = {e["id"] for e in snap["profile"][-60:]} | {g["id"] for g in snap["goals"]}
+        if digest:
+            parts.append(digest)
+        return "\n\n".join(parts)
+
+    async def suggest_goals(self):
+        """پیشنهاد ۳ تا ۵ هدف مشخص بر اساس آنچه مهراد از کاربر می‌داند. خروجی: لیست {title, horizon, why, steps}."""
+        ctx = await self.context_prompt()
+        system = ("تو «مهراد» مربی و مغز دوم کاربری. فقط بر پایهٔ واقعیت‌هایی که پایین می‌بینی هدف پیشنهاد بده (چیزی از خودت نساز).\n\n" + ctx)
+        user = ("بر اساس آنچه از من می‌دانی (پروفایل، روتین‌ها، عادت‌ها، مالی، هدف‌های فعلی) ۳ تا ۵ هدف مشخص و قابل‌اندازه‌گیری پیشنهاد بده؛ "
+                "ترکیبی از هدف کوتاه‌مدت (این ماه) و بلندمدت‌تر. هدف‌های تکراری با هدف‌های باز بالا نده. اگر عادت بدی وقتم را می‌گیرد، یکی از هدف‌ها مربوط به آن باشد. "
+                "فقط و فقط یک آرایهٔ JSON معتبر بده، بدون متن اضافه: "
+                '[{"title": "...", "horizon": "این ماه|۳ ماه|امسال|۳ سال", "why": "چرا برای من مهم است (یک جمله، با استناد به چیزی که از من می‌دانی)", "steps": ["قدم اول", "قدم دوم"]}]')
+        async with self.brain_lock:
+            raw = await self.brain.complete(system, user)
+        m = re.search(r"\[.*\]", raw, re.DOTALL)
+        try:
+            data = json.loads(m.group(0)) if m else []
+        except ValueError:
+            data = []
+        out = []
+        for g in data[:5]:
+            if isinstance(g, dict) and str(g.get("title", "")).strip():
+                raw_steps = g.get("steps")
+                steps = [str(x)[:140] for x in raw_steps if str(x).strip()][:4] if isinstance(raw_steps, list) else []
+                out.append({"title": str(g["title"]).strip()[:200], "horizon": str(g.get("horizon", ""))[:30],
+                            "why": str(g.get("why", ""))[:300], "steps": steps})
+        return out
 
     async def _apply_entries(self, entries, allowed_ids):
         """ورودی‌های مغز: جدید → ثبت؛ update_id/delete_id → فقط روی رکوردهای اخیری که مغز در همین گفتگو دیده است."""
@@ -155,12 +213,107 @@ class Bot:
             lines.append(("⚠️ " if al["level"] != "good" else "✅ ") + al["text"])
         await self.tg.send(chat_id, "\n".join(lines))
 
+    async def ingest_external(self, kind, source, text, ts, important, dedup_key=None):
+        """ورودی ایجنت‌ها (ایمیل/تلگرام): ذخیره در inbox؛ مهم‌ها فوری اعلام می‌شوند، بقیه در خلاصهٔ دوره‌ای."""
+        text = text[:2000]
+        inbox_id = await self.mem.add_inbox(kind, source, text, ts, dedup_key=dedup_key, notified=1 if important else 0)
+        if inbox_id is None:
+            return False
+        if important:
+            icon = {"email": "📧", "telegram": "💬"}.get(kind, "•")
+            await self.notify_owner(agents.one_line(icon + " (مهم)", source, text))
+        return True
+
+    async def send_digest(self):
+        items = await self.mem.inbox_unnotified(("email", "telegram"))
+        txt = agents.digest_text(items)
+        if txt:
+            await self.notify_owner(txt)
+            await self.mem.mark_notified([i["id"] for i in items])
+        return bool(txt)
+
+    async def handle_inbox(self, chat_id):
+        items = await self.mem.recent_inbox(("email", "telegram"), 15)
+        if not items:
+            await self.tg.send(chat_id, "پیام ایمیل/تلگرامی ثبت نشده است. ایجنت‌ها هنوز تنظیم نشده‌اند یا چیزی نیامده.")
+            return
+        await self.tg.send(chat_id, agents.digest_text(list(reversed(items)), limit=15).replace("خلاصهٔ پیام‌های جدید", "آخرین پیام‌ها"))
+
+    async def handle_mailtest(self, chat_id):
+        agent = getattr(self, "mail_agent", None)
+        if agent is None:
+            await self.tg.send(chat_id, "ایجنت ایمیل تنظیم نشده. EMAIL_IMAP_USER و EMAIL_IMAP_PASSWORD (App Password) را در .env بگذار.")
+            return
+        ok, msg = await agent.check()
+        await self.tg.send(chat_id, ("✅ " if ok else "❌ ") + msg)
+
+    async def handle_wife(self, chat_id, arg=""):
+        _, token = await self.mem.create_invite("wife", arg.strip() or "همسر", days=14, max_uses=3)
+        url = f"{self.cfg.public_url}/who/{token}"
+        await self.tg.send(chat_id, "لینک پرسش‌نامهٔ همسر (۱۴ روز اعتبار، حداکثر ۳ بار ارسال):\n" + url +
+                           "\n\nاین لینک را فقط برای خودش بفرست. او فقط به چند سؤال دربارهٔ تو جواب می‌دهد و هیچ‌کدام از اطلاعات تو را نمی‌بیند. "
+                           "پاسخ‌هایش در اپ (هدف‌ها ← پروفایل) برای خودت دیدنی و قابل‌حذف است. ابطال: /invites")
+
+    async def handle_invites(self, chat_id):
+        inv = await self.mem.list_invites()
+        if not inv:
+            await self.tg.send(chat_id, "لینکی ساخته نشده. با /wife بساز.")
+            return
+        import time as _t
+        lines = [f"#{i['id']} {i['label'] or i['kind']} — {i['uses']}/{i['max_uses']} استفاده" +
+                 (" — باطل" if i["revoked"] else " — منقضی" if i["expires_ts"] < _t.time() else "") for i in inv]
+        await self.tg.send(chat_id, "لینک‌ها:\n" + "\n".join(lines) + "\n\nابطال: /revoke <شماره>")
+
+    async def handle_revoke(self, chat_id, arg):
+        try:
+            ok = await self.mem.revoke_invite(int(arg.strip().lstrip("#")))
+        except ValueError:
+            ok = False
+        await self.tg.send(chat_id, "باطل شد." if ok else "شمارهٔ لینک را درست بنویس: /revoke 1")
+
+    async def _onboard_next(self, chat_id):
+        """سؤال بعدی مصاحبه (از ۱۵ سؤال) یا پایان."""
+        i = int(await self.mem.kv_get("onboard_i", "0") or 0)
+        if i >= len(profile.SELF_QUESTIONS):
+            await self.mem.kv_set("onboard_q", None)
+            await self.mem.kv_set("onboard_i", None)
+            await self.tg.send(chat_id, "مصاحبه تمام شد 🙏 هر وقت چیزی عوض شد فقط بگو. با /goals برایت هدف پیشنهاد می‌دهم.")
+            return
+        qid, section, text = profile.SELF_QUESTIONS[i]
+        await self.mem.kv_set("onboard_q", qid)
+        await self.mem.kv_set("onboard_i", i + 1)
+        await self.tg.send(chat_id, f"سؤال {life.fa(i + 1)} از {life.fa(len(profile.SELF_QUESTIONS))} ({section}):\n{text}\n\n(برای پایان: /onboard stop — برای رد کردن: بنویس «رد»)")
+
+    async def handle_onboard(self, chat_id, arg):
+        if arg.strip() == "stop":
+            await self.mem.kv_set("onboard_q", None)
+            await self.mem.kv_set("onboard_i", None)
+            await self.tg.send(chat_id, "مصاحبه متوقف شد. با /onboard از اول شروع می‌شود.")
+            return
+        await self.mem.kv_set("onboard_i", "0")
+        await self.tg.send(chat_id, "می‌خواهم تو را از صفر تا صد بشناسم؛ ۱۵ سؤال کوتاه است و هر جوابی که دادی در پروفایلت ثبت می‌شود.")
+        await self._onboard_next(chat_id)
+
+    async def handle_goals(self, chat_id):
+        await self.tg.send_chat_action(chat_id, "typing")
+        goals = await self.suggest_goals()
+        if not goals:
+            await self.tg.send(chat_id, "فعلاً چیز کافی از تو نمی‌دانم. با /onboard شروع کن یا چند روز روزت را برایم تعریف کن.")
+            return
+        lines = ["🎯 هدف‌های پیشنهادی:"]
+        for n, g in enumerate(goals, 1):
+            lines.append(f"{life.fa(n)}. {g['title']} ({g['horizon']})\n   چرا: {g['why']}")
+        await self.tg.send(chat_id, "\n".join(lines) + "\n\nبرای اضافه‌کردن، در اپ ← هدف‌ها ← «پیشنهاد هدف» را بزن.")
+
+    async def handle_nova(self, chat_id):
+        await self.tg.send(chat_id, novatunnel.format_text(await novatunnel.snapshot(self.cfg.novatunnel_db_url)))
+
     async def handle_summary(self, chat_id, label, private=False):
         await self.tg.send(chat_id, life.format_text(await self.dashboard(label), private=private))
 
     async def handle_pair(self, chat_id):
         code = await self.mem.create_pair_code()
-        await self.tg.send(chat_id, f"کد جفت‌سازی اپ (۱۰ دقیقه، یک‌بار مصرف):\n\n{code}\n\nدر اپ مهرداد وارد کن.")
+        await self.tg.send(chat_id, f"کد جفت‌سازی اپ (۱۰ دقیقه، یک‌بار مصرف):\n\n{code}\n\nدر اپ مهراد وارد کن.")
 
     async def handle_devices(self, chat_id):
         devs = await self.mem.list_devices()
@@ -193,7 +346,7 @@ class Bot:
             return
         if self.cfg.setup_code and arg == self.cfg.setup_code:
             await self.mem.set_owner(chat_id)
-            await self.tg.send(chat_id, "از حالا من مهردادم، مغز دومت. هر چی بخوای بگو — یادم می‌مونه.")
+            await self.tg.send(chat_id, "از حالا من مهرادم، مغز دومت. هر چی بخوای بگو — یادم می‌مونه.")
         else:
             await self.tg.send(chat_id, "کد درست نیست. از SETUP_CODE توی .env استفاده کن: /start <کد>")
 
@@ -250,6 +403,38 @@ class Bot:
             await self.handle_summary(chat_id, head[1:], private="private" in text)
             return
 
+        if text == "/inbox":
+            await self.handle_inbox(chat_id)
+            return
+
+        if text == "/mailtest":
+            await self.handle_mailtest(chat_id)
+            return
+
+        if text.startswith("/wife"):
+            await self.handle_wife(chat_id, text[len("/wife"):])
+            return
+
+        if text == "/invites":
+            await self.handle_invites(chat_id)
+            return
+
+        if text.startswith("/revoke"):
+            await self.handle_revoke(chat_id, text[len("/revoke"):])
+            return
+
+        if text.startswith("/onboard"):
+            await self.handle_onboard(chat_id, text[len("/onboard"):])
+            return
+
+        if text == "/goals":
+            await self.handle_goals(chat_id)
+            return
+
+        if text == "/nova":
+            await self.handle_nova(chat_id)
+            return
+
         if text == "/finance":
             await self.handle_finance(chat_id)
             return
@@ -282,8 +467,15 @@ class Bot:
             return
 
         await self.tg.send_chat_action(chat_id, "typing")
+        onboarding = await self.mem.kv_get("onboard_q")
+        if onboarding and text.strip() in ("رد", "رد کن", "skip"):
+            await self.mem.kv_set("onboard_q", onboarding)
+            await self._onboard_next(chat_id)
+            return
         reply = await self.chat(text)
         await self.tg.send(chat_id, reply)
+        if onboarding:
+            await self._onboard_next(chat_id)
 
     async def handle_callback(self, cq):
         chat_id = cq["message"]["chat"]["id"]

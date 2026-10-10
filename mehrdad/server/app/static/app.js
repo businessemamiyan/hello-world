@@ -1,4 +1,4 @@
-/* مهرداد — اپ وب (فارسی/RTL). داده فقط با توکن دستگاه از /api می‌آید؛ هیچ داده‌ای داخل خود فایل‌ها نیست. */
+/* مهراد — اپ وب (فارسی/RTL). داده فقط با توکن دستگاه از /api می‌آید؛ هیچ داده‌ای داخل خود فایل‌ها نیست. */
 (() => {
 'use strict';
 const $ = (s, r = document) => r.querySelector(s);
@@ -12,7 +12,7 @@ const store = {
   set: (k, v) => { try { localStorage.setItem(k, v); } catch {} },
   del: k => { try { localStorage.removeItem(k); } catch {} },
 };
-const ICON = {activity:'🧭', income:'💰', expense:'💸', meal:'🍽', smoking:'💨', intimacy:'❤️', workout:'🏃', sleep:'😴',
+const ICON = {profile:'🧬', activity:'🧭', income:'💰', expense:'💸', meal:'🍽', smoking:'💨', intimacy:'❤️', workout:'🏃', sleep:'😴',
   feeling:'💭', task:'✅', goal:'🎯', idea:'💡', habit:'🔥', note:'📝', other:'•'};
 const THEMES = {night:'شب', day:'روز', amber:'کهربایی', ocean:'اقیانوسی'};
 const RANGES = {today:'امروز', week:'۷ روز', month:'این ماه'};
@@ -23,7 +23,7 @@ let token = store.get('mehrdad_token') || '';
 const hash = new URLSearchParams(location.hash.slice(1));
 if (hash.get('t')) { token = hash.get('t'); store.set('mehrdad_token', token); history.replaceState(null, '', location.pathname); }
 if (!token && window.MehrdadNative && MehrdadNative.getToken) token = MehrdadNative.getToken() || '';
-const S = { tab: store.get('mehrdad_tab') || 'today', mview: 'tx', mrange: 'month', lrange: 'week', priv: store.get('mehrdad_priv') === '1',
+const S = { tab: store.get('mehrdad_tab') || 'today', mview: 'tx', gview: 'goals', mrange: 'month', lrange: 'week', priv: store.get('mehrdad_priv') === '1',
             cache: {}, busy: false };
 applyTheme(store.get('mehrdad_theme') || 'night');
 
@@ -87,7 +87,7 @@ function tlItem(i) {
   const pending = i.status === 'planned' || i.status === 'maybe' || i.status === 'ongoing';
   const span = i.end_time ? `${i.time}–${i.end_time}` : i.time;
   return `<div class="m-tl${st && i.status !== 'ongoing' ? ' m-plan' : ''}"><span class="m-ic">${ICON[i.kind] || '•'}</span>
-    <div class="m-tl-b"><div>${esc(i.summary)}${i.uncertain ? ' <span class="pill warn" title="مهرداد مطمئن نیست">؟</span>' : ''}</div>
+    <div class="m-tl-b"><div>${esc(i.summary)}${i.uncertain ? ' <span class="pill warn" title="مهراد مطمئن نیست">؟</span>' : ''}</div>
       <div class="muted small">${esc(i.label)}${i.category ? ' · ' + esc(i.category) : ''} · <span class="num">${i.range === 'today' ? '' : esc(i.date) + ' '}${esc(span)}</span>${i.minutes ? ' · <span class="num">' + dur(i.minutes) + '</span>' : ''}${st ? ` <span class="pill ${st[1]}">${st[0]}</span>` : ''}</div></div>
     ${i.amount ? `<b class="num ${cls}">${sign}${money(i.amount)}</b>` : '<span></span>'}
     ${pending ? `<button class="x" data-act="mark-done" data-id="${i.id}" aria-label="انجام شد" title="انجام شد">✓</button>` : '<span></span>'}
@@ -185,14 +185,14 @@ async function viewToday() {
     <div class="north"><span class="eyebrow">امروز · ${esc(d.today_jalali)}</span>
       <div class="fig"><strong class="num">${net < 0 ? '−' : ''}${money(Math.abs(net))}</strong><span>تومان خالص امروز</span></div>
       <div class="meta"><span>درآمد <b class="num m-pos">${money(f.income)}</b></span><span>خرج <b class="num m-neg">${money(f.expense)}</b></span></div></div>
-    <div class="card ai"><div class="row spread"><h2>امروز چی شد؟</h2><span class="pill ai">مهرداد</span></div>
+    <div class="card ai"><div class="row spread"><h2>امروز چی شد؟</h2><span class="pill ai">مهراد</span></div>
       ${composer('sayToday', 'مثلاً: ۲۰۰ ت فروش داشتم، ناهار برنج خوردم')}
       <p class="muted small">هر چه بنویسی خودش در بخش درست ثبت می‌شود.</p></div>
     ${plannedLine(f)}
     ${groupKpis(d, 4)}
     ${timeBars(d)}
     <div class="card"><div class="row spread"><h2>برنامهٔ امروز</h2><span class="pill num">${fa(open.length)} باز</span></div>
-      ${open.length ? open.map(taskRow).join('') : empty('کار بازی نیست. یکی اضافه کن یا به مهرداد بگو.')}
+      ${open.length ? open.map(taskRow).join('') : empty('کار بازی نیست. یکی اضافه کن یا به مهراد بگو.')}
       <form class="row" data-form="task" style="flex-wrap:nowrap"><input type="text" name="title" placeholder="کار تازه…" required maxlength="200"><button class="btn primary" type="submit">افزودن</button></form></div>
     ${habitsCard(d.habits)}
     <div class="card"><div class="row spread"><h2>امروز چه گذشت</h2><span class="muted small">${fa((d.items || []).filter(i => !hidden(i.kind)).length)} مورد</span></div>${timeline(d.items || [], 'today')}</div>
@@ -228,7 +228,7 @@ async function viewWealth() {
       <div class="meta"><span>دارایی <b class="num m-pos">${money(s.assets)}</b></span><span>بدهی <b class="num m-neg">${money(s.debts_total)}</b></span></div></div>
     <div class="kpis m-k3">${kpi('نقد', money(s.liquid), 'good')}${kpi('اقساط ماهانه', money(s.monthly_obligations), s.monthly_obligations ? 'warn' : '')}${kpi('اقساط ۳۰ روز', money(s.next30_due), s.next30_due > s.liquid ? 'crit' : '')}</div>
     <div class="stack">${s.alerts.map(a => `<div class="issue ${lvl[a.level] || 'info'}"><span class="tag">${esc(a.tag)}</span><div>${esc(a.text)}</div></div>`).join('')}</div>
-    <div class="card ai"><div class="row spread"><h2>بررسی با مهرداد</h2><span class="pill ai">مربی</span></div>
+    <div class="card ai"><div class="row spread"><h2>بررسی با مهراد</h2><span class="pill ai">مربی</span></div>
       <p class="muted small">حساب‌ها، اقساط و درآمد/خرج واقعی‌ات را کنار هم می‌بیند و راه‌حل می‌دهد.</p>
       <div class="row"><button class="btn ai" data-act="ask-fin" data-q="وضعیت مالی‌ام را کامل بررسی کن: حساب‌ها، اقساط، درآمد و خرج. مشکل‌ها و یک برنامهٔ مشخص برای پرداخت بدهی‌ها و پس‌انداز بده.">بررسی کامل</button>
       <button class="btn" data-act="ask-fin" data-q="این ماه کدام خرج‌هایم را می‌توانم کم کنم تا اقساط را راحت‌تر بدهم؟">کجا خرج کم کنم؟</button></div><div id="finOut"></div></div>
@@ -301,7 +301,64 @@ async function viewLife() {
   </section>`;
 }
 
+const gviewSeg = () => `<div class="seg" role="group" style="justify-self:start">
+  <button data-act="gview" data-val="goals" aria-pressed="${S.gview === 'goals'}">هدف‌ها</button>
+  <button data-act="gview" data-val="habits" aria-pressed="${S.gview === 'habits'}">عادت‌ها و روتین</button>
+  <button data-act="gview" data-val="profile" aria-pressed="${S.gview === 'profile'}">پروفایل من</button></div>`;
+
+async function viewHabits() {
+  const [p, d] = await Promise.all([api('/api/profile'), api('/api/dashboard?range=today')]);
+  const bad = p.habits.filter(h => h.kind === 'bad'), good = p.habits.filter(h => h.kind !== 'bad');
+  const hrow = h => `<div class="m-tl" style="grid-template-columns:1fr auto auto"><div class="m-tl-b"><div>${esc(h.name)} <span class="pill ${h.kind === 'bad' ? 'warn' : 'good'}">${h.kind === 'bad' ? 'بد' : 'خوب'}</span></div>
+      <div class="muted small">۷ روز: ${h.minutes_7d ? dur(h.minutes_7d) : fa(h.count_7d) + ' بار'} در ${fa(h.days_7d)} روز · ۳۰ روز: ${h.minutes_30d ? dur(h.minutes_30d) : '—'}</div></div>
+      <span></span>${h.kind === 'bad' ? `<button class="btn sm" data-act="track-habit" data-name="${esc(h.name)}">پیگیری کن</button>` : '<span></span>'}</div>`;
+  return `<section class="pane">${gviewSeg()}
+    <div class="pane-title"><h1>عادت‌ها و روتین</h1></div>
+    <div class="card"><div class="row spread"><h2>🧭 روتین‌های منظم</h2><span class="pill num">${fa(p.routines.length)}</span></div>
+      <p class="muted small">مهراد از روی چیزهایی که می‌گویی تشخیص می‌دهد (مثلاً «رفتم سر کار ایساتیس») و خودش روتین می‌سازد.</p>
+      ${p.routines.length ? p.routines.map(r => `<div class="m-tl" style="grid-template-columns:1fr auto"><div class="m-tl-b"><div>${esc(r.name)}</div>
+        <div class="muted small">${fa(r.per_week)} روز در هفته · معمولاً <span class="num">${esc(r.avg_start)}${r.avg_end ? '–' + esc(r.avg_end) : ''}</span>${r.avg_minutes ? ' · ' + dur(r.avg_minutes) : ''}</div></div>
+        <span class="pill num">${fa(r.days)} روز</span></div>`).join('') : empty('هنوز روتینی تشخیص داده نشده؛ چند روز روزت را تعریف کن.')}</div>
+    <div class="card"><div class="row spread"><h2>🔍 عادت‌هایی که دیده‌ام</h2><span class="pill num">${fa(p.habits.length)}</span></div>
+      <p class="muted small">حتی اگر اسمش را عادت نگذاشته باشی (اسکرول اینستاگرام، قلیان، …)؛ این‌ها در هدف‌گذاری وزن دارند.</p>
+      ${bad.map(hrow).join('')}${good.map(hrow).join('')}${p.habits.length ? '' : empty('هنوز عادتی دیده نشده.')}</div>
+    ${habitsCard(d.habits)}
+    <div class="card"><h2>افزودن عادت برای پیگیری</h2><form class="form" data-form="habit">
+      <label class="f"><span>عادت خوب</span><input type="text" name="good" required maxlength="120" placeholder="مثلاً مطالعهٔ ۲۰ دقیقه"></label>
+      <label class="f"><span>به‌جای (اختیاری)</span><input type="text" name="bad" maxlength="120" placeholder="مثلاً اسکرول شبانه"></label>
+      <button class="btn primary" type="submit">افزودن</button></form></div>
+  </section>`;
+}
+
+async function viewProfile() {
+  const [p, inv] = await Promise.all([api('/api/profile'), api('/api/invites')]);
+  S.cache.profile = p;
+  const by = {};
+  p.profile.forEach(e => (by[e.category || 'سایر'] ||= []).push(e));
+  const c = p.completeness, pct = Math.round(c.filled / c.total * 100);
+  const fact = e => { const wife = (e.fields || {}).source === 'همسر';
+    return `<div class="m-tl" style="grid-template-columns:1fr auto auto"><div class="m-tl-b"><div>${esc(e.summary)}</div>${wife ? '<div class="muted small">از زبان همسرت</div>' : ''}</div>
+      <span class="pill ${wife ? 'gold' : ''}">${wife ? 'همسر' : 'خودت'}</span><button class="x" data-act="del" data-id="${e.id}" aria-label="حذف">✕</button></div>`; };
+  const secs = p.sections.concat(Object.keys(by).filter(k => !p.sections.includes(k)));
+  const invRow = i => `<div class="row spread"><span>${esc(i.label || 'لینک')} · <span class="num">${fa(i.uses)}/${fa(i.max_uses)}</span> ${i.revoked ? '<span class="pill crit">باطل</span>' : i.expires_ts < Date.now() / 1000 ? '<span class="pill warn">منقضی</span>' : ''}</span>
+      ${!i.revoked ? `<button class="btn sm danger" data-act="revoke-inv" data-id="${i.id}">ابطال</button>` : ''}</div>`;
+  return `<section class="pane">${gviewSeg()}
+    <div class="pane-title"><h1>پروفایل من</h1><span class="pill num">${fa(c.filled)} از ${fa(c.total)} بخش</span></div>
+    <div class="card"><div class="bar"><i style="width:${pct}%"></i></div>
+      <p class="muted small">هر چه بیشتر بدانم، هدف‌ها و برنامه‌ها دقیق‌تر می‌شوند. ${c.missing.length ? 'خالی: ' + esc(c.missing.slice(0, 4).join('، ')) : 'همهٔ بخش‌ها پر است 👏'}</p>
+      <div class="row"><button class="btn ai" data-act="say-onboard">شروع مصاحبه در چت</button><span class="muted small">یا در تلگرام: /onboard</span></div></div>
+    <div class="card gold"><div class="row spread"><h2>💌 لینک برای همسرت</h2><span class="pill gold">او دربارهٔ تو جواب می‌دهد</span></div>
+      <p class="muted small">یک لینک امن و فقط برای پرسش‌نامه؛ او هیچ‌چیز از اطلاعات تو را نمی‌بیند. پاسخ‌هایش اینجا برای خودت دیدنی و قابل‌حذف است و او این را در صفحه می‌خواند.</p>
+      <div class="row"><button class="btn primary" data-act="make-invite">ساخت لینک تازه</button></div><div id="inviteOut"></div>
+      ${inv.invites.length ? `<div class="stack6" style="margin-top:6px">${inv.invites.map(invRow).join('')}</div>` : ''}</div>
+    ${secs.filter(k => by[k]).map(k => `<div class="card"><div class="row spread"><h2>${esc(k)}</h2><span class="pill num">${fa(by[k].length)}</span></div>${by[k].slice().reverse().map(fact).join('')}</div>`).join('')
+      || `<div class="card">${empty('هنوز چیزی دربارهٔ تو ثبت نشده. شروع کن: «من … هستم و …» یا مصاحبه را بزن.')}</div>`}
+  </section>`;
+}
+
 async function viewGoals() {
+  if (S.gview === 'habits') return viewHabits();
+  if (S.gview === 'profile') return viewProfile();
   const r = await api('/api/events?kind=goal,task&limit=150'); const ev = r.events;
   S.cache.goals = ev;
   const goals = ev.filter(e => e.type === 'goal'), tasks = ev.filter(e => e.type === 'task');
@@ -309,11 +366,16 @@ async function viewGoals() {
   const goalCard = g => { const p = Number((g.fields || {}).progress || 0), h = (g.fields || {}).horizon;
     return `<div class="card m-goal"><div class="row spread"><b>${esc(g.summary)}</b><span class="row" style="gap:4px">${h ? `<span class="pill gold">${esc(h)}</span>` : ''}
       <button class="x" data-act="edit" data-id="${g.id}" aria-label="ویرایش">✎</button><button class="x" data-act="del" data-id="${g.id}" aria-label="حذف">✕</button></span></div>
+      ${(g.fields || {}).why ? `<div class="muted small">چرا: ${esc(g.fields.why)}</div>` : ''}
+      ${((g.fields || {}).steps || []).length ? `<ul class="small" style="margin:0;padding-inline-start:18px">${g.fields.steps.map(x => `<li>${esc(x)}</li>`).join('')}</ul>` : ''}
       <div class="bar ${p >= 100 ? 'good' : ''}"><i style="width:${Math.min(100, p)}%"></i></div>
       <div class="row spread"><input type="range" min="0" max="100" step="5" value="${p}" data-act="progress" data-id="${g.id}" aria-label="پیشرفت"><span class="num small muted">${fa(p)}٪</span></div></div>`; };
-  return `<section class="pane">
+  return `<section class="pane">${gviewSeg()}
     <div class="pane-title"><h1>هدف‌ها و برنامه</h1></div>
-    <div class="card ai"><div class="row spread"><h2>برنامه‌ریزی با مهرداد</h2><span class="pill ai">مربی</span></div>
+    <div class="card gold"><div class="row spread"><h2>🎯 هدف‌گذاری هوشمند</h2><span class="pill gold">بر اساس شناخت از تو</span></div>
+      <p class="muted small">مهراد بر پایهٔ پروفایل، روتین‌ها، عادت‌ها و مالی‌ات هدف پیشنهاد می‌دهد؛ هر کدام را خودت تأیید می‌کنی.</p>
+      <div class="row"><button class="btn primary" data-act="suggest-goals">پیشنهاد هدف</button></div><div id="goalSuggest"></div></div>
+    <div class="card ai"><div class="row spread"><h2>برنامه‌ریزی با مهراد</h2><span class="pill ai">مربی</span></div>
       <p class="muted small">بر اساس هدف‌ها و کارهای بازت، برنامهٔ هفته را می‌چیند.</p>
       <div class="row"><button class="btn ai" data-act="plan" data-what="هفته">برنامهٔ این هفته</button><button class="btn" data-act="plan" data-what="امروز">برنامهٔ امروز</button></div>
       <div id="planOut"></div></div>
@@ -333,7 +395,7 @@ async function viewGoals() {
 async function viewChat() {
   const r = await api('/api/history?limit=80');
   const msgs = r.messages.map(m => `<div class="m-b ${m.role === 'user' ? 'me' : 'bot'}">${esc(m.text)}</div>`).join('');
-  return `<section class="pane"><div class="pane-title"><h1>گفتگو با مهرداد</h1></div>
+  return `<section class="pane"><div class="pane-title"><h1>گفتگو با مهراد</h1></div>
     <div class="m-chatwrap"><div class="m-chat" id="chatList">${msgs || empty('هنوز چیزی نگفته‌ای.')}</div></div>
     <div class="m-composer-fixed">${composer('sayChat', 'بنویس یا با 🎤 بگو…')}</div></section>`;
 }
@@ -412,8 +474,8 @@ function openSettings() {
 // ------------------------------------------------------------- جفت‌سازی
 function pairScreen() {
   $('#nav').hidden = true; $('#subtitle').textContent = 'مغز دوم تو';
-  $('#view').innerHTML = `<section class="m-center"><div class="card"><h1>سلام، من مهردادم 👋</h1>
-    <p>برای وصل‌شدن: در تلگرام به مهرداد بنویس <b>/pair</b> و کد ۸ حرفی را اینجا بزن.</p>
+  $('#view').innerHTML = `<section class="m-center"><div class="card"><h1>سلام، من مهرادم 👋</h1>
+    <p>برای وصل‌شدن: در تلگرام به مهراد بنویس <b>/pair</b> و کد ۸ حرفی را اینجا بزن.</p>
     <form class="stack" data-form="pair"><input type="text" name="code" placeholder="کد جفت‌سازی" autocomplete="off" autocapitalize="characters" maxlength="16" dir="ltr" required>
     <button class="btn primary" type="submit">اتصال</button></form></div></section>`;
 }
@@ -464,6 +526,35 @@ document.addEventListener('click', async ev => {
     else if (act === 'n-notif') MehrdadNative.openNotificationAccess();
     else if (act === 'n-update') { closeSheet(); MehrdadNative.checkUpdate(); }
     else if (act === 'mark-done') { await api('/api/events/' + id, { method: 'PATCH', body: { status: 'done' } }); toast('انجام‌شد ✓'); render(); }
+    else if (act === 'gview') { S.gview = b.dataset.val; render(); }
+    else if (act === 'say-onboard') { go('chat'); setTimeout(() => { const ta = $('#sayChat'); if (ta) { ta.value = 'می‌خواهم مصاحبه شروع شود؛ یک‌یک از من سؤال کن تا مرا بشناسی.'; ta.focus(); } }, 300); }
+    else if (act === 'track-habit') {
+      const good = prompt(`جایگزین خوب برای «${b.dataset.name}» چیست؟`, 'پیاده‌روی ۱۰ دقیقه'); if (!good) return;
+      await api('/api/habits', { method: 'POST', body: { good: good.trim(), bad: b.dataset.name } }); toast('عادت ثبت شد؛ هر شب از تو می‌پرسم 🔥'); render();
+    }
+    else if (act === 'make-invite') {
+      const r = await api('/api/invites', { method: 'POST', body: { label: 'همسر', days: 14 } });
+      $('#inviteOut').innerHTML = `<div class="note" style="padding:10px;border-radius:10px;background:var(--surface2)"><div class="small muted">این لینک را فقط برای همسرت بفرست (۱۴ روز، حداکثر ۳ بار ارسال):</div>
+        <input type="text" readonly dir="ltr" value="${esc(r.url)}" id="inviteUrl" style="margin-top:6px">
+        <div class="row" style="margin-top:6px"><button class="btn sm primary" data-act="copy-invite">کپی</button>${navigator.share ? '<button class="btn sm" data-act="share-invite">ارسال…</button>' : ''}</div></div>`;
+    }
+    else if (act === 'copy-invite') { const el = $('#inviteUrl'); el.select(); try { await navigator.clipboard.writeText(el.value); toast('کپی شد'); } catch { document.execCommand('copy'); toast('کپی شد'); } }
+    else if (act === 'share-invite') { try { await navigator.share({ title: 'چند سؤال دربارهٔ من', text: 'این چند سؤال را دربارهٔ من جواب بده 🙏', url: $('#inviteUrl').value }); } catch {} }
+    else if (act === 'revoke-inv') { if (confirm('این لینک باطل شود؟')) { await api('/api/invites/' + id, { method: 'DELETE' }); render(); } }
+    else if (act === 'suggest-goals') {
+      const out = $('#goalSuggest'); out.innerHTML = '<span class="m-spin"></span> مهراد دارد فکر می‌کند…'; b.disabled = true;
+      try {
+        const r = await api('/api/goals/suggest', { method: 'POST' }); S.cache.suggest = r.goals;
+        out.innerHTML = r.goals.length ? r.goals.map((g, i) => `<div class="card" style="margin-top:8px"><div class="row spread"><b>${esc(g.title)}</b><span class="pill gold">${esc(g.horizon || '')}</span></div>
+          ${g.why ? `<div class="muted small">چرا: ${esc(g.why)}</div>` : ''}${(g.steps || []).length ? `<ul class="small" style="margin:4px 0;padding-inline-start:18px">${g.steps.map(x => `<li>${esc(x)}</li>`).join('')}</ul>` : ''}
+          <button class="btn sm primary" data-act="add-suggest" data-i="${i}">افزودن به هدف‌ها</button></div>`).join('') : empty('هنوز چیز کافی از تو نمی‌دانم؛ در «پروفایل من» مصاحبه را شروع کن.');
+      } catch (e) { out.innerHTML = empty('نشد: ' + esc(e.message)); } finally { b.disabled = false; }
+    }
+    else if (act === 'add-suggest') {
+      const g = (S.cache.suggest || [])[Number(b.dataset.i)]; if (!g) return;
+      await api('/api/events', { method: 'POST', body: { type: 'goal', summary: g.title, fields: { progress: 0, horizon: g.horizon || undefined, why: g.why || undefined, steps: g.steps || undefined } } });
+      b.disabled = true; b.textContent = 'اضافه شد ✓'; toast('به هدف‌ها اضافه شد');
+    }
     else if (act === 'mview') { S.mview = b.dataset.val; render(); }
     else if (act === 'acc-edit') openAccEdit(id);
     else if (act === 'debt-edit') openDebtEdit(id);
@@ -476,7 +567,7 @@ document.addEventListener('click', async ev => {
       await api(`/api/debts/${id}/pay`, { method: 'POST', body: { amount } }); toast('قسط ثبت شد ✓ (در حساب‌ها هم خرج شد)'); render();
     }
     else if (act === 'ask-fin') {
-      const out = $('#finOut'); out.innerHTML = '<span class="m-spin"></span> مهرداد دارد حساب‌هایت را بررسی می‌کند…'; b.disabled = true;
+      const out = $('#finOut'); out.innerHTML = '<span class="m-spin"></span> مهراد دارد حساب‌هایت را بررسی می‌کند…'; b.disabled = true;
       try { const r = await api('/api/chat', { method: 'POST', body: { text: b.dataset.q } }); out.innerHTML = `<div class="m-b bot" style="max-width:100%">${esc(r.reply)}</div>`; } finally { b.disabled = false; }
     }
     else if (act === 'del') { if (confirm('حذف شود؟')) { await api('/api/events/' + id, { method: 'DELETE' }); closeSheet(); toast('حذف شد'); render(); } }
@@ -487,7 +578,7 @@ document.addEventListener('click', async ev => {
     else if (act === 'theme') { applyTheme(b.dataset.val); $$('.seg [data-act=theme]').forEach(x => x.setAttribute('aria-pressed', x === b)); }
     else if (act === 'logout') { closeSheet(); logout(false); }
     else if (act === 'plan') {
-      const out = $('#planOut'); out.innerHTML = '<span class="m-spin"></span> مهرداد دارد برنامه می‌چیند…'; b.disabled = true;
+      const out = $('#planOut'); out.innerHTML = '<span class="m-spin"></span> مهراد دارد برنامه می‌چیند…'; b.disabled = true;
       try { const r = await api('/api/chat', { method: 'POST', body: { text: `برنامهٔ ${b.dataset.what}‌ام را بر اساس هدف‌ها و کارهای بازم و عادت‌هایم بچین. کوتاه و قابل‌اجرا، با ساعت‌بندی پیشنهادی.` } });
         out.innerHTML = `<div class="m-b bot" style="max-width:100%">${esc(r.reply)}</div>`; } finally { b.disabled = false; }
     }
@@ -532,6 +623,7 @@ document.addEventListener('submit', async ev => {
       if (v.end) body.end = v.end; else if (v.minutes) body.minutes = Number(v.minutes);
       await api('/api/events', { method: 'POST', body });
     }
+    else if (kind === 'habit') await api('/api/habits', { method: 'POST', body: { good: v.good.trim(), bad: (v.bad || '').trim() || undefined } });
     else if (kind === 'account') await api('/api/accounts', { method: 'POST', body: { name: v.name.trim(), kind: v.kind, balance: Number(v.balance) } });
     else if (kind === 'acc-edit') { await api('/api/accounts/' + f.dataset.id, { method: 'PATCH', body: { name: v.name.trim(), balance: Number(v.balance) } }); closeSheet(); }
     else if (kind === 'debt') {

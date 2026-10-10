@@ -14,6 +14,8 @@ from .memory import Memory
 from .scheduler import Scheduler
 from .telegram import Telegram
 from .web import create_app
+from .agent_mail import MailAgent
+from .agent_tg import TelegramAgent
 
 
 async def amain():
@@ -36,11 +38,24 @@ async def amain():
     brain = Brain(cfg.anthropic_api_key, cfg.anthropic_model, cfg.anthropic_proxy, search=mem.search_memory,
                   provider=cfg.provider(), cli_model=cfg.cli_model, cli_cwd=cfg.data_dir)
     bot = Bot(mem, tg, brain, cfg)
-    brain.context_provider = bot.finance_prompt
+    brain.context_provider = bot.context_prompt
     sched = Scheduler(bot, mem, cfg)
     app = create_app(mem, time.time(), bot)
     server = uvicorn.Server(uvicorn.Config(app, host=cfg.host, port=cfg.port, log_level="info", proxy_headers=True))
-    await asyncio.gather(server.serve(), bot.poll_forever(), sched.run_forever())
+    async def guarded(name, coro):               # خرابی یک ایجنت ربات را نکشد
+        try:
+            await coro
+        except Exception:
+            logging.exception("%s متوقف شد", name)
+
+    tasks = [server.serve(), bot.poll_forever(), sched.run_forever()]
+    if cfg.email_imap_user and cfg.email_imap_password:
+        mail = MailAgent(bot, mem, cfg)
+        bot.mail_agent = mail
+        tasks.append(guarded("ایجنت ایمیل", mail.run_forever()))
+    if cfg.tg_api_id and cfg.tg_api_hash and cfg.tg_allow:
+        tasks.append(guarded("ایجنت تلگرام", TelegramAgent(bot, cfg).run_forever()))
+    await asyncio.gather(*tasks)
 
 
 def main():

@@ -103,7 +103,7 @@ async def test_help_command(setup):
     mem, tg, brain, cfg, bot = setup
     await mem.set_owner(1)
     await bot.handle_message({"chat": {"id": 1}, "text": "/help"})
-    assert "مهرداد" in tg.sent[-1][1]
+    assert "مهراد" in tg.sent[-1][1]
     assert brain.calls == []
 
 

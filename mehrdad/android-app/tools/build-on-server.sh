@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# APK انتشار (امضای ثابت) را روی یک سرور Docker خارج از ایران می‌سازد، روی سرور مهرداد منتشر می‌کند
+# APK انتشار (امضای ثابت) را روی یک سرور Docker خارج از ایران می‌سازد، روی سرور مهراد منتشر می‌کند
 # (تا خود اپ‌ها به‌روز شوند)، و یک نسخه را هم برای تو برمی‌گرداند.
 #
 # اجرا (Git Bash روی ویندوز):
@@ -16,7 +16,7 @@ export PYTHONUTF8=1 PYTHONIOENCODING=utf-8   # خروجی فارسی در وین
 HOST="${BUILD_HOST:-root@89.125.35.130}"
 KEY="${BUILD_KEY:-$HOME/.ssh/mehrdad_nl}"
 DIR=/opt/mehrdad-android-build
-APP_DATA=/opt/mehrdad/mehrdad/server/data           # همان ./data سرویس مهرداد (داخل کانتینر: /data)
+APP_DATA=/opt/mehrdad/mehrdad/server/data           # همان ./data سرویس مهراد (داخل کانتینر: /data)
 OUT="${1:-mehrdad.apk}"
 BACKUP_DIR="${BACKUP_DIR:-$HOME/.mehrdad-signing}"
 PUBLISH="${PUBLISH:-1}"
