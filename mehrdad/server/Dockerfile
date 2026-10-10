@@ -15,7 +15,8 @@ RUN useradd -r -u 10001 -m -d /home/app app && mkdir -p /data && chown app /data
 USER app
 # وضعیت/لاگین Claude Code روی ولوم /data می‌ماند؛ آپدیت خودکار خاموش تا نسخه بین ران‌ها ثابت بماند
 ENV HOME=/home/app PATH=/home/app/.local/bin:$PATH CLAUDE_CONFIG_DIR=/data/claude DISABLE_AUTOUPDATER=1
-RUN if [ "$INSTALL_CLAUDE_CLI" = "1" ]; then curl -fsSL https://claude.ai/install.sh | bash && claude --version; fi
+# اول فایل را دانلود می‌کنیم (نه curl|bash): دانلود خراب در pipe بی‌صدا رد می‌شد و بعدش claude پیدا نمی‌شد
+RUN if [ "$INSTALL_CLAUDE_CLI" = "1" ]; then curl -fsSL --retry 5 --retry-all-errors -o /tmp/claude-install.sh https://claude.ai/install.sh && bash /tmp/claude-install.sh && rm -f /tmp/claude-install.sh && claude --version; fi
 EXPOSE 8081
 HEALTHCHECK --interval=60s --timeout=5s CMD python -c "import urllib.request;urllib.request.urlopen('http://127.0.0.1:8081/health')" || exit 1
 CMD ["python", "-m", "app.main"]
