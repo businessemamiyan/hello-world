@@ -8,11 +8,14 @@ from zoneinfo import ZoneInfo
 
 TEHRAN = ZoneInfo("Asia/Tehran")
 
-KINDS = ("expense", "income", "meal", "intimacy", "smoking", "workout", "sleep",
+STATUSES = ("done", "ongoing", "planned", "maybe")          # وضعیت واقعیِ یک رویداد (کارها: open/done جدا هستند)
+PENDING = ("planned", "maybe")                               # هنوز اتفاق نیفتاده؛ در جمع‌ها حساب نمی‌شود
+
+KINDS = ("activity", "expense", "income", "meal", "intimacy", "smoking", "workout", "sleep",
          "feeling", "task", "goal", "idea", "habit", "note", "other")
 
 LABELS = {
-    "expense": "خرج", "income": "درآمد", "meal": "غذا", "intimacy": "رابطهٔ زناشویی",
+    "activity": "فعالیت", "expense": "خرج", "income": "درآمد", "meal": "غذا", "intimacy": "رابطهٔ زناشویی",
     "smoking": "قلیان/سیگار", "workout": "ورزش", "sleep": "خواب", "feeling": "حال‌وحال",
     "task": "کار", "goal": "هدف", "idea": "ایده", "habit": "عادت", "note": "یادداشت", "other": "سایر",
 }
@@ -99,6 +102,46 @@ def parse_when(s, now=None):
     return None
 
 
+def parse_end(end_s, start_ts, now=None):
+    """پایان یک فعالیت: «HH:MM» (همان روز شروع؛ اگر کوچک‌تر از شروع بود فردا) یا تاریخ‌ساعت کامل → epoch یا None."""
+    if not end_s or not isinstance(end_s, str):
+        return None
+    now = now or now_tehran()
+    full = parse_when(end_s, now)
+    if full is None:
+        return None
+    if start_ts is not None and ":" in end_s and len(end_s.strip()) <= 5:     # فقط ساعت
+        s_dt = datetime.datetime.fromtimestamp(start_ts, TEHRAN)
+        e = datetime.datetime.fromtimestamp(full, TEHRAN).replace(year=s_dt.year, month=s_dt.month, day=s_dt.day)
+        if e <= s_dt:
+            e += datetime.timedelta(days=1)
+        return e.timestamp()
+    return full
+
+
+def activity_minutes(fields, start_ts, now_ts):
+    """مدت یک رویداد به دقیقه: minutes صریح، یا پایان (end_ts)، یا اگر در جریان است از شروع تا الان (حداکثر تا پایان برنامه‌ریزی‌شده)."""
+    fields = fields or {}
+    status = fields.get("status")
+    end_ts = fields.get("end_ts")
+    if status == "ongoing" and start_ts is not None and start_ts <= now_ts:
+        upto = min(now_ts, end_ts) if end_ts else now_ts
+        return max(0.0, min(16 * 60.0, (upto - start_ts) / 60))
+    if isinstance(fields.get("minutes"), (int, float)):
+        return float(fields["minutes"])
+    if end_ts and start_ts is not None:
+        return max(0.0, (end_ts - start_ts) / 60)
+    return None
+
+
+def fa_duration(minutes):
+    m = int(round(minutes))
+    h, mm = divmod(m, 60)
+    if h and mm:
+        return f"{fa(h)} ساعت و {fa(mm)} دقیقه"
+    return f"{fa(h)} ساعت" if h else f"{fa(mm)} دقیقه"
+
+
 def range_bounds(label, now=None):
     """(شروع, پایان) به epoch برای today | week (۷ روز اخیر) | month (ماه جلالی جاری)."""
     now = now or now_tehran()
@@ -118,52 +161,82 @@ def range_bounds(label, now=None):
 
 # ---------------------------------------------------------------- تجمیع
 def build_dashboard(rows, habits, label, now=None):
-    """rows: رکوردهای memory در بازه (dict با type/summary/amount/category/fields/when_ts)."""
+    """rows: رکوردهای memory در بازه (type/summary/amount/category/fields/when_ts).
+    رویدادهای planned/maybe در جمع‌ها نمی‌آیند و جدا نشان داده می‌شوند؛ مدت‌ها از minutes/end_ts حساب می‌شود."""
     now = now or now_tehran()
+    now_ts = now.timestamp()
     start, end = range_bounds(label, now)
     income = expense = 0.0
+    p_income = p_expense = 0.0
     by_cat = {"income": {}, "expense": {}}
     counts = {}
+    minutes_by = {}
+    groups = {}
     items = []
-    # سری روزانه برای نمودار: هر روز بازه، با جمع درآمد/خرج و تعداد چند نوع
+    # سری روزانه برای نمودار
     daily_map = {}
     day = datetime.datetime.fromtimestamp(start, TEHRAN).date()
     last = datetime.datetime.fromtimestamp(end - 1, TEHRAN).date()
     while day <= last:
         jm, jd = g2j(day.year, day.month, day.day)[1:]
         daily_map[day] = {"date": fa("%02d/%02d" % (jm, jd)), "day": fa(jd), "income": 0, "expense": 0,
-                          "meal": 0, "smoking": 0, "workout": 0}
+                          "meal": 0, "smoking": 0, "workout": 0, "minutes": 0}
         day += datetime.timedelta(days=1)
     for r in sorted(rows, key=lambda x: x["when_ts"]):
         kind = r["type"]
         fields = r.get("fields") or {}
+        status = fields.get("status") if kind != "task" else None
+        pending = status in PENDING
         n = fields.get("count") if isinstance(fields.get("count"), (int, float)) else 1
-        counts[kind] = counts.get(kind, 0) + n
         amt = r.get("amount") or 0
-        if kind in ("income", "expense"):
-            if kind == "income":
-                income += amt
-            else:
-                expense += amt
-            cat = r.get("category") or "بدون دسته"
-            by_cat[kind][cat] = by_cat[kind].get(cat, 0) + amt
+        mins = activity_minutes(fields, r["when_ts"], now_ts) if kind != "task" else None
         t = datetime.datetime.fromtimestamp(r["when_ts"], TEHRAN)
-        bucket = daily_map.get(t.date())
-        if bucket is not None:
+        end_ts = fields.get("end_ts")
+        end_time = fa(datetime.datetime.fromtimestamp(end_ts, TEHRAN).strftime("%H:%M")) if end_ts else None
+        if pending:
+            if kind == "income":
+                p_income += amt
+            elif kind == "expense":
+                p_expense += amt
+        else:
+            counts[kind] = counts.get(kind, 0) + n
             if kind in ("income", "expense"):
-                bucket[kind] += amt
-            elif kind in ("meal", "smoking", "workout"):
-                bucket[kind] += n
+                if kind == "income":
+                    income += amt
+                else:
+                    expense += amt
+                cat = r.get("category") or "بدون دسته"
+                by_cat[kind][cat] = by_cat[kind].get(cat, 0) + amt
+            gkey = r.get("category") or LABELS.get(kind, kind)
+            if kind not in ("income", "expense", "task", "goal", "idea", "note", "habit"):
+                g = groups.setdefault(gkey, {"name": gkey, "kind": kind, "count": 0, "minutes": 0})
+                g["count"] += n
+                if mins:
+                    g["minutes"] += mins
+            if mins:
+                minutes_by[gkey] = minutes_by.get(gkey, 0) + mins
+            bucket = daily_map.get(t.date())
+            if bucket is not None:
+                if kind in ("income", "expense"):
+                    bucket[kind] += amt
+                elif kind in ("meal", "smoking", "workout"):
+                    bucket[kind] += n
+                if mins:
+                    bucket["minutes"] += mins
         items.append({"id": r.get("id"), "kind": kind, "label": LABELS.get(kind, kind), "summary": r["summary"],
                       "amount": amt or None, "category": r.get("category"), "time": fa(t.strftime("%H:%M")),
-                      "date": jalali_str(t), "fields": fields})
+                      "end_time": end_time, "minutes": round(mins) if mins else None, "status": status,
+                      "uncertain": bool(fields.get("uncertain")), "date": jalali_str(t), "fields": fields})
     return {
         "range": label,
         "from": datetime.datetime.fromtimestamp(start, TEHRAN).isoformat(),
         "to": datetime.datetime.fromtimestamp(end, TEHRAN).isoformat(),
         "today_jalali": jalali_str(now),
-        "finance": {"income": income, "expense": expense, "net": income - expense, "by_category": by_cat},
+        "finance": {"income": income, "expense": expense, "net": income - expense, "by_category": by_cat,
+                    "planned_income": p_income, "planned_expense": p_expense},
         "counts": counts,
+        "time_by_category": [{"name": k, "minutes": round(v)} for k, v in sorted(minutes_by.items(), key=lambda kv: -kv[1])],
+        "groups": sorted(groups.values(), key=lambda g: (-g["minutes"], -g["count"])),
         "daily": list(daily_map.values()),
         "items": items,
         "habits": [{"id": h["id"], "good": h["good"], "bad": h.get("bad"), "streak": h["streak"],
@@ -186,9 +259,14 @@ def format_text(d, private=False):
         for kind, name in (("income", "درآمد"), ("expense", "خرج")):
             for cat, v in sorted(f["by_category"][kind].items(), key=lambda kv: -kv[1])[:5]:
                 lines.append(f"   · {name} — {cat}: {_money(v)}")
-    emoji = {"meal": "🍽", "smoking": "💨", "intimacy": "❤️", "workout": "🏃", "sleep": "😴", "feeling": "💭",
+    if d["time_by_category"]:
+        lines.append("⏱ زمان: " + "؛ ".join(f"{t['name']} {fa_duration(t['minutes'])}" for t in d["time_by_category"][:5]))
+    plan_exp, plan_inc = f.get("planned_expense", 0), f.get("planned_income", 0)
+    if plan_exp or plan_inc:
+        lines.append(f"🗓 برنامه‌ریزی‌شده (هنوز حساب نشده): خرج {_money(plan_exp)} | درآمد {_money(plan_inc)}")
+    emoji = {"activity": "🧭", "meal": "🍽", "smoking": "💨", "intimacy": "❤️", "workout": "🏃", "sleep": "😴", "feeling": "💭",
              "task": "✅", "goal": "🎯", "idea": "💡"}
-    for kind in ("meal", "smoking", "intimacy", "workout", "sleep", "feeling", "task", "goal", "idea"):
+    for kind in ("activity", "meal", "smoking", "intimacy", "workout", "sleep", "feeling", "task", "goal", "idea"):
         if kind == "intimacy" and not private:
             continue
         its = [i for i in d["items"] if i["kind"] == kind]

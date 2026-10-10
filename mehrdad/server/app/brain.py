@@ -10,7 +10,7 @@ import time
 
 import httpx
 
-from .life import KINDS, now_tehran, parse_when
+from .life import KINDS, STATUSES, now_tehran, parse_end, parse_when
 
 log = logging.getLogger("brain")
 
@@ -78,8 +78,20 @@ SYSTEM_PROMPT = """تو «مهرداد» هستی — مغز دومِ کاربر
 زمان: اگر کاربر گفت «ساعت ۱۴»، «دیروز»، «صبح» → when را به وقت تهران به شکل "YYYY-MM-DD HH:MM" بنویس (با «زمان الان»
 پایین‌تر حساب کن)؛ وگرنه when را null بگذار (یعنی همین الان).
 
+### فعالیت‌های زمان‌دار، برنامه و ابهام
+کاربر معمولاً روزش را روایت می‌کند (ساعت‌ها، مدت‌ها، چند چیز در یک پیام). برای هر چیز یک ورودی جدا بساز:
+- **activity**: هر کاری که شروع/پایان یا مدت دارد (کار، یادگیری/آموزش، رفت‌وآمد، استراحت، خرید، خانواده…). category = نام کوتاه فارسی («کار»، «یادگیری»، «رفت‌وآمد»…).
+  ورزش، خواب و غذا هم می‌توانند زمان داشته باشند.
+- زمان‌ها: «۶.۲۰»، «۶:۲۰»، «ساعت ۷ و ربع»، «۱۶:۳۰» همه ساعت‌اند. when = شروع، end = پایان (فقط ساعت «HH:MM» کافی است، همان روز؛ اگر از نیمه‌شب گذشت خودکار فردا حساب می‌شود).
+  اگر گفت «۲ ساعت» → minutes: 120 (بدون end). «بیدار شدم ۶:۲۰» → activity با category «بیدارشدن»، when ۰۶:۲۰.
+- **status**: done (انجام شده)، ongoing (الان در جریان است؛ «تا ۱۶:۳۰ می‌مانم» یعنی ongoing با end = ۱۶:۳۰)، planned (گفت می‌خواهد انجام دهد)،
+  maybe («احتمالاً»، «شاید»). planned/maybe هنوز در جمع پول و زمان نمی‌آیند؛ برای آن‌ها هم amount و when را بگذار تا بعداً «انجام شد» بشوند.
+- هر خرجی که وسط روایت گفت جدا ثبت شود (مثلاً «سرویس هر رفت ۲۵۰ هزار» = یک خرج done برای رفت + یک خرج maybe برای برگشت اگر گفت «احتمالاً برگشت هم دارم»).
+- **ابهام**: اگر نفهمیدی (مثلاً «گاز زدم شدم ۶۶۰۰» که ممکن است پر کردن باک CNG یا چیز دیگری باشد)، بهترین حدس را با "uncertain": true ثبت کن و در reply یک سؤال کوتاه و مشخص بپرس. حدس‌های بی‌پایه نزن.
+- در پایان reply، اگر روایت چند چیز بود، خلاصهٔ یک‌خطی «چه ثبت شد» بگو و فقط در صورت لزوم یک سؤال بپرس.
+
 **قالب خروجی**: فقط و فقط یک JSON معتبر (بدون ```json و بدون هیچ متن قبل/بعدش) با این شکل:
-{"reply": "<جواب فارسی تو به کاربر>", "memory": [{"type": "<income|expense|meal|smoking|intimacy|workout|sleep|feeling|task|goal|idea|habit|note|other>", "summary": "<خلاصه یک‌خطی>", "detail": "<جزئیات اختیاری>", "amount": <عدد تومان یا null>, "category": "<دسته یا null>", "when": "<YYYY-MM-DD HH:MM یا null>", "fields": {<اختیاری>}}]}
+{"reply": "<جواب فارسی تو به کاربر>", "memory": [{"type": "<activity|income|expense|meal|smoking|intimacy|workout|sleep|feeling|task|goal|idea|habit|note|other>", "summary": "<خلاصه یک‌خطی>", "detail": "<جزئیات اختیاری>", "amount": <عدد تومان یا null>, "category": "<دسته یا null>", "when": "<YYYY-MM-DD HH:MM یا HH:MM یا null>", "end": "<HH:MM یا null>", "minutes": <عدد یا null>, "status": "<done|ongoing|planned|maybe یا null>", "uncertain": <true یا null>, "fields": {<اختیاری>}}]}
 نوع "habit" فقط برای وقتی است که کاربر درباره‌ی عادتی حرف می‌زند بدون اینکه با /habit ثبتش کرده
 باشد (فقط برای حافظه — ساخت ردیف واقعی عادت و استریک فقط با دستور /habit انجام می‌شود، نه این JSON).
 
@@ -323,7 +335,21 @@ class Brain:
             amount = float(amount) if isinstance(amount, (int, float)) and not isinstance(amount, bool) else None
             category = e.get("category")
             category = str(category)[:60] if category else None
-            fields = e.get("fields") if isinstance(e.get("fields"), dict) else None
+            fields = dict(e["fields"]) if isinstance(e.get("fields"), dict) else {}
+            when_ts = parse_when(e.get("when"), now)
+            mins = e.get("minutes")
+            mins = float(mins) if isinstance(mins, (int, float)) and not isinstance(mins, bool) and 0 < mins <= 24 * 60 else None
+            end_ts = parse_end(e.get("end"), when_ts, now)
+            if end_ts is None and mins and when_ts:
+                end_ts = when_ts + mins * 60
+            if end_ts:
+                fields["end_ts"] = end_ts
+            if mins:
+                fields["minutes"] = mins
+            if e.get("status") in STATUSES and t != "task":
+                fields["status"] = e["status"]
+            if e.get("uncertain") is True:
+                fields["uncertain"] = True
             clean.append({"type": t, "summary": str(e["summary"]), "detail": e.get("detail"), "amount": amount,
-                          "category": category, "when_ts": parse_when(e.get("when"), now), "fields": fields})
+                          "category": category, "when_ts": when_ts, "fields": fields or None})
         return parsed["reply"], clean

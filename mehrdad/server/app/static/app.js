@@ -12,7 +12,7 @@ const store = {
   set: (k, v) => { try { localStorage.setItem(k, v); } catch {} },
   del: k => { try { localStorage.removeItem(k); } catch {} },
 };
-const ICON = {income:'💰', expense:'💸', meal:'🍽', smoking:'💨', intimacy:'❤️', workout:'🏃', sleep:'😴',
+const ICON = {activity:'🧭', income:'💰', expense:'💸', meal:'🍽', smoking:'💨', intimacy:'❤️', workout:'🏃', sleep:'😴',
   feeling:'💭', task:'✅', goal:'🎯', idea:'💡', habit:'🔥', note:'📝', other:'•'};
 const THEMES = {night:'شب', day:'روز', amber:'کهربایی', ocean:'اقیانوسی'};
 const RANGES = {today:'امروز', week:'۷ روز', month:'این ماه'};
@@ -71,6 +71,9 @@ const jdate = s => { const m = /^(\d{4})-(\d{2})-(\d{2})/.exec(s || ''); if (!m)
 const en = s => String(s).replace(/[۰-۹]/g, d => '۰۱۲۳۴۵۶۷۸۹'.indexOf(d)).replace(/[٠-٩]/g, d => '٠١٢٣٤٥٦٧٨٩'.indexOf(d)).replace(/[,٬،\s]/g, '');
 const ACCKIND = { bank: 'بانک', cash: 'نقد', wallet: 'کیف پول', crypto: 'کریپتو', other: 'سایر' };
 const DEBTKIND = { installment: 'قسط', loan: 'وام', credit_card: 'کارت اعتباری', personal: 'شخصی', other: 'سایر' };
+const dur = m => { m = Math.round(m || 0); const h = Math.floor(m / 60), r = m % 60;
+  return h && r ? `${fa(h)} ساعت و ${fa(r)} دقیقه` : h ? `${fa(h)} ساعت` : `${fa(r)} دقیقه`; };
+const STATUS = { ongoing: ['در جریان', 'info'], planned: ['برنامه', 'gold'], maybe: ['احتمالی', ''] };
 const kpi = (l, v, cls = '') => `<div class="kpi ${cls}"><div class="v num">${v}</div><div class="l">${l}</div></div>`;
 const seg = (scope, cur) => `<div class="seg" role="group">${Object.entries(RANGES).map(([k, v]) =>
   `<button data-act="seg" data-scope="${scope}" data-val="${k}" aria-pressed="${cur === k}">${v}</button>`).join('')}</div>`;
@@ -80,15 +83,21 @@ const hidden = kind => kind === 'intimacy' && !S.priv;
 function tlItem(i) {
   const sign = i.kind === 'income' ? '+' : '−';
   const cls = i.kind === 'income' ? 'm-pos' : 'm-neg';
-  return `<div class="m-tl"><span class="m-ic">${ICON[i.kind] || '•'}</span>
-    <div class="m-tl-b"><div>${esc(i.summary)}</div><div class="muted small">${esc(i.label)}${i.category ? ' · ' + esc(i.category) : ''} · <span class="num">${i.range === 'today' ? '' : esc(i.date) + ' '}${esc(i.time)}</span></div></div>
+  const st = STATUS[i.status];
+  const pending = i.status === 'planned' || i.status === 'maybe' || i.status === 'ongoing';
+  const span = i.end_time ? `${i.time}–${i.end_time}` : i.time;
+  return `<div class="m-tl${st && i.status !== 'ongoing' ? ' m-plan' : ''}"><span class="m-ic">${ICON[i.kind] || '•'}</span>
+    <div class="m-tl-b"><div>${esc(i.summary)}${i.uncertain ? ' <span class="pill warn" title="مهرداد مطمئن نیست">؟</span>' : ''}</div>
+      <div class="muted small">${esc(i.label)}${i.category ? ' · ' + esc(i.category) : ''} · <span class="num">${i.range === 'today' ? '' : esc(i.date) + ' '}${esc(span)}</span>${i.minutes ? ' · <span class="num">' + dur(i.minutes) + '</span>' : ''}${st ? ` <span class="pill ${st[1]}">${st[0]}</span>` : ''}</div></div>
     ${i.amount ? `<b class="num ${cls}">${sign}${money(i.amount)}</b>` : '<span></span>'}
+    ${pending ? `<button class="x" data-act="mark-done" data-id="${i.id}" aria-label="انجام شد" title="انجام شد">✓</button>` : '<span></span>'}
     <button class="x" data-act="edit" data-id="${i.id}" aria-label="ویرایش">✎</button>
     <button class="x" data-act="del" data-id="${i.id}" aria-label="حذف">✕</button></div>`;
 }
 function timeline(items, range) {
   const list = items.filter(i => !hidden(i.kind)).map(i => ({ ...i, range }));
-  return list.length ? list.slice().reverse().map(tlItem).join('') : empty('هنوز چیزی ثبت نشده.');
+  const ordered = range === 'today' ? list : list.slice().reverse();
+  return ordered.length ? ordered.map(tlItem).join('') : empty('هنوز چیزی ثبت نشده.');
 }
 
 function chart(daily, keys) {
@@ -113,6 +122,35 @@ function catBars(map, color) {
   if (!rows.length) return empty('دسته‌ای نیست.');
   const max = rows[0][1] || 1;
   return rows.map(([c, v]) => `<div class="m-cat"><span>${esc(c)}</span><div class="bar"><i style="width:${(v / max * 100).toFixed(0)}%;background:${color}"></i></div><b class="num small">${money(v)}</b></div>`).join('');
+}
+
+function groupKpis(d, max = 4) {
+  const g = (d.groups || []).filter(x => !(x.kind === 'intimacy' && !S.priv)).slice(0, max);
+  if (!g.length) return `<div class="kpis"><div class="kpi"><div class="v">—</div><div class="l">هنوز فعالیتی ثبت نشده</div></div></div>`;
+  return `<div class="kpis">${g.map(x => kpi(esc(x.name), x.minutes ? dur(x.minutes) : fa(x.count), x.kind === 'smoking' ? 'warn' : '')).join('')}</div>`;
+}
+function timeBars(d) {
+  const t = d.time_by_category || [];
+  if (!t.length) return '';
+  const max = t[0].minutes || 1, total = t.reduce((a, x) => a + x.minutes, 0);
+  return `<div class="card"><div class="row spread"><h2>⏱ زمان به تفکیک</h2><span class="pill num">${dur(total)}</span></div>` +
+    t.slice(0, 8).map(x => `<div class="m-cat"><span>${esc(x.name)}</span><div class="bar"><i style="width:${(x.minutes / max * 100).toFixed(0)}%"></i></div><b class="num small">${dur(x.minutes)}</b></div>`).join('') + '</div>';
+}
+function plannedLine(f) {
+  const pe = f.planned_expense || 0, pi = f.planned_income || 0;
+  if (!pe && !pi) return '';
+  return `<div class="issue info"><span class="tag">برنامه‌ریزی‌شده</span><div>هنوز حساب نشده: ${pe ? 'خرج ' + money(pe) : ''}${pe && pi ? ' | ' : ''}${pi ? 'درآمد ' + money(pi) : ''} تومان</div></div>`;
+}
+function activityForm() {
+  return `<div class="card"><h2>ثبت فعالیت</h2><form class="form" data-form="activity">
+    <label class="f full"><span>چه کاری؟</span><input type="text" name="title" required maxlength="200" placeholder="مثلاً آموزش برنامه‌نویسی"></label>
+    <label class="f"><span>دسته</span><input type="text" name="category" list="actcats" maxlength="60" placeholder="کار / یادگیری / رفت‌وآمد…">
+      <datalist id="actcats"><option value="کار"><option value="یادگیری"><option value="رفت‌وآمد"><option value="ورزش"><option value="استراحت"><option value="خانواده"></datalist></label>
+    <label class="f"><span>از ساعت</span><input type="time" name="start"></label>
+    <label class="f"><span>تا ساعت</span><input type="time" name="end"></label>
+    <label class="f"><span>یا مدت (دقیقه)</span><input type="number" name="minutes" min="1" max="1440" inputmode="numeric"></label>
+    <label class="f"><span>وضعیت</span><select name="status"><option value="done">انجام شد</option><option value="ongoing">در جریان</option><option value="planned">برنامه</option></select></label>
+    <button class="btn primary" type="submit">ثبت</button></form></div>`;
 }
 
 function habitsCard(h) {
@@ -150,7 +188,9 @@ async function viewToday() {
     <div class="card ai"><div class="row spread"><h2>امروز چی شد؟</h2><span class="pill ai">مهرداد</span></div>
       ${composer('sayToday', 'مثلاً: ۲۰۰ ت فروش داشتم، ناهار برنج خوردم')}
       <p class="muted small">هر چه بنویسی خودش در بخش درست ثبت می‌شود.</p></div>
-    <div class="kpis">${kpi('وعدهٔ غذا', fa(c.meal || 0))}${kpi('قلیان/سیگار', fa(c.smoking || 0), c.smoking ? 'warn' : '')}${kpi('ورزش', fa(c.workout || 0), c.workout ? 'good' : '')}${kpi('کار باز', fa(open.length))}</div>
+    ${plannedLine(f)}
+    ${groupKpis(d, 4)}
+    ${timeBars(d)}
     <div class="card"><div class="row spread"><h2>برنامهٔ امروز</h2><span class="pill num">${fa(open.length)} باز</span></div>
       ${open.length ? open.map(taskRow).join('') : empty('کار بازی نیست. یکی اضافه کن یا به مهرداد بگو.')}
       <form class="row" data-form="task" style="flex-wrap:nowrap"><input type="text" name="title" placeholder="کار تازه…" required maxlength="200"><button class="btn primary" type="submit">افزودن</button></form></div>
@@ -223,6 +263,7 @@ async function viewMoney() {
   return `<section class="pane">
     ${mviewSeg()}<div class="pane-title"><h1>حساب‌ها</h1>${seg('mrange', S.mrange)}</div>
     <div class="kpis m-k3">${kpi('درآمد', money(f.income), 'good')}${kpi('خرج', money(f.expense), f.expense > f.income ? 'crit' : '')}${kpi('خالص', (f.net < 0 ? '−' : '') + money(Math.abs(f.net)), f.net >= 0 ? 'good' : 'crit')}</div>
+    ${plannedLine(f)}
     <div class="card"><div class="row spread"><h2>روند روزانه</h2><div class="m-legend"><span><i style="background:var(--good)"></i>درآمد</span><span><i style="background:var(--crit)"></i>خرج</span></div></div>
       ${chart(d.daily || [], [{k:'income', c:'var(--good)'}, {k:'expense', c:'var(--crit)'}])}</div>
     <div class="card"><h2>درآمد به تفکیک منبع</h2>${catBars(f.by_category.income, 'var(--good)')}</div>
@@ -248,7 +289,10 @@ async function viewLife() {
     : `<div class="card"><div class="m-lock">🔒 <span>بخش‌های خصوصی پنهان‌اند. با دکمهٔ 🔒 بالا نشانشان بده.</span></div></div>`;
   return `<section class="pane">
     <div class="pane-title"><h1>زندگی</h1>${seg('lrange', S.lrange)}</div>
-    <div class="kpis">${kpi('غذا', fa(c.meal || 0))}${kpi('قلیان/سیگار', fa(c.smoking || 0), c.smoking ? 'warn' : '')}${kpi('ورزش', fa(c.workout || 0), c.workout ? 'good' : '')}${kpi('خواب ثبت‌شده', fa(c.sleep || 0))}</div>
+    ${groupKpis(d, 8)}
+    ${timeBars(d)}
+    ${activityForm()}
+    ${S.lrange === 'today' || S.lrange === 'week' ? `<div class="card"><div class="row spread"><h2>🧭 زمان‌بندی</h2><span class="muted small">${fa(items.filter(i => !hidden(i.kind)).length)} مورد</span></div>${timeline(items.filter(i => !['meal','smoking','intimacy','feeling'].includes(i.kind) || true), S.lrange)}</div>` : ''}
     ${habitsCard(d.habits)}
     ${(d.daily || []).length > 1 && c.smoking ? `<div class="card"><h2>💨 قلیان/سیگار در روزها</h2>${chart(d.daily, [{k:'smoking', c:'var(--warn)'}])}</div>` : ''}
     ${sec('meal', 'غذا')}${sec('workout', 'ورزش')}${sec('sleep', 'خواب')}${sec('feeling', 'حال‌وحال')}${sec('smoking', 'قلیان/سیگار')}
@@ -419,6 +463,7 @@ document.addEventListener('click', async ev => {
     else if (act === 'n-sms') MehrdadNative.requestSmsPermission();
     else if (act === 'n-notif') MehrdadNative.openNotificationAccess();
     else if (act === 'n-update') { closeSheet(); MehrdadNative.checkUpdate(); }
+    else if (act === 'mark-done') { await api('/api/events/' + id, { method: 'PATCH', body: { status: 'done' } }); toast('انجام‌شد ✓'); render(); }
     else if (act === 'mview') { S.mview = b.dataset.val; render(); }
     else if (act === 'acc-edit') openAccEdit(id);
     else if (act === 'debt-edit') openDebtEdit(id);
@@ -480,6 +525,12 @@ document.addEventListener('submit', async ev => {
     else if (kind === 'edit') {
       const body = { summary: v.summary.trim() }; if ('amount' in v) body.amount = v.amount === '' ? null : Number(v.amount); if ('category' in v) body.category = v.category.trim() || null;
       await api('/api/events/' + f.dataset.id, { method: 'PATCH', body }); closeSheet();
+    }
+    else if (kind === 'activity') {
+      const body = { type: 'activity', summary: v.title.trim(), category: (v.category || '').trim() || undefined, status: v.status || 'done' };
+      if (v.start) body.when = v.start;
+      if (v.end) body.end = v.end; else if (v.minutes) body.minutes = Number(v.minutes);
+      await api('/api/events', { method: 'POST', body });
     }
     else if (kind === 'account') await api('/api/accounts', { method: 'POST', body: { name: v.name.trim(), kind: v.kind, balance: Number(v.balance) } });
     else if (kind === 'acc-edit') { await api('/api/accounts/' + f.dataset.id, { method: 'PATCH', body: { name: v.name.trim(), balance: Number(v.balance) } }); closeSheet(); }

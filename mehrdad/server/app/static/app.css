@@ -61,3 +61,7 @@
 .m-k3{grid-template-columns:repeat(3,1fr)}
 .m-k3 .kpi .v{font-size:1rem}
 .m-composer textarea{line-height:1.6}
+
+.m-plan{opacity:.82}
+.m-plan .m-ic{border:1px dashed var(--line2);background:transparent}
+.m-tl{grid-template-columns:34px 1fr auto auto auto auto}

@@ -40,6 +40,9 @@ class EventIn(BaseModel):
     amount: float | None = Field(default=None, ge=0, le=1e12)
     category: str | None = Field(default=None, max_length=60)
     when: str | None = Field(default=None, max_length=20)
+    end: str | None = Field(default=None, max_length=20)
+    minutes: float | None = Field(default=None, gt=0, le=1440)
+    status: str | None = Field(default=None, pattern="^(done|ongoing|planned|maybe)$")
     fields: dict | None = None
 
 
@@ -49,7 +52,25 @@ class EventPatch(BaseModel):
     amount: float | None = Field(default=None, ge=0, le=1e12)
     category: str | None = Field(default=None, max_length=60)
     when: str | None = Field(default=None, max_length=20)
+    end: str | None = Field(default=None, max_length=20)
+    minutes: float | None = Field(default=None, gt=0, le=1440)
+    status: str | None = Field(default=None, pattern="^(done|ongoing|planned|maybe)$")
     fields: dict | None = None
+
+
+def _span_fields(fields, when_ts, end, minutes, status):
+    """end/minutes/status از فرم → داخل fields (end_ts به epoch)."""
+    out = dict(fields or {})
+    end_ts = life.parse_end(end, when_ts) if end else None
+    if end_ts is None and minutes and when_ts:
+        end_ts = when_ts + minutes * 60
+    if end_ts:
+        out["end_ts"] = end_ts
+    if minutes:
+        out["minutes"] = minutes
+    if status:
+        out["status"] = status
+    return out or None
 
 
 def _check_date(s):
@@ -199,9 +220,11 @@ def create_router(mem, svc):
     @router.post("/events")
     async def create_event(body: EventIn, dev=Depends(current_device)):
         _check_fields(body.fields)
+        when_ts = life.parse_when(body.when)
         ids = await mem.add_memory([{
             "type": body.type, "summary": body.summary, "detail": body.detail, "amount": body.amount,
-            "category": body.category, "fields": body.fields, "when_ts": life.parse_when(body.when)}])
+            "category": body.category, "when_ts": when_ts,
+            "fields": _span_fields(body.fields, when_ts or life.now_tehran().timestamp(), body.end, body.minutes, body.status)}])
         return await mem.get_event(ids[0])
 
     @router.patch("/events/{event_id}")
@@ -210,6 +233,14 @@ def create_router(mem, svc):
         patch = body.model_dump(exclude_unset=True)
         if "when" in patch:
             patch["when_ts"] = life.parse_when(patch.pop("when"))
+        end, minutes, status = patch.pop("end", None), patch.pop("minutes", None), patch.pop("status", None)
+        if end or minutes or status:
+            cur = await mem.get_event(event_id)
+            if not cur:
+                raise HTTPException(status_code=404, detail="not found")
+            start_ts = patch.get("when_ts") or cur["when_ts"]
+            extra = _span_fields({}, start_ts, end, minutes, status) or {}
+            patch["fields"] = {**(patch.get("fields") or {}), **extra}
         ev = await mem.update_event(event_id, patch)
         if not ev:
             raise HTTPException(status_code=404, detail="not found")

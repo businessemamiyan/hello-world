@@ -11,6 +11,7 @@
 # - کلید امضا فقط یک بار ساخته می‌شود و روی سرور می‌ماند؛ یک کپی هم به BACKUP_DIR می‌آید. بدون این کلید
 #   هیچ نسخهٔ بعدی روی نصب فعلی نمی‌نشیند. آن را گم نکن و جایی منتشر نکن.
 set -euo pipefail
+export PYTHONUTF8=1 PYTHONIOENCODING=utf-8   # خروجی فارسی در ویندوز (cp1256) نشکند
 
 HOST="${BUILD_HOST:-root@89.125.35.130}"
 KEY="${BUILD_KEY:-$HOME/.ssh/mehrdad_nl}"
