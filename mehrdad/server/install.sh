@@ -45,15 +45,21 @@ else
   log ".env از قبل هست — دست نخورد"
 fi
 
-if ! grep -q '^BOT_TOKEN=.\+' .env || ! grep -q '^ANTHROPIC_API_KEY=.\+' .env; then
+if ! grep -q '^BOT_TOKEN=.\+' .env || ! { grep -q '^ANTHROPIC_API_KEY=.\+' .env || grep -q '^CLAUDE_CODE_OAUTH_TOKEN=.\+' .env; }; then
   echo
-  echo "این دو مقدار را در .env پر کن، بعد دوباره همین اسکریپت را اجرا کن:"
-  echo "  BOT_TOKEN          ← از @BotFather در تلگرام (یک ربات تازه، جدا از ربات قطب‌نما)"
-  echo "  ANTHROPIC_API_KEY  ← از https://console.anthropic.com — مغز مهرداد همین است"
+  echo "این مقادیر را در .env پر کن، بعد دوباره همین اسکریپت را اجرا کن:"
+  echo "  BOT_TOKEN                ← از @BotFather در تلگرام (یک ربات تازه، جدا از ربات قطب‌نما)"
+  echo "  و یکی از این دو (مغز مهرداد):"
+  echo "  CLAUDE_CODE_OAUTH_TOKEN  ← بدون هزینهٔ API، با اشتراک خودت: روی سیستم خودت «claude setup-token»"
+  echo "  ANTHROPIC_API_KEY        ← پولی، از https://console.anthropic.com"
   echo
   echo "راهنمای کامل: server/README.md"
   exit 0
 fi
+
+# ولوم داده را کاربر غیر-root کانتینر (uid 10001) می‌نویسد؛ Docker پوشهٔ bind-mount را با مالک root می‌سازد
+mkdir -p data
+chown 10001:10001 data 2>/dev/null || sudo chown 10001:10001 data 2>/dev/null \n  || die "نمی‌توانم مالک پوشهٔ data را 10001 کنم؛ اسکریپت را با root/sudo اجرا کن."
 
 if grep -q '^\(TELEGRAM\|ANTHROPIC\)_PROXY=.\+' .env; then
   [ -f xray/config.json ] || die "پروکسی در .env فعال است ولی xray/config.json نیست (xray/config.example.json را کپی و پر کن)."

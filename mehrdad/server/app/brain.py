@@ -1,8 +1,10 @@
 """موتور «مغز» — یک تماس با Claude (Anthropic Messages API) که هم جواب مکالمه‌ای می‌دهد
 هم واقعیت‌های قابل‌ذخیره را از پیام کاربر استخراج می‌کند. بدون SDK اضافه؛ فقط httpx.
 """
+import asyncio
 import json
 import logging
+import os
 import re
 import time
 
@@ -109,12 +111,90 @@ def _extract_json(text):
     return None
 
 
+def _format_found(found):
+    lines = []
+    for m in found:
+        day = time.strftime("%Y-%m-%d", time.localtime(m["ts"])) if m.get("ts") else "؟"
+        amt = f" ({int(m['amount']):,} تومان)" if m.get("amount") else ""
+        det = f" — {m['detail']}" if m.get("detail") else ""
+        lines.append(f"- {day} [{m['type']}] {m['summary']}{amt}{det}")
+    return "\n".join(lines)
+
+
+class CLIError(Exception):
+    pass
+
+
+def parse_cli_output(stdout):
+    """خروجی `claude -p --output-format json` → متن نتیجه. هم شکل شیء واحد و هم آرایهٔ رویدادها را می‌فهمد."""
+    try:
+        data = json.loads(stdout)
+    except (json.JSONDecodeError, ValueError):
+        raise CLIError(f"خروجی CLI JSON نیست: {stdout[:200]!r}")
+    if isinstance(data, list):
+        data = next((d for d in reversed(data) if isinstance(d, dict) and d.get("type") == "result"), None) or {}
+    if not isinstance(data, dict):
+        raise CLIError("شکل خروجی CLI ناشناخته است")
+    if data.get("is_error"):
+        raise CLIError(f"CLI خطا برگرداند: {str(data.get('result'))[:300]}")
+    result = data.get("result")
+    if not isinstance(result, str):
+        raise CLIError("فیلد result در خروجی CLI نیست")
+    return result
+
+
+async def run_claude_cli(system, prompt, model="sonnet", timeout=150, binary="claude", cwd=None):
+    """یک نوبت مکالمه با باینری رسمی و دست‌نخوردهٔ Claude Code (-p) با اشتراک خود کاربر
+    (CLAUDE_CODE_OAUTH_TOKEN از env). بدون ابزار، یک نوبت، بدون ذخیرهٔ سشن. --bare عمداً نیست:
+    آن حالت توکن OAuth را نمی‌خواند."""
+    args = [binary, "-p", "--output-format", "json", "--system-prompt", system, "--tools", "",
+            "--max-turns", "1", "--no-session-persistence", "--disable-slash-commands", "--model", model]
+    try:
+        proc = await asyncio.create_subprocess_exec(
+            *args, stdin=asyncio.subprocess.PIPE, stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.PIPE,
+            cwd=cwd, env=os.environ.copy(),
+        )
+    except OSError as e:
+        raise CLIError(f"اجرای {binary} ناموفق: {e}")
+    try:
+        out, err = await asyncio.wait_for(proc.communicate(prompt.encode("utf-8")), timeout)
+    except asyncio.TimeoutError:
+        proc.kill()
+        raise CLIError(f"CLI بعد از {timeout} ثانیه جواب نداد")
+    if proc.returncode != 0:
+        raise CLIError(
+            f"CLI با کد {proc.returncode} خارج شد: {err.decode('utf-8', 'replace')[:300]} {out.decode('utf-8', 'replace')[:200]}"
+        )
+    return parse_cli_output(out.decode("utf-8", "replace"))
+
+
+def _cli_prompt(messages):
+    """تاریخچه + پیام تازه → یک متن برای stdin (CLI یک گفتگوی چندنوبتی نمی‌گیرد)."""
+    *history, last = messages
+    parts = []
+    if history:
+        parts.append("گفتگوی اخیر:")
+        parts += [("کاربر: " if m["role"] == "user" else "مهرداد: ") + m["content"] for m in history]
+        parts.append("")
+    parts.append("پیام تازهٔ کاربر:")
+    parts.append(last["content"])
+    parts.append("")
+    parts.append("جواب مهرداد را فقط به‌صورت همان JSON گفته‌شده در دستور سیستم بده.")
+    return "\n".join(parts)
+
+
 class Brain:
-    def __init__(self, api_key, model="claude-sonnet-5-5", proxy="", search=None):
-        """search: coroutine async (query) -> list[dict] برای ابزار search_memory؛ None یعنی بدون ابزار."""
+    def __init__(self, api_key, model="claude-sonnet-5-5", proxy="", search=None, provider="api",
+                 cli_model="sonnet", cli_runner=None, cli_cwd=None):
+        """search: coroutine async (query) -> list[dict] برای جست‌وجوی حافظه (ابزار در حالت api، پیش‌بازیابی در cli).
+        provider: "api" (کلید Anthropic API، پولی) یا "cli" (باینری Claude Code با اشتراک خود کاربر).
+        cli_runner: coroutine async (system, prompt, model) -> متن؛ برای تست قابل‌تزریق است."""
         self.api_key = api_key
         self.model = model
         self.search = search
+        self.provider = provider
+        self.cli_model = cli_model
+        self.cli_runner = cli_runner or (lambda s, p, m: run_claude_cli(s, p, m, cwd=cli_cwd))
         self.client = httpx.AsyncClient(proxy=proxy or None, timeout=httpx.Timeout(60, connect=15))
 
     async def _call(self, system, messages, tools):
@@ -157,13 +237,7 @@ class Brain:
         found = await self.search((block.get("input") or {}).get("query", ""))
         if not found:
             return "چیزی پیدا نشد."
-        lines = []
-        for m in found:
-            day = time.strftime("%Y-%m-%d", time.localtime(m["ts"])) if m.get("ts") else "؟"
-            amt = f" ({int(m['amount']):,} تومان)" if m.get("amount") else ""
-            det = f" — {m['detail']}" if m.get("detail") else ""
-            lines.append(f"- {day} [{m['type']}] {m['summary']}{amt}{det}")
-        return "\n".join(lines)
+        return _format_found(found)
 
     async def think(self, recent_history, recent_memory, user_text, active_habits=None):
         """recent_history: لیست (role, text) از پیام‌های اخیر (بدون پیام جدید).
@@ -188,13 +262,20 @@ class Brain:
         messages.append({"role": "user", "content": user_text})
 
         try:
-            data = await self._run_tool_loop(system, messages)
-        except (httpx.HTTPError, ValueError) as e:
-            log.warning("anthropic call failed: %s", e)
+            if self.provider == "cli":
+                if self.search:  # CLI ابزار ندارد → پیش‌بازیابی از کل حافظه بر اساس پیام تازه
+                    found = await self.search(user_text)
+                    if found:
+                        system += "\n\n### نتایج جست‌وجو در کل حافظه برای پیام تازه (اگر مرتبط است استفاده کن):\n" + _format_found(found)
+                raw = await self.cli_runner(system, _cli_prompt(messages), self.cli_model)
+            else:
+                data = await self._run_tool_loop(system, messages)
+                blocks = data.get("content", [])
+                raw = "".join(b.get("text", "") for b in blocks if b.get("type") == "text")
+        except (httpx.HTTPError, ValueError, CLIError) as e:
+            log.warning("brain call failed (%s): %s", self.provider, e)
             return "الان نمی‌تونم فکر کنم (مشکل در اتصال). دوباره امتحان کن.", []
 
-        blocks = data.get("content", [])
-        raw = "".join(b.get("text", "") for b in blocks if b.get("type") == "text")
         parsed = _extract_json(raw)
         if not parsed or "reply" not in parsed:
             log.warning("could not parse brain JSON: %r", raw[:300])

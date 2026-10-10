@@ -2,13 +2,20 @@
 ARG BASE_IMAGE=python:3.11-slim
 FROM ${BASE_IMAGE}
 ARG PIP_INDEX_URL=https://pypi.org/simple
+# 1 = باینری رسمی Claude Code هم نصب شود (برای BRAIN_PROVIDER=cli با اشتراک Claude خود کاربر)
+ARG INSTALL_CLAUDE_CLI=1
 ENV PYTHONUNBUFFERED=1 TZ=Asia/Tehran DATA_DIR=/data
 WORKDIR /srv
 COPY server/requirements.txt .
 RUN pip install --no-cache-dir -i ${PIP_INDEX_URL} -r requirements.txt
+RUN apt-get update && apt-get install -y --no-install-recommends curl ca-certificates libstdc++6 \
+    && rm -rf /var/lib/apt/lists/*
 COPY server/app ./app
-RUN useradd -r -u 10001 app && mkdir -p /data && chown app /data
+RUN useradd -r -u 10001 -m -d /home/app app && mkdir -p /data && chown app /data
 USER app
+# وضعیت/لاگین Claude Code روی ولوم /data می‌ماند؛ آپدیت خودکار خاموش تا نسخه بین ران‌ها ثابت بماند
+ENV HOME=/home/app PATH=/home/app/.local/bin:$PATH CLAUDE_CONFIG_DIR=/data/claude DISABLE_AUTOUPDATER=1
+RUN if [ "$INSTALL_CLAUDE_CLI" = "1" ]; then curl -fsSL https://claude.ai/install.sh | bash && claude --version; fi
 EXPOSE 8081
 HEALTHCHECK --interval=60s --timeout=5s CMD python -c "import urllib.request;urllib.request.urlopen('http://127.0.0.1:8081/health')" || exit 1
 CMD ["python", "-m", "app.main"]
