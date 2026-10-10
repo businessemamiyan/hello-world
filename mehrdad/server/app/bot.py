@@ -1,10 +1,12 @@
 """حلقه‌ی ربات تلگرام مهرداد — فقط به صاحبش جواب می‌دهد.
 
-فاز ۱: فقط متن. ویس (فاز ۲) بعداً اضافه می‌شود — پیام ویس فعلاً با یک توضیح کوتاه رد می‌شود.
+فاز ۱: متن + سیستم عادت (ساخت/جایگزینی عادت، چک‌این روزانه با استریک).
+ویس (فاز ۲) بعداً اضافه می‌شود — پیام ویس فعلاً با یک توضیح کوتاه رد می‌شود.
 """
 import logging
 
-from .telegram import TGError
+from .memory import today_str
+from .telegram import TGError, btn
 
 log = logging.getLogger("bot")
 
@@ -13,8 +15,42 @@ HELP = """من مهرداد‌ام — مغز دومت.
 هر چی بگی رو به‌خاطر می‌سپارم: خرج، درآمد، ایده، کار، حس‌وحال، هرچی.
 فقط باهام حرف بزن، مثل یه رفیق. فرم و دکمه لازم نیست.
 
+برای ساختن عادت:
+/habit <عادت خوب> — مثلاً: /habit هر روز صبح ۲۰ دقیقه مطالعه
+/habit به‌جای <عادت بد>، <عادت خوب> — مثلاً: /habit به‌جای چک گوشی صبح، ۱۰ دقیقه کشش بدن
+/habits — لیست عادت‌های فعال و استریک‌هاشون + چک‌این امروز
+
 /start <کد> — معرفی خودت به‌عنوان صاحب این مغز (یک‌بار)
 /help — همین راهنما"""
+
+NO_HABITS = "هنوز عادتی ثبت نکردی. با /habit شروع کن — یه چیز کوچیک و مشخص، نه یه آرزوی بزرگ."
+
+
+def parse_habit_text(text):
+    """«به‌جای X، Y» یا «X -> Y» یا فقط «Y» → (good, bad|None)"""
+    t = text.strip()
+    for sep in ("->", "→"):
+        if sep in t:
+            bad, good = t.split(sep, 1)
+            return good.strip(), bad.strip() or None
+    for kw in ("به‌جای", "بجای", "به جای"):
+        if t.startswith(kw):
+            rest = t[len(kw):].strip()
+            for comma in ("،", ","):
+                if comma in rest:
+                    bad, good = rest.split(comma, 1)
+                    return good.strip(), bad.strip() or None
+    return t, None
+
+
+def habit_line(h):
+    streak = f"🔥{h['streak']}" if h["streak"] else "—"
+    base = h["good"] if not h.get("bad") else f"{h['good']} (به‌جای {h['bad']})"
+    return f"#{h['id']} {base} · استریک {streak}"
+
+
+def checkin_kb(habit_id):
+    return [[btn("✅ انجام دادم", f"hb:{habit_id}:1"), btn("❌ نه، امروز نه", f"hb:{habit_id}:0")]]
 
 
 class Bot:
@@ -26,9 +62,7 @@ class Bot:
 
     async def _is_owner(self, chat_id):
         owner = await self.mem.get_owner()
-        if owner is None:
-            return False
-        return owner == chat_id
+        return owner is not None and owner == chat_id
 
     async def handle_start(self, chat_id, arg):
         owner = await self.mem.get_owner()
@@ -43,6 +77,33 @@ class Bot:
             await self.tg.send(chat_id, "از حالا من مهردادم، مغز دومت. هر چی بخوای بگو — یادم می‌مونه.")
         else:
             await self.tg.send(chat_id, "کد درست نیست. از SETUP_CODE توی .env استفاده کن: /start <کد>")
+
+    async def handle_habit_add(self, chat_id, arg):
+        if not arg.strip():
+            await self.tg.send(chat_id, "بعد از /habit بنویس چه عادتی. مثلاً:\n/habit به‌جای سیگار وقتی استرس دارم، ۵ دقیقه نفس عمیق")
+            return
+        good, bad = parse_habit_text(arg)
+        hid = await self.mem.add_habit(good, bad)
+        if bad:
+            msg = f"ثبت شد: وقتی خواستی «{bad}» رو انجام بدی، به‌جاش «{good}». از امشب چک‌این می‌گیرم ازت. #{hid}"
+        else:
+            msg = f"ثبت شد: «{good}». از امشب چک‌این می‌گیرم ازت — هر روز، بدون بهونه. #{hid}"
+        await self.tg.send(chat_id, msg)
+
+    async def prompt_habit_checkin(self, chat_id, habit):
+        await self.tg.send(chat_id, f"امروز «{habit['good']}» رو انجام دادی؟", kb=checkin_kb(habit["id"]))
+
+    async def handle_habits_list(self, chat_id):
+        habits = await self.mem.list_habits("active")
+        if not habits:
+            await self.tg.send(chat_id, NO_HABITS)
+            return
+        lines = [habit_line(h) for h in habits]
+        await self.tg.send(chat_id, "عادت‌های فعال:\n" + "\n".join(lines))
+        today = today_str()
+        for h in habits:
+            if h["last_checkin"] != today:
+                await self.prompt_habit_checkin(chat_id, h)
 
     async def handle_message(self, msg):
         chat_id = msg["chat"]["id"]
@@ -65,6 +126,14 @@ class Bot:
             await self.tg.send(chat_id, HELP)
             return
 
+        if text.startswith("/habits"):
+            await self.handle_habits_list(chat_id)
+            return
+
+        if text.startswith("/habit"):
+            await self.handle_habit_add(chat_id, text[len("/habit"):])
+            return
+
         if msg.get("voice") or msg.get("audio"):
             await self.tg.send(chat_id, "فعلاً فقط متن می‌فهمم — فهمیدن ویس تو فاز بعدیه. همون رو تایپ کن.")
             return
@@ -75,12 +144,46 @@ class Bot:
         await self.tg.send_chat_action(chat_id, "typing")
         history = await self.mem.recent_messages(20)
         recent_mem = await self.mem.recent_memory(40)
+        active_habits = await self.mem.list_habits("active")
         await self.mem.add_message("user", text)
-        reply, entries = await self.brain.think(history, recent_mem, text)
+        reply, entries = await self.brain.think(history, recent_mem, text, active_habits)
         await self.mem.add_message("assistant", reply)
         if entries:
             await self.mem.add_memory(entries)
         await self.tg.send(chat_id, reply)
+
+    async def handle_callback(self, cq):
+        chat_id = cq["message"]["chat"]["id"]
+        message_id = cq["message"]["message_id"]
+        data = cq.get("data", "")
+        if not await self._is_owner(chat_id):
+            await self.tg.answer(cq["id"])
+            return
+        if not data.startswith("hb:"):
+            await self.tg.answer(cq["id"])
+            return
+        try:
+            _, hid_s, done_s = data.split(":")
+            hid, done = int(hid_s), done_s == "1"
+        except ValueError:
+            await self.tg.answer(cq["id"])
+            return
+        habit = await self.mem.get_habit(hid)
+        if not habit:
+            await self.tg.answer(cq["id"], "این عادت دیگر وجود ندارد.")
+            return
+        result = await self.mem.checkin_habit(hid, done)
+        streak = result["streak"]
+        if done:
+            if streak >= result["best_streak"] and streak > 1:
+                fb = f"🔥 آفرین! {streak} روز پشت‌سرهم — رکورد جدیدته."
+            else:
+                fb = f"🔥 ثبت شد. استریک: {streak} روز."
+        else:
+            fb = "عیبی نداره، امروز رو بی‌خیال. استریک صفر شد — فردا دوباره از یک شروع کن."
+        await self.mem.add_message("assistant", f"[چک‌این عادت #{hid}] {fb}")
+        await self.tg.edit(chat_id, message_id, f"«{habit['good']}»\n{fb}")
+        await self.tg.answer(cq["id"], fb)
 
     async def poll_forever(self):
         offset = 0
@@ -96,10 +199,10 @@ class Bot:
                 continue
             for u in updates:
                 offset = u["update_id"] + 1
-                msg = u.get("message")
-                if not msg:
-                    continue
                 try:
-                    await self.handle_message(msg)
+                    if u.get("message"):
+                        await self.handle_message(u["message"])
+                    elif u.get("callback_query"):
+                        await self.handle_callback(u["callback_query"])
                 except Exception:
-                    log.exception("خطا در پردازش پیام")
+                    log.exception("خطا در پردازش آپدیت")

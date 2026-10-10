@@ -30,8 +30,27 @@ SYSTEM_PROMPT = """تو «مهرداد» هستی — مغز دومِ کاربر
 قانون کلیدی: هر پیامی که می‌فرستد را به‌خاطر بسپار — خرج، درآمد، ایده، کار، احساس، هرچی. تو باید
 علاوه بر جواب مکالمه‌ای، واقعیت‌های قابل‌ذخیره را هم استخراج کنی.
 
+### ساخت عادت و دیسیپلین — این بخش مهم‌ترین نقش توست
+کاربر صریحاً گفته: اکثر آدم‌ها نه به‌خاطر کمبود استعداد بلکه کمبود دیسیپلین شکست می‌خورند، و
+می‌خواهد تو کمکش کنی عادت‌های بد را کنار بگذارد و عادت‌های قدرتمند جایگزین بسازد. اصولی که
+همیشه رعایت کن:
+- **هویت‌محور فکر کن، نه فقط رفتار**: به‌جای «باید ورزش کنی» بگو چیزی که نشان دهد او در حال
+  تبدیل‌شدن به «کسی‌ست که…» است (مثل اصل عادت‌های اتمی جیمز کلییر). تغییر کوچک و پایدار از
+  یک قهرمانی یک‌روزه و بی‌دوام مهم‌تر است.
+- وقتی کاربر توی مکالمه‌ی عادی (نه با فرمان /habit) اشاره کرد که می‌خواهد یک عادت بد را کنار
+  بگذارد یا عادتی بسازد، تشویقش کن با `/habit` ثبتش کند تا استریک و یادآوری شبانه برایش فعال
+  شود — دستور دقیق را بگو: «/habit به‌جای <عادت بد>، <عادت خوب>» یا فقط «/habit <عادت خوب>».
+- وقتی در بخش «عادت‌های فعال» (پایین‌تر) می‌بینی استریکی شکسته شده یا صفر شده، **سرزنش نکن** —
+  مثل یک مربی واقعی، با همدلی ولی جدی برگردان به مسیر: چرا شکست؟ چه مانعی بود؟ قدم بعدی چیست؟
+  وقتی استریک بالا می‌رود، واقعاً تشویق کن — نه چاپلوسی، بلکه تصدیق واقعی پیشرفت.
+- اگر کاربر درباره‌ی یک عادت بد (مثلاً تنبلی، اهمال‌کاری، اعتیاد به گوشی) حرف زد بدون اینکه
+  هنوز ثبتش کرده باشد، کمکش کن محرک (trigger) آن را پیدا کند و یک جایگزین کوچک و عملی پیشنهاد
+  بده — نه یک برنامه‌ی غیرواقعی و بزرگ.
+
 **قالب خروجی**: فقط و فقط یک JSON معتبر (بدون ```json و بدون هیچ متن قبل/بعدش) با این شکل:
-{"reply": "<جواب فارسی تو به کاربر>", "memory": [{"type": "<expense|income|idea|task|feeling|note|other>", "summary": "<خلاصه یک‌خطی>", "detail": "<جزئیات اختیاری>", "amount": <عدد تومان یا null>}]}
+{"reply": "<جواب فارسی تو به کاربر>", "memory": [{"type": "<expense|income|idea|task|feeling|habit|note|other>", "summary": "<خلاصه یک‌خطی>", "detail": "<جزئیات اختیاری>", "amount": <عدد تومان یا null>}]}
+نوع "habit" فقط برای وقتی است که کاربر درباره‌ی عادتی حرف می‌زند بدون اینکه با /habit ثبتش کرده
+باشد (فقط برای حافظه — ساخت ردیف واقعی عادت و استریک فقط با دستور /habit انجام می‌شود، نه این JSON).
 
 اگر پیام کاربر چیز قابل‌ذخیره‌ای نداشت (مثلاً فقط سلام یا یک سوال عمومی)، memory را [] بگذار.
 جواب‌ها را کوتاه و مستقیم بنویس — مثل یک رفیق باهوش، نه یک مقاله."""
@@ -44,6 +63,16 @@ def _build_context_block(recent_memory):
     for m in recent_memory[-40:]:
         amt = f" ({int(m['amount']):,} تومان)" if m.get("amount") else ""
         lines.append(f"- [{m['type']}] {m['summary']}{amt}")
+    return "\n".join(lines)
+
+
+def _build_habits_block(active_habits):
+    if not active_habits:
+        return "(هنوز هیچ عادتی ثبت نکرده — اگر مناسب بود پیشنهاد بده با /habit شروع کند.)"
+    lines = []
+    for h in active_habits:
+        base = h["good"] if not h.get("bad") else f"{h['good']} (به‌جای {h['bad']})"
+        lines.append(f"- #{h['id']} {base} — استریک فعلی: {h['streak']} روز (بهترین: {h['best_streak']})")
     return "\n".join(lines)
 
 
@@ -69,14 +98,22 @@ class Brain:
         self.model = model
         self.client = httpx.AsyncClient(proxy=proxy or None, timeout=httpx.Timeout(60, connect=15))
 
-    async def think(self, recent_history, recent_memory, user_text):
+    async def think(self, recent_history, recent_memory, user_text, active_habits=None):
         """recent_history: لیست (role, text) از پیام‌های اخیر (بدون پیام جدید).
         recent_memory: خروجی memory.recent_memory().
         user_text: پیام تازه‌ی کاربر.
+        active_habits: خروجی memory.list_habits("active") — اختیاری.
         برمی‌گرداند: (reply_text, memory_entries)
         """
         context = _build_context_block(recent_memory)
-        system = SYSTEM_PROMPT + "\n\n### خاطرات اخیر کاربر (برای زمینه، تکرار نکن مگر لازم باشد):\n" + context
+        habits_block = _build_habits_block(active_habits or [])
+        system = (
+            SYSTEM_PROMPT
+            + "\n\n### عادت‌های فعال کاربر (برای تشویق/پیگیری، بدون اینکه هر بار درباره‌شان حرف بزنی مگر مرتبط باشد):\n"
+            + habits_block
+            + "\n\n### خاطرات اخیر کاربر (برای زمینه، تکرار نکن مگر لازم باشد):\n"
+            + context
+        )
 
         messages = []
         for role, text in recent_history[-20:]:
@@ -112,7 +149,7 @@ class Brain:
             return raw.strip() or "یه لحظه گیر کردم؛ دوباره بگو چی گفتی؟", []
 
         entries = parsed.get("memory") or []
-        valid_types = {"expense", "income", "idea", "task", "feeling", "note", "other"}
+        valid_types = {"expense", "income", "idea", "task", "feeling", "habit", "note", "other"}
         clean = []
         for e in entries:
             if not isinstance(e, dict) or not e.get("summary"):

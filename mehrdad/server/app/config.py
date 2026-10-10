@@ -22,6 +22,7 @@ class Config:
     data_dir: str = "/data"
     host: str = "0.0.0.0"
     port: int = 8081
+    habit_checkin_time: str = "21:00"
 
     @classmethod
     def from_env(cls):
@@ -37,6 +38,7 @@ class Config:
             anthropic_proxy=e("ANTHROPIC_PROXY", ""),
             data_dir=e("DATA_DIR", "/data"),
             port=_int(e("PORT")) or 8081,
+            habit_checkin_time=e("HABIT_CHECKIN_TIME", "21:00"),
         )
 
     def problems(self):

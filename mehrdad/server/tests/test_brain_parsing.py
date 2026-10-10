@@ -3,7 +3,7 @@ import sys
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
-from app.brain import _build_context_block, _extract_json
+from app.brain import _build_context_block, _build_habits_block, _extract_json
 
 
 def test_extract_json_plain():
@@ -43,3 +43,21 @@ def test_build_context_block_without_amount():
     block = _build_context_block(mem)
     assert "یه ایده" in block
     assert "تومان" not in block
+
+
+def test_build_habits_block_empty():
+    assert "/habit" in _build_habits_block([])
+
+
+def test_build_habits_block_simple():
+    habits = [{"id": 1, "good": "مطالعه", "bad": None, "streak": 3, "best_streak": 5}]
+    block = _build_habits_block(habits)
+    assert "مطالعه" in block
+    assert "3" in block
+    assert "به‌جای" not in block
+
+
+def test_build_habits_block_with_replacement():
+    habits = [{"id": 2, "good": "نفس عمیق", "bad": "سیگار", "streak": 0, "best_streak": 2}]
+    block = _build_habits_block(habits)
+    assert "به‌جای سیگار" in block

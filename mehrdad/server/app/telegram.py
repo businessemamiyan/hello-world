@@ -26,9 +26,31 @@ class Telegram:
             raise TGError(f"{method}: {data.get('description')}")
         return data["result"]
 
-    async def send(self, chat_id, text, reply_kb=None):
-        markup = reply_kb if reply_kb is not None else None
+    async def send(self, chat_id, text, kb=None, reply_kb=None):
+        markup = None
+        if kb is not None:
+            markup = {"inline_keyboard": kb}
+        elif reply_kb is not None:
+            markup = reply_kb
         return await self.call("sendMessage", chat_id=chat_id, text=text, reply_markup=markup, disable_web_page_preview=True)
+
+    async def answer(self, cq_id, text=None):
+        try:
+            await self.call("answerCallbackQuery", callback_query_id=cq_id, text=text)
+        except TGError:
+            pass
+
+    async def edit(self, chat_id, message_id, text, kb=None):
+        try:
+            return await self.call(
+                "editMessageText", chat_id=chat_id, message_id=message_id, text=text,
+                reply_markup={"inline_keyboard": kb} if kb is not None else None,
+                disable_web_page_preview=True,
+            )
+        except TGError as e:
+            if "not modified" in str(e):
+                return None
+            raise
 
     async def send_chat_action(self, chat_id, action="typing"):
         try:
@@ -43,4 +65,8 @@ class Telegram:
         return r.content
 
     async def updates(self, offset, timeout=50):
-        return await self.call("getUpdates", offset=offset, timeout=timeout, allowed_updates=["message"])
+        return await self.call("getUpdates", offset=offset, timeout=timeout, allowed_updates=["message", "callback_query"])
+
+
+def btn(text, data):
+    return {"text": text, "callback_data": data}
