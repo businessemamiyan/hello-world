@@ -224,6 +224,29 @@ class Bot:
             await self.notify_owner(agents.one_line(icon + " (مهم)", source, text))
         return True
 
+    async def do_backup(self, keep=14):
+        """پشتیبان روزانه در data/backups/mehrdad-YYYYMMDD.db؛ فقط ۱۴ تای آخرِ خودکار نگه داشته می‌شود."""
+        import glob
+        import os
+        import re as _re
+        d = os.path.join(self.cfg.data_dir, "backups")
+        os.makedirs(d, exist_ok=True)
+        dest = os.path.join(d, "mehrdad-%s.db" % life.now_tehran().strftime("%Y%m%d"))
+        await self.mem.backup_to(dest)
+        os.chmod(dest, 0o600)
+        autos = sorted(p for p in glob.glob(os.path.join(d, "mehrdad-*.db")) if _re.search(r"mehrdad-\d{8}\.db$", p))
+        for old in autos[:-keep]:
+            try:
+                os.remove(old)
+            except OSError:
+                pass
+        return dest
+
+    async def handle_backup(self, chat_id):
+        import os
+        dest = await self.do_backup()
+        await self.tg.send(chat_id, f"✅ پشتیبان ساخته شد: {os.path.basename(dest)} ({life.fa(os.path.getsize(dest) // 1024)} کیلوبایت). هر شب ساعت ۰۳:۳۰ هم خودکار ساخته می‌شود (۱۴ روز نگه‌داری).")
+
     async def send_digest(self):
         items = await self.mem.inbox_unnotified(("email", "telegram"))
         txt = agents.digest_text(items)
@@ -401,6 +424,10 @@ class Bot:
         head = text.split(maxsplit=1)[0] if text else ""
         if head in ("/today", "/week", "/month"):
             await self.handle_summary(chat_id, head[1:], private="private" in text)
+            return
+
+        if text == "/backup":
+            await self.handle_backup(chat_id)
             return
 
         if text == "/inbox":

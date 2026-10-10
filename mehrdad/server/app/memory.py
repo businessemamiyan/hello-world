@@ -188,6 +188,17 @@ class Memory:
         except sqlite3.OperationalError:
             return False
 
+    # ---------- پشتیبان ----------
+    async def backup_to(self, dest):
+        """پشتیبان سازگار از دیتابیس زنده با API رسمی SQLite (کپی ساده‌ی فایل در حالت WAL پشتیبان معتبر نیست)."""
+        async with self.lock:
+            dst = sqlite3.connect(dest)
+            try:
+                self.db.backup(dst)
+            finally:
+                dst.close()
+        return dest
+
     # ---------- owner ----------
     async def set_owner(self, chat_id):
         async with self.lock:

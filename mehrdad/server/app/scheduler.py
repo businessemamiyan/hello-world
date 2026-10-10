@@ -29,6 +29,15 @@ class Scheduler:
         self.cfg = cfg
         self.fired_date = None
         self.fired_digest = set()
+        self.backup_date = None
+
+    async def maybe_backup(self, hhmm, today):
+        if hhmm == getattr(self.cfg, "backup_time", "03:30") and self.backup_date != today:
+            self.backup_date = today
+            try:
+                await self.bot.do_backup()
+            except Exception:
+                log.exception("پشتیبان‌گیری ناموفق")
 
     async def maybe_digest(self, hhmm, today):
         times = [t.strip() for t in (getattr(self.cfg, "digest_times", "") or "").split(",") if t.strip()]
@@ -42,6 +51,7 @@ class Scheduler:
         hhmm = now.strftime("%H:%M")
         today = now.date().isoformat()
         await self.maybe_digest(hhmm, today)
+        await self.maybe_backup(hhmm, today)
         if hhmm != self.cfg.habit_checkin_time or self.fired_date == today:
             return
         self.fired_date = today
