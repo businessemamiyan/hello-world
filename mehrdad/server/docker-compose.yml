@@ -13,7 +13,8 @@ services:
     volumes:
       - ./data:/data
     ports:
-      - "127.0.0.1:8081:8081"
+      # پورت میزبان قابل‌تغییر: روی سرورهای شلوغ (مثلاً xray روی 8081) با HOST_PORT در .env عوض کن
+      - "127.0.0.1:${HOST_PORT:-8095}:8081"
     restart: unless-stopped
 
   xray:

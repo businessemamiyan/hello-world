@@ -4,7 +4,7 @@
 # این اسکریپت را خودت روی سرور اجرا کن. هیچ سرویس دیگری روی سرور را لمس نمی‌کند:
 #   - همه‌چیز داخل همین پوشه (mehrdad/server) با Docker Compose بالا می‌آید،
 #     با نام پروژه مجزا "mehrdad" (کانتینر/شبکه/ولوم‌های جدا، کاملاً جدا از قطب‌نما).
-#   - پورت پیش‌فرض 127.0.0.1:8081 است (فقط لوکال).
+#   - پورت پیش‌فرض 127.0.0.1:8095 است (فقط لوکال؛ با HOST_PORT در .env قابل‌تغییر).
 #   - با --install-docker فقط در صورتی Docker نصب می‌شود که غایب باشد.
 #
 # اجرا:
@@ -68,7 +68,7 @@ log "وضعیت"
 sleep 2
 docker compose ps
 echo
-curl -fsS http://127.0.0.1:8081/health 2>/dev/null || true
+curl -fsS "http://127.0.0.1:$(grep -E '^HOST_PORT=' .env | cut -d= -f2 | grep . || echo 8095)/health" 2>/dev/null || true
 echo
 echo "بعد در تلگرام به ربات بنویس: /start <SETUP_CODE از .env>"
 echo "لاگ‌ها: docker compose logs -f mehrdad"
