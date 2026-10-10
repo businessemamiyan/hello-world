@@ -9,8 +9,10 @@
 """
 import asyncio
 import datetime
+import hashlib
 import os
 import re
+import secrets
 import sqlite3
 import time
 
@@ -26,6 +28,10 @@ def normalize_fa(text):
         return ""
     t = _DIACRITICS.sub("", str(text).translate(_FA_DIGITS).translate(_NORMALIZE))
     return t.lower()
+
+
+def _sha(s):
+    return hashlib.sha256(s.encode("utf-8")).hexdigest()
 
 
 def today_str():
@@ -72,6 +78,26 @@ class Memory:
                 best_streak INTEGER NOT NULL DEFAULT 0,
                 last_checkin TEXT,
                 created_ts REAL NOT NULL
+            );
+            CREATE TABLE IF NOT EXISTS devices(
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                name TEXT NOT NULL,
+                token_hash TEXT NOT NULL UNIQUE,
+                created_ts REAL NOT NULL,
+                last_seen_ts REAL
+            );
+            CREATE TABLE IF NOT EXISTS pair_codes(
+                code_hash TEXT PRIMARY KEY,
+                expires_ts REAL NOT NULL
+            );
+            CREATE TABLE IF NOT EXISTS inbox(
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                kind TEXT NOT NULL,
+                source TEXT,
+                text TEXT NOT NULL,
+                ts REAL NOT NULL,
+                dedup TEXT NOT NULL UNIQUE,
+                parsed INTEGER NOT NULL DEFAULT 0
             );
             CREATE TABLE IF NOT EXISTS habit_log(
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -132,6 +158,88 @@ class Memory:
                 "SELECT role, text FROM messages ORDER BY id DESC LIMIT ?", (limit,)
             ).fetchall()
             return list(reversed(rows))
+
+    async def recent_messages_ts(self, limit=50):
+        """برای همگام‌سازی چت اپ: [{role, text, ts}] از قدیم به جدید."""
+        async with self.lock:
+            rows = self.db.execute(
+                "SELECT role, text, ts FROM messages ORDER BY id DESC LIMIT ?", (limit,)
+            ).fetchall()
+            return [{"role": r[0], "text": r[1], "ts": r[2]} for r in reversed(rows)]
+
+    # ---------- دستگاه‌ها و جفت‌سازی (اپ اندروید) ----------
+    async def create_pair_code(self, ttl=600):
+        """کد یک‌بارمصرف ۸ حرفی؛ فقط هش ذخیره می‌شود."""
+        code = secrets.token_hex(4).upper()
+        async with self.lock:
+            self.db.execute("DELETE FROM pair_codes WHERE expires_ts < ?", (time.time(),))
+            self.db.execute("INSERT INTO pair_codes(code_hash, expires_ts) VALUES(?,?)", (_sha(code), time.time() + ttl))
+            self.db.commit()
+        return code
+
+    async def consume_pair_code(self, code):
+        h = _sha((code or "").strip().upper())
+        async with self.lock:
+            row = self.db.execute("SELECT expires_ts FROM pair_codes WHERE code_hash=?", (h,)).fetchone()
+            if not row:
+                return False
+            self.db.execute("DELETE FROM pair_codes WHERE code_hash=?", (h,))
+            self.db.commit()
+            return row[0] >= time.time()
+
+    async def add_device(self, name):
+        token = secrets.token_urlsafe(32)
+        async with self.lock:
+            cur = self.db.execute(
+                "INSERT INTO devices(name, token_hash, created_ts) VALUES(?,?,?)",
+                ((name or "گوشی")[:60], _sha(token), time.time()),
+            )
+            self.db.commit()
+            return cur.lastrowid, token
+
+    async def device_for_token(self, token):
+        if not token:
+            return None
+        async with self.lock:
+            row = self.db.execute(
+                "SELECT id, name FROM devices WHERE token_hash=?", (_sha(token),)
+            ).fetchone()
+            if not row:
+                return None
+            self.db.execute("UPDATE devices SET last_seen_ts=? WHERE id=?", (time.time(), row[0]))
+            self.db.commit()
+            return {"id": row[0], "name": row[1]}
+
+    async def list_devices(self):
+        async with self.lock:
+            rows = self.db.execute("SELECT id, name, created_ts, last_seen_ts FROM devices ORDER BY id").fetchall()
+            return [{"id": r[0], "name": r[1], "created_ts": r[2], "last_seen_ts": r[3]} for r in rows]
+
+    async def remove_device(self, device_id):
+        async with self.lock:
+            cur = self.db.execute("DELETE FROM devices WHERE id=?", (device_id,))
+            self.db.commit()
+            return cur.rowcount > 0
+
+    # ---------- inbox (پیامک/نوتیفیکیشن ورودی از گوشی) ----------
+    async def add_inbox(self, kind, source, text, ts):
+        """None اگر قبلاً همین مورد ثبت شده باشد (تلاش دوباره‌ی اپ نباید خرج را دوبار ثبت کند)."""
+        dedup = _sha(f"{kind}|{source}|{int(ts)}|{text}")
+        async with self.lock:
+            try:
+                cur = self.db.execute(
+                    "INSERT INTO inbox(kind, source, text, ts, dedup) VALUES(?,?,?,?,?)",
+                    (kind, source, text, ts, dedup),
+                )
+            except sqlite3.IntegrityError:
+                return None
+            self.db.commit()
+            return cur.lastrowid
+
+    async def mark_inbox_parsed(self, inbox_id):
+        async with self.lock:
+            self.db.execute("UPDATE inbox SET parsed=1 WHERE id=?", (inbox_id,))
+            self.db.commit()
 
     # ---------- memory (بلندمدت) ----------
     async def add_memory(self, entries):

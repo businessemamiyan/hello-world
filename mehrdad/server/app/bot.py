@@ -3,6 +3,7 @@
 فاز ۱: متن + سیستم عادت (ساخت/جایگزینی عادت، چک‌این روزانه با استریک).
 ویس (فاز ۲) بعداً اضافه می‌شود — پیام ویس فعلاً با یک توضیح کوتاه رد می‌شود.
 """
+import asyncio
 import logging
 
 from .memory import today_str
@@ -19,6 +20,11 @@ HELP = """من مهرداد‌ام — مغز دومت.
 /habit <عادت خوب> — مثلاً: /habit هر روز صبح ۲۰ دقیقه مطالعه
 /habit به‌جای <عادت بد>، <عادت خوب> — مثلاً: /habit به‌جای چک گوشی صبح، ۱۰ دقیقه کشش بدن
 /habits — لیست عادت‌های فعال و استریک‌هاشون + چک‌این امروز
+
+اپ اندروید:
+/pair — کد یک‌بارمصرف برای وصل‌کردن اپ (۱۰ دقیقه اعتبار)
+/devices — دستگاه‌های وصل‌شده
+/unpair <شماره> — قطع یک دستگاه
 
 /start <کد> — معرفی خودت به‌عنوان صاحب این مغز (یک‌بار)
 /help — همین راهنما"""
@@ -59,6 +65,49 @@ class Bot:
         self.tg = tg
         self.brain = brain
         self.cfg = cfg
+        self.brain_lock = asyncio.Lock()  # تلگرام و اپ هم‌زمان یک پروسهٔ مغز را نگیرند
+
+    async def chat(self, text):
+        """یک نوبت مکالمه (هم تلگرام هم اپ): تاریخچه و حافظه را می‌خواند، می‌پرسد، و ذخیره می‌کند."""
+        async with self.brain_lock:
+            history = await self.mem.recent_messages(20)
+            recent_mem = await self.mem.recent_memory(40)
+            active_habits = await self.mem.list_habits("active")
+            await self.mem.add_message("user", text)
+            reply, entries = await self.brain.think(history, recent_mem, text, active_habits)
+            await self.mem.add_message("assistant", reply)
+            if entries:
+                await self.mem.add_memory(entries)
+        return reply
+
+    async def notify_owner(self, text):
+        owner = await self.mem.get_owner()
+        if owner:
+            try:
+                await self.tg.send(owner, text)
+            except Exception:  # نبودن تلگرام نباید ثبت تراکنش را خراب کند
+                log.exception("ارسال اعلان به صاحب ناموفق")
+
+    async def handle_pair(self, chat_id):
+        code = await self.mem.create_pair_code()
+        await self.tg.send(chat_id, f"کد جفت‌سازی اپ (۱۰ دقیقه، یک‌بار مصرف):\n\n{code}\n\nدر اپ مهرداد وارد کن.")
+
+    async def handle_devices(self, chat_id):
+        devs = await self.mem.list_devices()
+        if not devs:
+            await self.tg.send(chat_id, "هیچ دستگاهی وصل نیست. با /pair شروع کن.")
+            return
+        lines = [f"#{d['id']} {d['name']}" for d in devs]
+        await self.tg.send(chat_id, "دستگاه‌های وصل‌شده:\n" + "\n".join(lines) + "\n\nقطع: /unpair <شماره>")
+
+    async def handle_unpair(self, chat_id, arg):
+        try:
+            did = int(arg.strip().lstrip("#"))
+        except ValueError:
+            await self.tg.send(chat_id, "شمارهٔ دستگاه را بنویس: /unpair 1")
+            return
+        ok = await self.mem.remove_device(did)
+        await self.tg.send(chat_id, "قطع شد." if ok else "چنین دستگاهی نیست.")
 
     async def _is_owner(self, chat_id):
         owner = await self.mem.get_owner()
@@ -126,6 +175,18 @@ class Bot:
             await self.tg.send(chat_id, HELP)
             return
 
+        if text == "/pair":
+            await self.handle_pair(chat_id)
+            return
+
+        if text == "/devices":
+            await self.handle_devices(chat_id)
+            return
+
+        if text.startswith("/unpair"):
+            await self.handle_unpair(chat_id, text[len("/unpair"):])
+            return
+
         if text.startswith("/habits"):
             await self.handle_habits_list(chat_id)
             return
@@ -142,14 +203,7 @@ class Bot:
             return
 
         await self.tg.send_chat_action(chat_id, "typing")
-        history = await self.mem.recent_messages(20)
-        recent_mem = await self.mem.recent_memory(40)
-        active_habits = await self.mem.list_habits("active")
-        await self.mem.add_message("user", text)
-        reply, entries = await self.brain.think(history, recent_mem, text, active_habits)
-        await self.mem.add_message("assistant", reply)
-        if entries:
-            await self.mem.add_memory(entries)
+        reply = await self.chat(text)
         await self.tg.send(chat_id, reply)
 
     async def handle_callback(self, cq):
