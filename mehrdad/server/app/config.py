@@ -61,6 +61,4 @@ class Config:
             p.append("یکی از OWNER_ID یا SETUP_CODE لازم است")
         if self.provider() == "api" and not self.anthropic_api_key:
             p.append("ANTHROPIC_API_KEY خالی است (یا BRAIN_PROVIDER=cli و CLAUDE_CODE_OAUTH_TOKEN بگذار)")
-        if self.provider() == "cli" and not self.claude_oauth_token:
-            p.append("CLAUDE_CODE_OAUTH_TOKEN خالی است — با `claude setup-token` روی سیستم خودت بساز")
         return p

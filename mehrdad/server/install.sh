@@ -45,7 +45,7 @@ else
   log ".env از قبل هست — دست نخورد"
 fi
 
-if ! grep -q '^BOT_TOKEN=.\+' .env || ! { grep -q '^ANTHROPIC_API_KEY=.\+' .env || grep -q '^CLAUDE_CODE_OAUTH_TOKEN=.\+' .env; }; then
+if ! grep -q '^BOT_TOKEN=.\+' .env || ! { grep -q '^ANTHROPIC_API_KEY=.\+' .env || grep -q '^CLAUDE_CODE_OAUTH_TOKEN=.\+' .env || [ -f data/claude/.credentials.json ]; }; then
   echo
   echo "این مقادیر را در .env پر کن، بعد دوباره همین اسکریپت را اجرا کن:"
   echo "  BOT_TOKEN                ← از @BotFather در تلگرام (یک ربات تازه، جدا از ربات قطب‌نما)"

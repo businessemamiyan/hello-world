@@ -27,6 +27,10 @@ async def amain():
         for p in probs:
             logging.error("تنظیمات: %s", p)
         sys.exit(1)
+    if cfg.provider() == "cli" and not cfg.claude_oauth_token and not os.path.exists(
+            os.path.join(cfg.data_dir, "claude", ".credentials.json")):
+        logging.warning("حالت cli ولی نه CLAUDE_CODE_OAUTH_TOKEN هست نه لاگین ذخیره‌شده؛ "
+                        "اجرا کن: docker exec -it mehrdad-mehrdad-1 claude auth login")
     mem = Memory(os.path.join(cfg.data_dir, "mehrdad.db"))
     tg = Telegram(cfg.bot_token, cfg.telegram_proxy, cfg.telegram_api)
     brain = Brain(cfg.anthropic_api_key, cfg.anthropic_model, cfg.anthropic_proxy, search=mem.search_memory,

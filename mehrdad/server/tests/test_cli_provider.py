@@ -85,7 +85,7 @@ def test_config_provider_selection_and_problems():
     assert Config(**base, anthropic_api_key="k").provider() == "api"
     assert Config(**base, claude_oauth_token="t").provider() == "cli"
     assert Config(**base).provider() == "cli"
-    assert any("CLAUDE_CODE_OAUTH_TOKEN" in p for p in Config(**base).problems())
+    assert Config(**base).problems() == []  # cli بدون توکن: لاگین ذخیره‌شدهٔ `claude auth login` هم کافی است
     assert Config(**base, claude_oauth_token="t").problems() == []
     assert Config(**base, anthropic_api_key="k").problems() == []
     assert any("ANTHROPIC_API_KEY" in p for p in Config(**base, brain_provider="api").problems())
