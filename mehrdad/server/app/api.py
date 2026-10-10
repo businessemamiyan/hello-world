@@ -157,6 +157,7 @@ class CoachDoneIn(BaseModel):
 
 class CoachAnswerIn(BaseModel):
     idx: int = Field(ge=0, le=5)
+    kind: str = Field(default="q", pattern="^[qe]$")
     text: str = Field(min_length=1, max_length=2000)
 
 
@@ -350,7 +351,7 @@ def create_router(mem, svc):
     @router.post("/coach/answer")
     async def coach_answer(body: CoachAnswerIn, dev=Depends(current_device)):
         try:
-            reply = await _coach().answer(body.idx, body.text)
+            reply = await _coach().answer(body.idx, body.text, body.kind)
         except Exception:
             log.exception("coach answer failed")
             raise HTTPException(status_code=502, detail="brain unavailable")

@@ -401,6 +401,12 @@ async function viewChat() {
     <div class="m-composer-fixed">${composer('sayChat', 'بنویس یا با 🎤 بگو…')}</div></section>`;
 }
 
+function eveCard(c) {
+  const qs = c.evening_questions || [], ans = c.answers || {};
+  return `<div class="card"><div class="row spread"><h2>🌙 مرور شبانه</h2><span class="pill ai">روز را ببند</span></div>
+    ${qs.map((q, i) => { const a = ans['e' + i]; return `<div class="c-q" style="padding:8px 0;border-bottom:1px solid var(--line)"><div class="c-id">${esc(q)}</div>${a ? `<div class="m-b me" style="max-width:100%;margin-top:6px">${esc(a.text)}</div><div class="m-b bot" style="max-width:100%;margin-top:6px">${esc(a.reply)}</div>`
+      : `<textarea id="ce${i}" rows="2" placeholder="جوابت…"></textarea><div class="row"><button class="btn sm primary" data-act="coach-answer" data-kind="e" data-i="${i}">ثبت</button></div>`}</div>`; }).join('')}</div>`;
+}
 const BOOK_ST = { suggested: 'پیشنهادی', reading: 'در حال مطالعه', done: 'تمام شد' };
 async function viewCoach() {
   const c = await api('/api/coach'); S.cache.coach = c;
@@ -450,6 +456,7 @@ async function viewCoach() {
     ${p.challenge.title ? `<div class="card gold"><div class="row spread"><h2>⚡ چالش امروز</h2>${p.challenge.minutes ? `<span class="pill num">${dur(p.challenge.minutes)}</span>` : ''}</div><div class="c-id">${esc(p.challenge.title)}</div>
       ${(p.challenge.steps || []).length ? `<ol class="small" style="margin:4px 0;padding-inline-start:20px">${p.challenge.steps.map(x => `<li>${esc(x)}</li>`).join('')}</ol>` : ''}${tasks('challenge', 'انجامش دادم', '')}</div>` : ''}
     ${qs ? `<div class="card"><div class="row spread"><h2>❓ مربی از تو می‌پرسد</h2><span class="pill ai">جواب‌ها ثبت می‌شوند</span></div>${qs}</div>` : ''}
+    ${eveCard(c)}
     ${swaps ? `<div class="card"><div class="row spread"><h2>🔁 عادت بد ← عادت خوب</h2></div><p class="muted small">حذف نه؛ جایگزین. هر کدام را بزن تا هر شب بپرسم چطور پیش رفتی.</p>${swaps}</div>` : ''}
     ${p.book ? `<div class="card"><div class="row spread"><h2>📚 کتاب پیشنهادی</h2></div><div class="c-id">${esc(p.book.title)}${p.book.author ? ' — ' + esc(p.book.author) : ''}</div>${p.book.why ? `<div class="small muted">${esc(p.book.why)}</div>` : ''}
       <div class="row"><button class="btn sm primary" data-act="coach-addbook" data-title="${esc(p.book.title)}" data-author="${esc(p.book.author || '')}">اضافه به کتاب‌هایم و شروع آموزش</button></div></div>` : ''}
@@ -694,9 +701,9 @@ document.addEventListener('click', async ev => {
     else if (act === 'coach-done') { const key = b.dataset.key, on = !b.closest('.m-task').classList.contains('done');
       await api('/api/coach/done', { method: 'POST', body: { key, on } }); renderKeep(); }
     else if (act === 'coach-answer') {
-      const i = b.dataset.i, ta = $('#cq' + i), text = (ta.value || '').trim(); if (!text) return toast('جوابت را بنویس');
+      const i = b.dataset.i, kind = b.dataset.kind || 'q', ta = $('#c' + (kind === 'e' ? 'e' : 'q') + i), text = (ta.value || '').trim(); if (!text) return toast('جوابت را بنویس');
       b.disabled = true; b.textContent = 'در حال ثبت…';
-      try { await api('/api/coach/answer', { method: 'POST', body: { idx: Number(i), text } }); renderKeep(); } finally { b.disabled = false; }
+      try { await api('/api/coach/answer', { method: 'POST', body: { idx: Number(i), text, kind } }); renderKeep(); } finally { b.disabled = false; }
     }
     else if (act === 'coach-track') { const r = await api(`/api/coach/swap/${b.dataset.i}/track`, { method: 'POST' }); toast(r.existing ? 'از قبل پیگیری می‌شد 🔥' : 'ثبت شد؛ هر شب از تو می‌پرسم 🔥'); b.disabled = true; }
     else if (act === 'coach-teach') {

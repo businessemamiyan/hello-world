@@ -42,6 +42,10 @@ PLAN_FORMAT = """فقط و فقط یک JSON معتبر بده، بدون هیچ 
 قواعد: routine بین ۴ تا ۷ مورد و به ترتیب ساعت (با توجه به ساعت بیداری/کار شناخته‌شدهٔ او)؛ questions دقیقاً ۲ تا ۳ مورد؛ swaps فقط اگر واقعاً عادت بدی از او می‌دانی (وگرنه []) حداکثر ۲ مورد؛ book اگر پیشنهاد مناسبی نداری null (کتاب نساز، فقط کتاب‌های واقعی)."""
 
 
+# مرور شبانه (مثل ریتم «صبح هدف‌گذاری، شب بازتاب»): ثابت است، مدل لازم ندارد
+EVENING_QUESTIONS = ["امروز چه چیزی خوب پیش رفت (حتی کوچک)؟", "امروز چه چیزی یاد گرفتم؟", "اولین قدم فردا چیست؟"]
+
+
 def _s(x, n):
     return str(x).strip()[:n] if isinstance(x, (str, int, float)) and not isinstance(x, bool) and str(x).strip() else ""
 
@@ -106,6 +110,7 @@ def done_keys(plan):
         keys.append("challenge")
     keys += [f"s{i}" for i in range(len(plan.get("swaps", [])))]
     keys += [f"q{i}" for i in range(len(plan.get("questions", [])))]
+    keys += [f"e{i}" for i in range(len(EVENING_QUESTIONS))]
     return keys
 
 
@@ -193,7 +198,7 @@ class Coach:
         date = self.today()
         rec = await self.get_day(date)
         days = await self.recent_days()
-        return {"date": date, "plan": (rec or {}).get("plan"), "done": (rec or {}).get("done") or {}, "answers": (rec or {}).get("answers") or {},
+        return {"date": date, "evening_questions": EVENING_QUESTIONS, "plan": (rec or {}).get("plan"), "done": (rec or {}).get("done") or {}, "answers": (rec or {}).get("answers") or {},
                 "generating": self.generating, "error": self.last_error, "stats": compute_stats(days, date), "books": await self.books()}
 
     # ---------- ساخت برنامهٔ امروز ----------
@@ -248,6 +253,11 @@ class Coach:
             finally:
                 self.generating = False
 
+    def evening_message(self, done, total):
+        left = total - done
+        head = "🌙 مرور شبانه" + (f" — امروز {life.fa(done)} از {life.fa(total)} کار را انجام دادی." if total else ".")
+        return head + (" اشکالی ندارد، فردا دوباره." if left and not done else "") + "\n۳ سؤال کوتاه در اپ ← تب مربی ← «مرور شبانه» منتظر توست؛ یا همین‌جا جواب بده."
+
     def morning_message(self, plan):
         lines = ["☀️ صبح بخیر! برنامهٔ مربی برای امروز آماده است:"]
         if plan["focus"]["title"]:
@@ -271,15 +281,17 @@ class Coach:
         await self.save_day(date, rec)
         return rec["done"]
 
-    async def answer(self, idx, text):
+    async def answer(self, idx, text, kind="q"):
+        """جواب یک سؤال مربی (kind=q) یا سؤال مرور شبانه (kind=e)؛ از مسیر چت عادی می‌رود تا مغز آنچه گفته را ثبت کند."""
         date = self.today()
         rec = await self.get_day(date)
-        qs = ((rec or {}).get("plan") or {}).get("questions") or []
+        qs = EVENING_QUESTIONS if kind == "e" else (((rec or {}).get("plan") or {}).get("questions") or [])
         if not rec or not (0 <= idx < len(qs)) or not text.strip():
             return None
-        reply = await self.bot.chat(f"(پاسخ من به سؤال مربی: «{qs[idx]}»)\n{text.strip()[:2000]}")
-        rec.setdefault("answers", {})[str(idx)] = {"text": text.strip()[:2000], "reply": reply}
-        rec.setdefault("done", {})[f"q{idx}"] = True
+        label = "بازتاب شبانهٔ من" if kind == "e" else "پاسخ من به سؤال مربی"
+        reply = await self.bot.chat(f"({label}: «{qs[idx]}»)\n{text.strip()[:2000]}")
+        rec.setdefault("answers", {})[f"{kind}{idx}" if kind == "e" else str(idx)] = {"text": text.strip()[:2000], "reply": reply}
+        rec.setdefault("done", {})[f"{kind}{idx}"] = True
         await self.save_day(date, rec)
         return reply
 

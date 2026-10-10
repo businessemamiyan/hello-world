@@ -31,6 +31,7 @@ class Scheduler:
         self.fired_digest = set()
         self.backup_date = None
         self.coach_date = None
+        self.evening_date = None
 
     async def maybe_backup(self, hhmm, today):
         if hhmm == getattr(self.cfg, "backup_time", "03:30") and self.backup_date != today:
@@ -54,6 +55,21 @@ class Scheduler:
         except Exception:
             log.exception("برنامهٔ صبحگاهی مربی ناموفق")
 
+    async def maybe_evening(self, hhmm, today):
+        """شب (۲۱:۳۰) یادآوری مرور شبانهٔ مربی؛ فقط اگر امروز برنامه ساخته شده باشد."""
+        if hhmm != getattr(self.cfg, "coach_evening_time", "21:30") or self.evening_date == today:
+            return
+        self.evening_date = today
+        coach = getattr(self.bot, "coach", None)
+        if not coach or not await self.mem.get_owner():
+            return
+        try:
+            st = await coach.state()
+            if st["plan"] and not any(k.startswith("e") for k, v in st["done"].items() if v):
+                await self.bot.notify_owner(coach.evening_message(st["stats"]["today"]["done"], st["stats"]["today"]["total"]))
+        except Exception:
+            log.exception("یادآوری شبانهٔ مربی ناموفق")
+
     async def maybe_digest(self, hhmm, today):
         times = [t.strip() for t in (getattr(self.cfg, "digest_times", "") or "").split(",") if t.strip()]
         key = (today, hhmm)
@@ -68,6 +84,7 @@ class Scheduler:
         await self.maybe_digest(hhmm, today)
         await self.maybe_backup(hhmm, today)
         await self.maybe_coach(hhmm, today)
+        await self.maybe_evening(hhmm, today)
         if hhmm != self.cfg.habit_checkin_time or self.fired_date == today:
             return
         self.fired_date = today

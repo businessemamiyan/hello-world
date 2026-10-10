@@ -139,7 +139,7 @@ def test_stats_streak_is_forgiving_but_not_infinite():
 
     days = dict([day(0, 2), day(1, 1), day(3, 1), day(4, 4)])               # روز ۲ غیبت (یک روز بخشیده می‌شود)
     s = coachmod.compute_stats(days, today.isoformat())
-    assert s["streak"] == 4 and s["xp"] == 8 and s["today"] == {"done": 2, "total": 4} and len(s["week"]) == 7
+    assert s["streak"] == 4 and s["xp"] == 8 and s["today"] == {"done": 2, "total": 7} and len(s["week"]) == 7
     days2 = dict([day(0, 1), day(3, 1), day(4, 1)])                           # دو روز پشت‌سرهم غیبت = شکست
     assert coachmod.compute_stats(days2, today.isoformat())["streak"] == 1
     assert coachmod.compute_stats({}, today.isoformat())["streak"] == 0 and coachmod.compute_stats({}, today.isoformat())["level"] == 1
@@ -215,3 +215,37 @@ def test_coach_api_flow(api):
     assert c.get("/api/coach", headers=h).json()["books"][0]["lessons"][0]["title"] == "درس ۱"
     assert c.delete(f"/api/coach/books/{b['id']}", headers=h).status_code == 200
     assert c.delete(f"/api/coach/books/{b['id']}", headers=h).status_code == 404
+
+
+@pytest.mark.asyncio
+async def test_evening_reflection_answers_and_nudge(tmp_path):
+    mem, tg, brain, bot = make(tmp_path)
+    await mem.set_owner(7)
+    await bot.coach.generate()
+    st = await bot.coach.state()
+    assert len(st["evening_questions"]) == 3
+    assert await bot.coach.answer(5, "x", kind="e") is None
+    reply = await bot.coach.answer(1, "یاد گرفتم تایمر بگذارم", kind="e")
+    assert reply == "خوبه، ثبت کردم"
+    st = await bot.coach.state()
+    assert st["done"]["e1"] is True and st["answers"]["e1"]["text"] == "یاد گرفتم تایمر بگذارم" and "q1" not in st["done"]
+    assert any("بازتاب شبانهٔ من" in m[1] for m in await mem.recent_messages(4))
+    sch = scheduler.Scheduler(bot, mem, bot.cfg)
+    tg.sent.clear()
+    await sch.maybe_evening("21:30", "2026-10-11")                 # قبلاً جواب داده: مزاحم نشود
+    assert tg.sent == []
+
+
+@pytest.mark.asyncio
+async def test_evening_nudge_sent_once_when_nothing_answered(tmp_path):
+    mem, tg, brain, bot = make(tmp_path)
+    await mem.set_owner(7)
+    sch = scheduler.Scheduler(bot, mem, bot.cfg)
+    await sch.maybe_evening("21:30", "2026-10-11")                 # برنامه‌ای ساخته نشده: چیزی نمی‌فرستد
+    assert tg.sent == []
+    await bot.coach.generate()
+    await sch.maybe_evening("21:29", "2026-10-12")
+    assert tg.sent == []
+    await sch.maybe_evening("21:30", "2026-10-12")
+    await sch.maybe_evening("21:30", "2026-10-12")
+    assert len(tg.sent) == 1 and "مرور شبانه" in tg.sent[0]
