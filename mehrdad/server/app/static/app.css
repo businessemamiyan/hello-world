@@ -74,3 +74,12 @@ html,body{overscroll-behavior-y:contain}
 .ptr[hidden]{display:none}
 .m-hb.spin{animation:m-spin .8s linear infinite}
 @keyframes m-spin{to{transform:rotate(360deg)}}
+
+.c-week{display:flex;gap:5px;align-items:flex-end;height:34px}
+.c-week>div{flex:1;background:var(--hero-track,var(--line));border-radius:4px;height:100%;display:flex;align-items:flex-end;overflow:hidden}
+.c-week>div>i{display:block;width:100%;background:var(--hero-fig,var(--gold));border-radius:4px}
+.c-body{white-space:pre-wrap;line-height:1.95;overflow-wrap:anywhere}
+.c-id{font-weight:700;line-height:1.7}
+.c-swap{display:grid;gap:4px;padding:10px 0;border-bottom:1px solid var(--line)}
+.c-swap:last-of-type{border-bottom:0}
+.c-q textarea{width:100%;min-height:56px}

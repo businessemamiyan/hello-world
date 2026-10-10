@@ -67,7 +67,7 @@ a{color:var(--ai)}
 .chip-mode{font-size:.72rem;font-weight:700;padding:3px 10px;border-radius:999px;border:1px solid var(--line2);color:var(--ink2);background:transparent;white-space:nowrap}
 .chip-mode.demo{border-color:var(--warn);color:var(--warn);background:var(--warn-bg)}
 
-nav.bottom{position:fixed;inset-inline:0;bottom:0;z-index:8;background:rgba(10,15,24,.96);border-top:1px solid var(--line);padding:6px 8px calc(6px + env(safe-area-inset-bottom,0px));display:grid;grid-template-columns:repeat(5,1fr);gap:4px;backdrop-filter:blur(8px)}
+nav.bottom{position:fixed;inset-inline:0;bottom:0;z-index:8;background:rgba(10,15,24,.96);border-top:1px solid var(--line);padding:6px 8px calc(6px + env(safe-area-inset-bottom,0px));display:grid;grid-template-columns:repeat(6,1fr);gap:2px;backdrop-filter:blur(8px)}
 nav.bottom button{border:0;background:transparent;color:var(--ink3);display:grid;justify-items:center;gap:2px;padding:6px 2px;border-radius:10px;font-size:.72rem;font-weight:700}
 nav.bottom button svg{width:22px;height:22px}
 nav.bottom button[aria-current="page"]{color:var(--gold);background:var(--gold-soft)}

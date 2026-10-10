@@ -10,6 +10,8 @@ import json
 import re
 
 from . import agents, finance, life, novatunnel, profile
+from .coach import Coach
+from .media import MAX_IMAGE_BYTES, sniff_image
 from .memory import normalize_fa, today_str
 from .telegram import TGError, btn
 
@@ -77,21 +79,26 @@ class Bot:
         self.brain_lock = asyncio.Lock()  # تلگرام و اپ هم‌زمان یک پروسهٔ مغز را نگیرند
         self._ctx_ids = set()             # شناسهٔ پروفایل/هدف‌هایی که در آخرین چکیده به مغز نشان داده شد
         self._ctx_debt_ids = set()        # شناسهٔ بدهی‌های فعالی که مغز در همین گفتگو دیده است
+        self.coach = Coach(self)
 
-    async def chat(self, text):
-        """یک نوبت مکالمه (هم تلگرام هم اپ): تاریخچه و حافظه را می‌خواند، می‌پرسد، و ذخیره می‌کند."""
+    async def chat(self, text, images=None):
+        """یک نوبت مکالمه (هم تلگرام هم اپ): تاریخچه و حافظه را می‌خواند، می‌پرسد، و ذخیره می‌کند.
+        images: لیست (media_type, bytes)؛ فقط برای همین نوبت به مغز داده می‌شود و ذخیره نمی‌شود."""
         async with self.brain_lock:
             history = await self.mem.recent_messages(20)
             recent_mem = await self.mem.recent_memory(40)
             active_habits = await self.mem.list_habits("active")
-            await self.mem.add_message("user", text)
+            await self.mem.add_message("user", ("📷 [عکس] " + text) if images else text)
             pending_q = await self.mem.kv_get("onboard_q")
             brain_text = text
             if pending_q:      # جواب یک سؤال مصاحبه است: به مغز بگو تا درست در پروفایل ثبتش کند
                 q = profile.question_by_id(pending_q)
                 if q:
                     brain_text = f"[کاربر دارد به سؤال مصاحبه «{q[2]}» (بخش {q[1]}) جواب می‌دهد؛ جواب را در پروفایل ثبت کن]\n{text}"
-            reply, entries = await self.brain.think(history, recent_mem, brain_text, active_habits)
+            if images:
+                reply, entries = await self.brain.think(history, recent_mem, brain_text, active_habits, images=images)
+            else:
+                reply, entries = await self.brain.think(history, recent_mem, brain_text, active_habits)
             notes = []
             if entries:
                 notes = await self._apply_entries(entries, {m["id"] for m in recent_mem if m.get("id")} | self._ctx_ids)
@@ -232,6 +239,7 @@ class Bot:
         """ورودی‌های مغز: جدید → ثبت؛ update_id/delete_id → فقط روی رکوردهای اخیری که مغز دیده؛ account_op/debt_op/habit_new → به‌روزرسانی اپ.
         خروجی: لیست خط‌های تأیید (حقیقت سمت سرور) برای نمایش زیر پاسخ."""
         adds, notes = [], []
+        paying = any("debt_op" in e and e["debt_op"]["op"] == "pay" for e in entries)
         for e in entries:
             if "delete_id" in e:
                 if e["delete_id"] in allowed_ids:
@@ -258,6 +266,8 @@ class Bot:
                     await self.mem.add_habit(h["good"], h.get("bad"))
                     notes.append(f"🔥 عادت «{h['good']}» برای پیگیری ثبت شد")
             else:
+                if paying and e.get("type") == "expense" and ("قسط" in (e.get("summary") or "") or e.get("category") in ("اقساط", "قسط")):
+                    continue            # pay خودش خرج «اقساط» را ثبت می‌کند؛ تکراری نشود
                 adds.append(e)
         if adds:
             await self.mem.add_memory(adds)
@@ -587,6 +597,12 @@ class Bot:
             await self.handle_habit_add(chat_id, text[len("/habit"):])
             return
 
+        photo = msg.get("photo")
+        doc = msg.get("document") or {}
+        if photo or str(doc.get("mime_type") or "").startswith("image/"):
+            await self.handle_photo(chat_id, msg)
+            return
+
         if msg.get("voice") or msg.get("audio"):
             await self.tg.send(chat_id, "فعلاً فقط متن می‌فهمم — فهمیدن ویس تو فاز بعدیه. همون رو تایپ کن.")
             return
@@ -604,6 +620,27 @@ class Bot:
         await self.tg.send(chat_id, reply)
         if onboarding:
             await self._onboard_next(chat_id)
+
+    async def handle_photo(self, chat_id, msg):
+        """عکس تلگرام (فیش پرداخت، رسید، همسر، …) → مغز آن را می‌بیند و هر چه باید ثبت می‌کند."""
+        file = (msg.get("photo") or [None])[-1] or msg.get("document") or {}
+        if not file.get("file_id") or (file.get("file_size") or 0) > MAX_IMAGE_BYTES:
+            await self.tg.send(chat_id, "این عکس برای من زیادی بزرگ است؛ کوچک‌ترش را بفرست.")
+            return
+        await self.tg.send_chat_action(chat_id, "typing")
+        try:
+            data = await self.tg.download(file["file_id"])
+        except Exception:
+            log.exception("دانلود عکس تلگرام ناموفق")
+            await self.tg.send(chat_id, "نتوانستم عکس را بگیرم؛ دوباره بفرست.")
+            return
+        mt = sniff_image(data)
+        if not mt or len(data) > MAX_IMAGE_BYTES:
+            await self.tg.send(chat_id, "فقط عکس (jpg/png/webp) می‌فهمم.")
+            return
+        caption = (msg.get("caption") or "").strip()
+        reply = await self.chat(caption or "این عکس را ببین؛ اگر فیش پرداخت، رسید یا چیز قابل‌ثبت است ثبتش کن و بگو چه خواندی.", images=[(mt, data)])
+        await self.tg.send(chat_id, reply)
 
     async def handle_callback(self, cq):
         chat_id = cq["message"]["chat"]["id"]

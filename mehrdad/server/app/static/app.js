@@ -171,6 +171,7 @@ function composer(id, ph) {
   const mic = (window.MehrdadNative && MehrdadNative.startVoice) || window.SpeechRecognition || window.webkitSpeechRecognition;
   return `<div class="m-composer"><textarea id="${id}" rows="2" placeholder="${ph}" aria-label="پیام"></textarea>
     ${mic ? `<button class="m-mic" data-act="mic" data-for="${id}" aria-label="گفتن">🎤</button>` : ''}
+    <button class="m-mic" data-act="photo" data-for="${id}" aria-label="عکس" title="عکس فیش/رسید">📷</button>
     <button class="m-send" data-act="say" data-for="${id}" aria-label="ارسال">↑</button></div>`;
 }
 
@@ -400,7 +401,66 @@ async function viewChat() {
     <div class="m-composer-fixed">${composer('sayChat', 'بنویس یا با 🎤 بگو…')}</div></section>`;
 }
 
-const VIEWS = { today: viewToday, money: viewMoney, life: viewLife, goals: viewGoals, chat: viewChat };
+const BOOK_ST = { suggested: 'پیشنهادی', reading: 'در حال مطالعه', done: 'تمام شد' };
+async function viewCoach() {
+  const c = await api('/api/coach'); S.cache.coach = c;
+  const st = c.stats, p = c.plan, done = c.done || {};
+  const head = `<div class="pane-title"><h1>مربی</h1><span class="row" style="gap:6px"><span class="pill gold num">🔥 ${fa(st.streak)} روز</span><span class="pill num">سطح ${fa(st.level)}</span></span></div>`;
+  if (c.generating) {
+    setTimeout(() => { if (S.tab === 'coach') render(); }, 3000);
+    return `<section class="pane">${head}<div class="card ai"><h2><span class="m-spin"></span> مربی دارد برنامهٔ امروزت را می‌چیند…</h2><p class="muted small">معمولاً ۳۰ تا ۶۰ ثانیه؛ از روی چیزهایی که دربارهٔ تو می‌داند.</p></div></section>`;
+  }
+  const books = c.books || [];
+  const tasks = (key, title, sub, extra = '') => `<div class="m-task ${done[key] ? 'done' : ''}"><button class="m-check" data-act="coach-done" data-key="${key}" aria-label="انجام شد">✓</button>
+    <div><div class="m-t">${esc(title)}</div>${sub ? `<div class="muted small">${sub}</div>` : ''}</div>${extra || '<span></span>'}<span></span></div>`;
+  const bookCard = b => `<div class="card m-goal"><div class="row spread"><b>${esc(b.title)}</b><span class="pill ${b.status === 'done' ? 'good' : b.status === 'reading' ? 'gold' : ''}">${BOOK_ST[b.status] || ''}</span></div>
+      <div class="muted small">${b.author ? esc(b.author) : ''}${b.level ? ' · ' + esc(b.level) : ''}</div>${b.why ? `<div class="small">${esc(b.why)}</div>` : ''}
+      ${(b.lessons || []).map(l => `<details ${S.openLesson === b.id + ':' + l.n ? 'open' : ''}><summary>درس ${fa(l.n)}: ${esc(l.title)}</summary><div class="c-body small" style="margin-top:6px">${esc(l.body)}</div></details>`).join('')}
+      <div class="row"><button class="btn sm primary" data-act="coach-lesson" data-id="${b.id}">${(b.lessons || []).length ? 'درس بعدی' : 'شروع آموزش کتاب'}</button>
+        ${b.status !== 'done' ? `<button class="btn sm" data-act="coach-book" data-id="${b.id}" data-st="done">تمام شد</button>` : ''}<button class="x" data-act="coach-book-del" data-id="${b.id}" aria-label="حذف">✕</button></div><div id="bk${b.id}"></div></div>`;
+  const library = `<h2>📚 کتاب و آموزش</h2>
+    <div class="card ai"><div class="row spread"><h2>از مربی بپرس / یاد بگیر</h2><span class="pill ai">استاد</span></div>
+      <p class="muted small">هر موضوعی که می‌خواهی (فروش، تمرکز، مدیریت پول، زبان…) برایت درس مستقل و تمرین می‌دهد.</p>
+      <div class="row" style="flex-wrap:nowrap"><input type="text" id="teachTopic" placeholder="مثلاً: چطور فروش فیلترشکن را بالا ببرم؟" maxlength="300"><button class="btn primary" data-act="coach-teach">یاد بده</button></div><div id="teachOut"></div></div>
+    <div class="stack">${books.length ? books.map(bookCard).join('') : `<div class="card">${empty('هنوز کتابی نیست. پیشنهاد بگیر یا خودت اضافه کن.')}</div>`}</div>
+    <div class="row"><button class="btn ai" data-act="coach-rec">پیشنهاد کتاب برای من</button></div><div id="recOut"></div>
+    <form class="row" data-form="coach-book" style="flex-wrap:nowrap"><input type="text" name="title" placeholder="اسم کتابی که می‌خواهی یاد بگیری…" required maxlength="120"><button class="btn" type="submit">افزودن</button></form>`;
+  if (!p) return `<section class="pane">${head}<div class="card ai"><h2>برنامهٔ امروز هنوز ساخته نشده</h2>
+      <p class="muted small">مربی با توجه به شناختی که از تو دارد: تمرکز روز، روتین ساعت‌بندی‌شده، یک درس، یک چالش، چند سؤال و راه تبدیل عادت‌های بد را می‌سازد. هر روز ساعت ۷ صبح هم خودش می‌سازد و در تلگرام می‌فرستد.</p>
+      ${c.error ? `<p class="small" style="color:var(--warn)">دفعهٔ قبل نشد: ${esc(c.error)}</p>` : ''}
+      <div class="row"><button class="btn primary" data-act="coach-gen">ساخت برنامهٔ امروز</button></div></div>${library}</section>`;
+  const t = st.today, pct = t.total ? Math.round(t.done / t.total * 100) : 0;
+  const qs = (p.questions || []).map((q, i) => { const a = (c.answers || {})[String(i)];
+    return `<div class="c-q" style="padding:8px 0;border-bottom:1px solid var(--line)"><div class="c-id">${esc(q)}</div>${a ? `<div class="m-b me" style="max-width:100%;margin-top:6px">${esc(a.text)}</div><div class="m-b bot" style="max-width:100%;margin-top:6px">${esc(a.reply)}</div>`
+      : `<textarea id="cq${i}" rows="2" placeholder="جوابت را بنویس…"></textarea><div class="row"><button class="btn sm primary" data-act="coach-answer" data-i="${i}">ثبت جواب</button></div>`}</div>`; }).join('');
+  const swaps = (p.swaps || []).map((s, i) => `<div class="c-swap"><div><b>${esc(s.bad)}</b> ← <b class="m-pos">${esc(s.replacement)}</b></div>
+      ${s.cue ? `<div class="muted small">نشانهٔ احتمالی: ${esc(s.cue)}</div>` : ''}${s.if_then ? `<div class="small">${esc(s.if_then)}</div>` : ''}
+      ${s.tiny_step ? `<div class="small">قدم کوچک: ${esc(s.tiny_step)}</div>` : ''}${s.target ? `<div class="small">هدف این هفته: ${esc(s.target)}</div>` : ''}
+      <div class="row"><button class="btn sm primary" data-act="coach-track" data-i="${i}">پیگیری‌اش کن (هر شب می‌پرسم)</button></div></div>`).join('');
+  return `<section class="pane">${head}
+    <div class="north"><span class="eyebrow">تمرکز امروز</span>
+      <div class="fig"><strong style="font-size:1.35rem;line-height:1.5">${esc(p.focus.title)}</strong></div>
+      ${p.focus.identity ? `<div class="c-id" style="color:var(--hero-sub)">${esc(p.focus.identity)}</div>` : ''}
+      <div class="track"><i style="width:${pct}%"></i></div>
+      <div class="meta"><span>امروز <b class="num">${fa(t.done)}</b> از <b class="num">${fa(t.total)}</b></span><span>تجربه <b class="num">${fa(st.xp)}</b></span></div>
+      <div class="c-week" aria-label="۷ روز اخیر">${st.week.map(w => `<div title="${jdate(w.date)}"><i style="height:${w.total ? Math.max(6, Math.round(w.done / w.total * 100)) : 0}%"></i></div>`).join('')}</div></div>
+    ${(p.routine || []).length ? `<div class="card"><div class="row spread"><h2>🧭 روتین امروز</h2><span class="muted small">پیشنهاد مربی</span></div>${p.routine.map((r, i) => tasks('r' + i, (r.time ? r.time + ' — ' : '') + r.title, esc(r.why || ''), r.minutes ? `<span class="pill num">${dur(r.minutes)}</span>` : '')).join('')}</div>` : ''}
+    ${p.lesson.body ? `<div class="card"><div class="row spread"><h2>📖 ${esc(p.lesson.title || 'درس امروز')}</h2></div><div class="c-body">${esc(p.lesson.body)}</div>
+      ${p.lesson.takeaway ? `<div class="c-id" style="margin-top:6px">💡 ${esc(p.lesson.takeaway)}</div>` : ''}${tasks('lesson', 'خواندم و فهمیدم', '')}</div>` : ''}
+    ${p.challenge.title ? `<div class="card gold"><div class="row spread"><h2>⚡ چالش امروز</h2>${p.challenge.minutes ? `<span class="pill num">${dur(p.challenge.minutes)}</span>` : ''}</div><div class="c-id">${esc(p.challenge.title)}</div>
+      ${(p.challenge.steps || []).length ? `<ol class="small" style="margin:4px 0;padding-inline-start:20px">${p.challenge.steps.map(x => `<li>${esc(x)}</li>`).join('')}</ol>` : ''}${tasks('challenge', 'انجامش دادم', '')}</div>` : ''}
+    ${qs ? `<div class="card"><div class="row spread"><h2>❓ مربی از تو می‌پرسد</h2><span class="pill ai">جواب‌ها ثبت می‌شوند</span></div>${qs}</div>` : ''}
+    ${swaps ? `<div class="card"><div class="row spread"><h2>🔁 عادت بد ← عادت خوب</h2></div><p class="muted small">حذف نه؛ جایگزین. هر کدام را بزن تا هر شب بپرسم چطور پیش رفتی.</p>${swaps}</div>` : ''}
+    ${p.book ? `<div class="card"><div class="row spread"><h2>📚 کتاب پیشنهادی</h2></div><div class="c-id">${esc(p.book.title)}${p.book.author ? ' — ' + esc(p.book.author) : ''}</div>${p.book.why ? `<div class="small muted">${esc(p.book.why)}</div>` : ''}
+      <div class="row"><button class="btn sm primary" data-act="coach-addbook" data-title="${esc(p.book.title)}" data-author="${esc(p.book.author || '')}">اضافه به کتاب‌هایم و شروع آموزش</button></div></div>` : ''}
+    ${p.note ? `<div class="card"><div class="c-id">${esc(p.note)}</div></div>` : ''}
+    ${library}
+    <div class="row"><button class="btn sm" data-act="coach-gen" data-force="1">ساخت دوبارهٔ برنامهٔ امروز</button></div>
+  </section>`;
+}
+
+const VIEWS = { today: viewToday, money: viewMoney, life: viewLife, coach: viewCoach, goals: viewGoals, chat: viewChat };
+async function renderKeep() { const y = window.scrollY; await render(); window.scrollTo(0, y); }
 
 async function render() {
   const view = $('#view');
@@ -536,6 +596,41 @@ async function say(forId) {
     if (e.message !== 'unauthorized') { toast('نشد: ' + e.message); const t = $('#typing'); if (t) t.textContent = 'نتوانستم به مغز برسم؛ دوباره امتحان کن.'; ta.value = text; }
   } finally { S.busy = false; const s2 = $(`[data-act=say][data-for=${forId}]`); if (s2) s2.disabled = false; }
 }
+async function downscale(file, max = 1600) {
+  const url = URL.createObjectURL(file);
+  try {
+    const img = await new Promise((ok, bad) => { const i = new Image(); i.onload = () => ok(i); i.onerror = () => bad(new Error('عکس خوانده نشد')); i.src = url; });
+    const k = Math.min(1, max / Math.max(img.naturalWidth, img.naturalHeight));
+    const c = document.createElement('canvas'); c.width = Math.round(img.naturalWidth * k); c.height = Math.round(img.naturalHeight * k);
+    c.getContext('2d').drawImage(img, 0, 0, c.width, c.height);
+    return c.toDataURL('image/jpeg', 0.82);
+  } finally { URL.revokeObjectURL(url); }
+}
+async function sendPhoto(file, forId) {
+  if (!file || S.busy) return;
+  S.busy = true;
+  const ta = $('#' + forId); const caption = ta ? ta.value.trim() : ''; if (ta) ta.value = '';
+  const inChat = forId === 'sayChat' && $('#chatList');
+  if (inChat) {
+    const list = $('#chatList'); const empt = $('.m-empty', list); if (empt) empt.remove();
+    list.insertAdjacentHTML('beforeend', `<div class="m-b me">📷 ${esc(caption || 'عکس')}</div><div class="m-b bot typing" id="typing"><span class="m-spin"></span></div>`);
+    window.scrollTo(0, document.body.scrollHeight);
+  } else toast('مهراد دارد عکس را می‌خواند…');
+  try {
+    const image = await downscale(file);
+    const r = await api('/api/chat/image', { method: 'POST', body: { image, text: caption } });
+    if (inChat) { const t = $('#typing'); if (t) { t.classList.remove('typing'); t.removeAttribute('id'); t.textContent = r.reply; } window.scrollTo(0, document.body.scrollHeight); }
+    else { toast(r.reply.length > 110 ? r.reply.slice(0, 110) + '…' : r.reply); await render(); }
+  } catch (e) {
+    if (e.message !== 'unauthorized') { toast('نشد: ' + e.message); const t = $('#typing'); if (t) t.textContent = 'عکس را نتوانستم بخوانم؛ دوباره امتحان کن.'; if (ta) ta.value = caption; }
+  } finally { S.busy = false; }
+}
+document.addEventListener('change', ev => {
+  if (ev.target.id !== 'photoIn') return;
+  const f = ev.target.files && ev.target.files[0]; ev.target.value = '';
+  if (f) sendPhoto(f, S.photoFor || 'sayChat');
+});
+
 function mic(forId) {
   const ta = $('#' + forId);
   if (window.MehrdadNative && MehrdadNative.startVoice) { window.onVoiceText = t => { ta.value = t; ta.focus(); }; MehrdadNative.startVoice(); return; }
@@ -595,6 +690,34 @@ document.addEventListener('click', async ev => {
       b.disabled = true; b.textContent = 'اضافه شد ✓'; toast('به هدف‌ها اضافه شد');
     }
     else if (act === 'mview') { S.mview = b.dataset.val; render(); }
+    else if (act === 'coach-gen') { await api('/api/coach/generate' + (b.dataset.force ? '?force=true' : ''), { method: 'POST' }); render(); }
+    else if (act === 'coach-done') { const key = b.dataset.key, on = !b.closest('.m-task').classList.contains('done');
+      await api('/api/coach/done', { method: 'POST', body: { key, on } }); renderKeep(); }
+    else if (act === 'coach-answer') {
+      const i = b.dataset.i, ta = $('#cq' + i), text = (ta.value || '').trim(); if (!text) return toast('جوابت را بنویس');
+      b.disabled = true; b.textContent = 'در حال ثبت…';
+      try { await api('/api/coach/answer', { method: 'POST', body: { idx: Number(i), text } }); renderKeep(); } finally { b.disabled = false; }
+    }
+    else if (act === 'coach-track') { const r = await api(`/api/coach/swap/${b.dataset.i}/track`, { method: 'POST' }); toast(r.existing ? 'از قبل پیگیری می‌شد 🔥' : 'ثبت شد؛ هر شب از تو می‌پرسم 🔥'); b.disabled = true; }
+    else if (act === 'coach-teach') {
+      const topic = ($('#teachTopic').value || '').trim(); if (topic.length < 2) return toast('موضوع را بنویس');
+      const out = $('#teachOut'); out.innerHTML = '<span class="m-spin"></span> استاد دارد درس را آماده می‌کند…'; b.disabled = true;
+      try { const r = await api('/api/coach/teach', { method: 'POST', body: { topic } }); out.innerHTML = `<div class="m-b bot c-body" style="max-width:100%;margin-top:8px">${esc(r.text)}</div>`; }
+      catch (e) { out.innerHTML = empty('نشد: ' + esc(e.message)); } finally { b.disabled = false; }
+    }
+    else if (act === 'coach-rec') {
+      const out = $('#recOut'); out.innerHTML = '<span class="m-spin"></span> دارم کتاب‌های مناسب تو را پیدا می‌کنم…'; b.disabled = true;
+      try { const r = await api('/api/coach/books/recommend', { method: 'POST' }); toast(r.added.length ? 'کتاب‌ها اضافه شد' : 'کتاب تازه‌ای نبود'); await renderKeep(); }
+      catch (e) { out.innerHTML = empty('نشد: ' + esc(e.message)); } finally { b.disabled = false; }
+    }
+    else if (act === 'coach-addbook') { await api('/api/coach/books', { method: 'POST', body: { title: b.dataset.title, author: b.dataset.author } }); b.disabled = true; toast('اضافه شد؛ پایین‌تر «شروع آموزش کتاب» را بزن'); renderKeep(); }
+    else if (act === 'coach-lesson') {
+      const out = $('#bk' + id); out.innerHTML = '<span class="m-spin"></span> استاد درس را آماده می‌کند (حدود ۱ دقیقه)…'; b.disabled = true;
+      try { const r = await api(`/api/coach/books/${id}/lesson`, { method: 'POST' }); if (r.lesson) S.openLesson = id + ':' + r.lesson.n; else toast('این کتاب ۱۲ درس را تمام کرد 🎉'); await renderKeep(); }
+      catch (e) { out.innerHTML = empty('نشد: ' + esc(e.message)); b.disabled = false; }
+    }
+    else if (act === 'coach-book') { await api('/api/coach/books/' + id, { method: 'PATCH', body: { status: b.dataset.st } }); renderKeep(); }
+    else if (act === 'coach-book-del') { if (confirm('این کتاب از فهرست حذف شود؟')) { await api('/api/coach/books/' + id, { method: 'DELETE' }); renderKeep(); } }
     else if (act === 'acc-edit') openAccEdit(id);
     else if (act === 'debt-edit') openDebtEdit(id);
     else if (act === 'acc-del') { if (confirm('این حساب حذف شود؟')) { await api('/api/accounts/' + id, { method: 'DELETE' }); render(); } }
@@ -614,6 +737,7 @@ document.addEventListener('click', async ev => {
       await api('/api/events/' + id, { method: 'PATCH', body: { fields: { status: done ? 'open' : 'done' } } }); render(); }
     else if (act === 'say') say(b.dataset.for);
     else if (act === 'mic') mic(b.dataset.for);
+    else if (act === 'photo') { S.photoFor = b.dataset.for; $('#photoIn').click(); }
     else if (act === 'theme') { applyTheme(b.dataset.val); $$('.seg [data-act=theme]').forEach(x => x.setAttribute('aria-pressed', x === b)); }
     else if (act === 'logout') { closeSheet(); logout(false); }
     else if (act === 'plan') {
@@ -648,6 +772,7 @@ document.addEventListener('submit', async ev => {
       if (window.MehrdadNative && MehrdadNative.savePairing) MehrdadNative.savePairing(location.origin, token);
       toast('وصل شد ✓'); return boot();
     }
+    if (kind === 'coach-book') { await api('/api/coach/books', { method: 'POST', body: { title: v.title.trim() } }); toast('اضافه شد ✓'); return renderKeep(); }
     if (kind === 'task') await api('/api/events', { method: 'POST', body: { type: 'task', summary: v.title.trim(), fields: { status: 'open' } } });
     else if (kind === 'goal') await api('/api/events', { method: 'POST', body: { type: 'goal', summary: v.title.trim(), fields: { progress: 0, horizon: (v.horizon || '').trim() || undefined } } });
     else if (kind === 'money') await api('/api/events', { method: 'POST', body: { type: v.type, summary: (v.summary || '').trim() || (v.type === 'income' ? 'درآمد' : 'خرج'),

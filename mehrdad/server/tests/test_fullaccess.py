@@ -129,3 +129,14 @@ async def test_api_pay_uses_same_logic(tmp_path):
     upd = await bot.pay_debt(did, None, True)
     assert upd["status"] == "paid" and upd["remaining"] == 0.0 and upd["next_due"] is None
     assert await bot.pay_debt(did, None, True) is None                           # پرداخت‌شده دوباره پرداخت نمی‌شود
+
+
+@pytest.mark.asyncio
+async def test_pay_does_not_double_log_installment_expense(tmp_path):
+    mem, bot = make(tmp_path, {"reply": "ok", "memory": [{"type": "expense", "summary": "پرداخت قسط وام ملی", "amount": 1000000, "category": "اقساط"},
+                                                         {"type": "expense", "summary": "ناهار", "amount": 90000}],
+                               "debts": [{"op": "pay", "title": "وام ملی"}]})
+    await mem.add_debt({"title": "وام ملی", "remaining": 3000000.0, "total": 4000000.0, "installment_amount": 1000000.0, "due_day": 5, "next_due": "2026-10-05"})
+    await bot.chat("قسط وام ملی رو دادم و ناهار ۹۰ هزار")
+    spent = sorted((m["summary"], m["amount"]) for m in await mem.recent_memory(10) if m["type"] == "expense")
+    assert spent == sorted([("ناهار", 90000.0), ("قسط وام ملی", 1000000.0)])

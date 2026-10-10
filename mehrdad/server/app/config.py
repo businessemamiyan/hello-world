@@ -34,6 +34,7 @@ class Config:
     tg_allow: str = ""
     digest_times: str = "13:00,20:30"
     backup_time: str = "03:30"
+    coach_time: str = "07:00"
     data_dir: str = "/data"
     host: str = "0.0.0.0"
     port: int = 8081
@@ -66,6 +67,7 @@ class Config:
             tg_allow=e("TG_ALLOW", ""),
             digest_times=e("DIGEST_TIMES", "13:00,20:30"),
             backup_time=e("BACKUP_TIME", "03:30"),
+            coach_time=e("COACH_TIME", "07:00"),
             data_dir=e("DATA_DIR", "/data"),
             port=_int(e("PORT")) or 8081,
             habit_checkin_time=e("HABIT_CHECKIN_TIME", "21:00"),

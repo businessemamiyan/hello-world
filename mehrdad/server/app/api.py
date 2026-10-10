@@ -3,6 +3,7 @@
 احراز هویت: توکن اختصاصی هر دستگاه (Bearer)؛ فقط هش آن در دیتابیس است و با /unpair در تلگرام باطل می‌شود.
 هیچ رمز ثابتی در .env یا داخل اپ نیست. /api/pair با محدودیت تعداد تلاش ناموفق محافظت می‌شود.
 """
+import asyncio
 import json
 import logging
 import os
@@ -14,6 +15,7 @@ from pydantic import BaseModel, Field
 
 from . import finance, life, novatunnel, profile
 from .ingest import is_sensitive, memory_entry, parse_bank_text
+from .media import decode_image_b64
 
 log = logging.getLogger("api")
 
@@ -141,6 +143,34 @@ class PayIn(BaseModel):
 class HabitIn(BaseModel):
     good: str = Field(min_length=1, max_length=120)
     bad: str | None = Field(default=None, max_length=120)
+
+
+class ChatImageIn(BaseModel):
+    image: str = Field(min_length=100, max_length=9_000_000)
+    text: str = Field(default="", max_length=2000)
+
+
+class CoachDoneIn(BaseModel):
+    key: str = Field(min_length=1, max_length=12)
+    on: bool = True
+
+
+class CoachAnswerIn(BaseModel):
+    idx: int = Field(ge=0, le=5)
+    text: str = Field(min_length=1, max_length=2000)
+
+
+class CoachTeachIn(BaseModel):
+    topic: str = Field(min_length=2, max_length=300)
+
+
+class CoachBookIn(BaseModel):
+    title: str = Field(min_length=1, max_length=120)
+    author: str = Field(default="", max_length=80)
+
+
+class CoachBookPatch(BaseModel):
+    status: str = Field(pattern="^(suggested|reading|done)$")
 
 
 class InviteIn(BaseModel):
@@ -286,6 +316,102 @@ def create_router(mem, svc):
         snap["next_questions"] = [{"id": q[0], "section": q[1], "text": q[2]} for q in profile.SELF_QUESTIONS]
         return snap
 
+    # ---------- مربی ----------
+    def _coach():
+        c = getattr(svc, "coach", None)
+        if c is None:
+            raise HTTPException(status_code=503, detail="coach unavailable")
+        return c
+
+    @router.get("/coach")
+    async def coach_state(dev=Depends(current_device)):
+        return await _coach().state()
+
+    @router.post("/coach/generate", status_code=202)
+    async def coach_generate(force: bool = False, dev=Depends(current_device)):
+        c = _coach()
+        if not c.generating:
+            async def run():
+                try:
+                    await c.generate(force=force)
+                except Exception:
+                    pass                     # علت در c.last_error و لاگ است
+            asyncio.create_task(run())
+            await asyncio.sleep(0)           # generating باید همین حالا true شود تا اپ منتظر بماند
+        return {"generating": True}
+
+    @router.post("/coach/done")
+    async def coach_done(body: CoachDoneIn, dev=Depends(current_device)):
+        done = await _coach().set_done(body.key, body.on)
+        if done is None:
+            raise HTTPException(status_code=404, detail="not found")
+        return {"done": done}
+
+    @router.post("/coach/answer")
+    async def coach_answer(body: CoachAnswerIn, dev=Depends(current_device)):
+        try:
+            reply = await _coach().answer(body.idx, body.text)
+        except Exception:
+            log.exception("coach answer failed")
+            raise HTTPException(status_code=502, detail="brain unavailable")
+        if reply is None:
+            raise HTTPException(status_code=404, detail="not found")
+        return {"reply": reply}
+
+    @router.post("/coach/swap/{idx}/track")
+    async def coach_track_swap(idx: int, dev=Depends(current_device)):
+        r = await _coach().track_swap(idx)
+        if r is None:
+            raise HTTPException(status_code=404, detail="not found")
+        return r
+
+    @router.post("/coach/teach")
+    async def coach_teach(body: CoachTeachIn, dev=Depends(current_device)):
+        try:
+            text = await _coach().teach(body.topic)
+        except Exception:
+            log.exception("coach teach failed")
+            raise HTTPException(status_code=502, detail="brain unavailable")
+        return {"text": text}
+
+    @router.post("/coach/books/recommend")
+    async def coach_recommend(dev=Depends(current_device)):
+        try:
+            return {"added": await _coach().recommend_books()}
+        except Exception:
+            log.exception("coach recommend failed")
+            raise HTTPException(status_code=502, detail="brain unavailable")
+
+    @router.post("/coach/books")
+    async def coach_add_book(body: CoachBookIn, dev=Depends(current_device)):
+        b = await _coach().add_book(body.title, body.author)
+        if not b:
+            raise HTTPException(status_code=422, detail="invalid")
+        return b
+
+    @router.post("/coach/books/{book_id}/lesson")
+    async def coach_book_lesson(book_id: int, dev=Depends(current_device)):
+        try:
+            r = await _coach().book_lesson(book_id)
+        except Exception:
+            log.exception("coach book lesson failed")
+            raise HTTPException(status_code=502, detail="brain unavailable")
+        if r is None:
+            raise HTTPException(status_code=404, detail="not found")
+        return r
+
+    @router.patch("/coach/books/{book_id}")
+    async def coach_book_patch(book_id: int, body: CoachBookPatch, dev=Depends(current_device)):
+        if not await _coach().set_book(book_id, status=body.status):
+            raise HTTPException(status_code=404, detail="not found")
+        return {"ok": True}
+
+    @router.delete("/coach/books/{book_id}")
+    async def coach_book_delete(book_id: int, dev=Depends(current_device)):
+        if not await _coach().set_book(book_id, delete=True):
+            raise HTTPException(status_code=404, detail="not found")
+        return {"ok": True}
+
     @router.post("/goals/suggest")
     async def suggest_goals(dev=Depends(current_device)):
         try:
@@ -409,6 +535,18 @@ def create_router(mem, svc):
         if not updated:
             raise HTTPException(status_code=404, detail="not found")
         return updated
+
+    @router.post("/chat/image")
+    async def chat_image(body: ChatImageIn, dev=Depends(current_device)):
+        dec = decode_image_b64(body.image)
+        if not dec:
+            raise HTTPException(status_code=422, detail="فقط عکس jpg/png/webp تا ۶ مگابایت")
+        try:
+            reply = await svc.chat(body.text.strip() or "این عکس را ببین؛ اگر فیش پرداخت، رسید یا چیز قابل‌ثبت است ثبتش کن و بگو چه خواندی.", images=[dec])
+        except Exception:
+            log.exception("image chat failed")
+            raise HTTPException(status_code=502, detail="brain unavailable")
+        return {"reply": reply}
 
     @router.get("/history")
     async def history(limit: int = 50, dev=Depends(current_device)):
