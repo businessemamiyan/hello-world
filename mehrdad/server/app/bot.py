@@ -6,7 +6,7 @@
 import asyncio
 import logging
 
-from . import life
+from . import finance, life
 from .memory import today_str
 from .telegram import TGError, btn
 
@@ -24,6 +24,8 @@ HELP = """من مهرداد‌ام — مغز دومت.
 
 اپ اندروید:
 /today /week /month — خلاصهٔ خرج و درآمد، غذا، قلیان، کارها و عادت‌ها
+
+/finance — موجودی حساب‌ها، بدهی و اقساط، و هشدارها
 
 /pair — کد یک‌بارمصرف برای وصل‌کردن اپ (۱۰ دقیقه اعتبار)
 /devices — دستگاه‌های وصل‌شده
@@ -99,6 +101,39 @@ class Bot:
         d["tasks"] = await self.mem.latest_of_kinds(("task",), 10)
         d["goals"] = await self.mem.latest_of_kinds(("goal",), 10)
         return d
+
+    async def finance_snapshot(self):
+        """حساب‌ها، بدهی‌ها و تحلیل خودکار؛ میانگین درآمد/خرج از ۹۰ روز اخیر."""
+        import datetime, time as _t
+        accounts = await self.mem.list_accounts()
+        debts = await self.mem.list_debts()
+        end = _t.time()
+        rows = await self.mem.events_between(end - 90 * 86400, end + 86400, kinds=("income", "expense"))
+        first = min((r["when_ts"] for r in rows), default=end)
+        span_days = max(30, min(90, (end - first) / 86400 + 1))
+        inc = sum(r["amount"] or 0 for r in rows if r["type"] == "income") / span_days * 30
+        exp = sum(r["amount"] or 0 for r in rows if r["type"] == "expense") / span_days * 30
+        summary = finance.summarize(accounts, debts, inc, exp, life.now_tehran().date(), int(span_days))
+        return {"accounts": accounts, "debts": debts, "summary": summary}
+
+    async def finance_prompt(self):
+        snap = await self.finance_snapshot()
+        return finance.as_prompt(snap["accounts"], snap["debts"], snap["summary"], life.now_tehran().date())
+
+    async def handle_finance(self, chat_id):
+        snap = await self.finance_snapshot()
+        s = snap["summary"]
+        m = lambda n: life.fa(f"{int(round(n)):,}")
+        lines = ["🏦 وضعیت مالی", f"دارایی {m(s['assets'])} | بدهی {m(s['debts_total'])} | خالص {m(s['net_worth'])} تومان"]
+        for a in snap["accounts"]:
+            lines.append(f"  · {a['name']}: {m(a['balance'])}")
+        for d in snap["debts"]:
+            if d["status"] == "active":
+                due = finance.jalali_text(__import__("datetime").date.fromisoformat(d["next_due"])) if d.get("next_due") else "—"
+                lines.append(f"  ⛓ {d['title']}: مانده {m(d['remaining'])}، قسط {m(d['installment_amount'])}، سررسید {due}")
+        for al in s["alerts"][:5]:
+            lines.append(("⚠️ " if al["level"] != "good" else "✅ ") + al["text"])
+        await self.tg.send(chat_id, "\n".join(lines))
 
     async def handle_summary(self, chat_id, label, private=False):
         await self.tg.send(chat_id, life.format_text(await self.dashboard(label), private=private))
@@ -193,6 +228,10 @@ class Bot:
         head = text.split(maxsplit=1)[0] if text else ""
         if head in ("/today", "/week", "/month"):
             await self.handle_summary(chat_id, head[1:], private="private" in text)
+            return
+
+        if text == "/finance":
+            await self.handle_finance(chat_id)
             return
 
         if text == "/pair":

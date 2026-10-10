@@ -10,7 +10,7 @@ from collections import defaultdict, deque
 from fastapi import APIRouter, Depends, Header, HTTPException, Request
 from pydantic import BaseModel, Field
 
-from . import life
+from . import finance, life
 from .ingest import is_sensitive, memory_entry, parse_bank_text
 
 log = logging.getLogger("api")
@@ -50,9 +50,69 @@ class EventPatch(BaseModel):
     fields: dict | None = None
 
 
+def _check_date(s):
+    if s:
+        import datetime
+        try:
+            datetime.date.fromisoformat(s)
+        except ValueError:
+            raise HTTPException(status_code=422, detail="date must be YYYY-MM-DD")
+
+
 def _check_fields(fields):
     if fields is not None and len(str(fields)) > 2000:
         raise HTTPException(status_code=422, detail="fields too large")
+
+
+class AccountIn(BaseModel):
+    name: str = Field(min_length=1, max_length=60)
+    kind: str = Field(default="bank", pattern="^(bank|cash|wallet|crypto|other)$")
+    balance: float = Field(default=0, ge=-1e13, le=1e13)
+    note: str | None = Field(default=None, max_length=200)
+
+
+class AccountPatch(BaseModel):
+    name: str | None = Field(default=None, min_length=1, max_length=60)
+    kind: str | None = Field(default=None, pattern="^(bank|cash|wallet|crypto|other)$")
+    balance: float | None = Field(default=None, ge=-1e13, le=1e13)
+    note: str | None = Field(default=None, max_length=200)
+
+
+DEBT_KIND = "^(installment|loan|credit_card|personal|other)$"
+
+
+class DebtIn(BaseModel):
+    title: str = Field(min_length=1, max_length=100)
+    kind: str = Field(default="installment", pattern=DEBT_KIND)
+    creditor: str | None = Field(default=None, max_length=80)
+    total: float = Field(default=0, ge=0, le=1e13)
+    remaining: float | None = Field(default=None, ge=0, le=1e13)
+    installment_amount: float = Field(default=0, ge=0, le=1e13)
+    installments_total: int | None = Field(default=None, ge=1, le=600)
+    installments_paid: int = Field(default=0, ge=0, le=600)
+    due_day: int | None = Field(default=None, ge=1, le=31)
+    next_due: str | None = Field(default=None, max_length=10)
+    note: str | None = Field(default=None, max_length=200)
+
+
+class DebtPatch(BaseModel):
+    title: str | None = Field(default=None, min_length=1, max_length=100)
+    kind: str | None = Field(default=None, pattern=DEBT_KIND)
+    creditor: str | None = Field(default=None, max_length=80)
+    total: float | None = Field(default=None, ge=0, le=1e13)
+    remaining: float | None = Field(default=None, ge=0, le=1e13)
+    installment_amount: float | None = Field(default=None, ge=0, le=1e13)
+    installments_total: int | None = Field(default=None, ge=1, le=600)
+    installments_paid: int | None = Field(default=None, ge=0, le=600)
+    due_day: int | None = Field(default=None, ge=1, le=31)
+    next_due: str | None = Field(default=None, max_length=10)
+    status: str | None = Field(default=None, pattern="^(active|paid)$")
+    note: str | None = Field(default=None, max_length=200)
+
+
+class PayIn(BaseModel):
+    amount: float | None = Field(default=None, ge=0, le=1e13)
+    record_expense: bool = True
 
 
 class IngestItem(BaseModel):
@@ -144,6 +204,72 @@ def create_router(mem, svc):
         if not await mem.delete_event(event_id):
             raise HTTPException(status_code=404, detail="not found")
         return {"ok": True}
+
+    @router.get("/finance")
+    async def get_finance(dev=Depends(current_device)):
+        return await svc.finance_snapshot()
+
+    @router.post("/accounts")
+    async def create_account(body: AccountIn, dev=Depends(current_device)):
+        aid = await mem.add_account(body.name, body.kind, body.balance, body.note)
+        return {"id": aid}
+
+    @router.patch("/accounts/{account_id}")
+    async def patch_account(account_id: int, body: AccountPatch, dev=Depends(current_device)):
+        acc = await mem.update_account(account_id, body.model_dump(exclude_unset=True))
+        if not acc:
+            raise HTTPException(status_code=404, detail="not found")
+        return acc
+
+    @router.delete("/accounts/{account_id}")
+    async def remove_account(account_id: int, dev=Depends(current_device)):
+        if not await mem.delete_account(account_id):
+            raise HTTPException(status_code=404, detail="not found")
+        return {"ok": True}
+
+    @router.post("/debts")
+    async def create_debt(body: DebtIn, dev=Depends(current_device)):
+        d = body.model_dump()
+        d["remaining"] = d["remaining"] if d["remaining"] is not None else d["total"]
+        if not d.get("next_due") and d.get("due_day"):
+            d["next_due"] = finance.next_due_from_day(d["due_day"], life.now_tehran().date()).isoformat()
+        _check_date(d.get("next_due"))
+        return {"id": await mem.add_debt(d)}
+
+    @router.patch("/debts/{debt_id}")
+    async def patch_debt(debt_id: int, body: DebtPatch, dev=Depends(current_device)):
+        patch = body.model_dump(exclude_unset=True)
+        _check_date(patch.get("next_due"))
+        d = await mem.update_debt(debt_id, patch)
+        if not d:
+            raise HTTPException(status_code=404, detail="not found")
+        return d
+
+    @router.delete("/debts/{debt_id}")
+    async def remove_debt(debt_id: int, dev=Depends(current_device)):
+        if not await mem.delete_debt(debt_id):
+            raise HTTPException(status_code=404, detail="not found")
+        return {"ok": True}
+
+    @router.post("/debts/{debt_id}/pay")
+    async def pay_debt(debt_id: int, body: PayIn, dev=Depends(current_device)):
+        import datetime
+        d = await mem.get_debt(debt_id)
+        if not d or d["status"] != "active":
+            raise HTTPException(status_code=404, detail="not found")
+        amount = body.amount if body.amount is not None else (d["installment_amount"] or d["remaining"])
+        remaining = max(0.0, d["remaining"] - amount)
+        patch = {"remaining": remaining, "installments_paid": d["installments_paid"] + 1}
+        if remaining <= 0:
+            patch.update(status="paid", next_due=None)
+        elif d.get("next_due"):
+            base = datetime.date.fromisoformat(d["next_due"])
+            patch["next_due"] = finance.add_jalali_months(base, 1, d.get("due_day")).isoformat()
+        updated = await mem.update_debt(debt_id, patch)
+        if body.record_expense and amount:
+            await mem.add_memory([{"type": "expense", "summary": f"قسط {d['title']}", "amount": float(amount),
+                                   "category": "اقساط", "fields": {"debt_id": debt_id}}])
+        return updated
 
     @router.get("/history")
     async def history(limit: int = 50, dev=Depends(current_device)):

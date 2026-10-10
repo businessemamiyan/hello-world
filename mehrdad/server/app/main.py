@@ -36,6 +36,7 @@ async def amain():
     brain = Brain(cfg.anthropic_api_key, cfg.anthropic_model, cfg.anthropic_proxy, search=mem.search_memory,
                   provider=cfg.provider(), cli_model=cfg.cli_model, cli_cwd=cfg.data_dir)
     bot = Bot(mem, tg, brain, cfg)
+    brain.context_provider = bot.finance_prompt
     sched = Scheduler(bot, mem, cfg)
     app = create_app(mem, time.time(), bot)
     server = uvicorn.Server(uvicorn.Config(app, host=cfg.host, port=cfg.port, log_level="info", proxy_headers=True))

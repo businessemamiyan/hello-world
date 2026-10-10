@@ -215,6 +215,7 @@ class Brain:
         self.provider = provider
         self.cli_model = cli_model
         self.cli_runner = cli_runner or (lambda s, p, m: run_claude_cli(s, p, m, cwd=cli_cwd))
+        self.context_provider = None   # async () -> str؛ وضعیت مالی واقعی را به پرامپت اضافه می‌کند
         self.client = httpx.AsyncClient(proxy=proxy or None, timeout=httpx.Timeout(60, connect=15))
 
     async def _call(self, system, messages, tools):
@@ -268,6 +269,14 @@ class Brain:
         """
         context = _build_context_block(recent_memory)
         habits_block = _build_habits_block(active_habits or [])
+        extra = ""
+        if self.context_provider:
+            try:
+                fin = await self.context_provider()
+                if fin:
+                    extra = "\n\n### وضعیت مالی واقعی کاربر (برای مشاوره و بررسی حساب‌ها؛ عددها را از همین بخش بگیر، حدس نزن):\n" + fin
+            except Exception:
+                log.exception("context provider failed")
         now = now_tehran()
         system = (
             SYSTEM_PROMPT
@@ -276,6 +285,7 @@ class Brain:
             + habits_block
             + "\n\n### خاطرات اخیر کاربر (برای زمینه، تکرار نکن مگر لازم باشد):\n"
             + context
+            + extra
         )
 
         messages = []

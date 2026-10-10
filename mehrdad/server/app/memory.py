@@ -100,6 +100,37 @@ class Memory:
                 dedup TEXT NOT NULL UNIQUE,
                 parsed INTEGER NOT NULL DEFAULT 0
             );
+            CREATE TABLE IF NOT EXISTS accounts(
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                name TEXT NOT NULL,
+                kind TEXT NOT NULL DEFAULT 'bank',
+                balance REAL NOT NULL DEFAULT 0,
+                note TEXT,
+                created_ts REAL NOT NULL,
+                updated_ts REAL NOT NULL
+            );
+            CREATE TABLE IF NOT EXISTS account_log(
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                account_id INTEGER NOT NULL,
+                balance REAL NOT NULL,
+                ts REAL NOT NULL
+            );
+            CREATE TABLE IF NOT EXISTS debts(
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                title TEXT NOT NULL,
+                kind TEXT NOT NULL DEFAULT 'installment',
+                creditor TEXT,
+                total REAL NOT NULL DEFAULT 0,
+                remaining REAL NOT NULL DEFAULT 0,
+                installment_amount REAL NOT NULL DEFAULT 0,
+                installments_total INTEGER,
+                installments_paid INTEGER NOT NULL DEFAULT 0,
+                due_day INTEGER,
+                next_due TEXT,
+                status TEXT NOT NULL DEFAULT 'active',
+                note TEXT,
+                created_ts REAL NOT NULL
+            );
             CREATE TABLE IF NOT EXISTS habit_log(
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
                 habit_id INTEGER NOT NULL,
@@ -228,6 +259,109 @@ class Memory:
     async def remove_device(self, device_id):
         async with self.lock:
             cur = self.db.execute("DELETE FROM devices WHERE id=?", (device_id,))
+            self.db.commit()
+            return cur.rowcount > 0
+
+    # ---------- حساب‌های بانکی/نقدی ----------
+    _ACC_COLS = "id, name, kind, balance, note, updated_ts"
+
+    @staticmethod
+    def _acc(r):
+        return {"id": r[0], "name": r[1], "kind": r[2], "balance": r[3], "note": r[4], "updated_ts": r[5]}
+
+    async def list_accounts(self):
+        async with self.lock:
+            return [self._acc(r) for r in self.db.execute(f"SELECT {self._ACC_COLS} FROM accounts ORDER BY id").fetchall()]
+
+    async def add_account(self, name, kind="bank", balance=0.0, note=None):
+        now = time.time()
+        async with self.lock:
+            cur = self.db.execute("INSERT INTO accounts(name, kind, balance, note, created_ts, updated_ts) VALUES(?,?,?,?,?,?)",
+                                  (name, kind, balance, note, now, now))
+            self.db.execute("INSERT INTO account_log(account_id, balance, ts) VALUES(?,?,?)", (cur.lastrowid, balance, now))
+            self.db.commit()
+            return cur.lastrowid
+
+    async def update_account(self, account_id, patch):
+        async with self.lock:
+            r = self.db.execute(f"SELECT {self._ACC_COLS} FROM accounts WHERE id=?", (account_id,)).fetchone()
+            if not r:
+                return None
+            cur = self._acc(r)
+            new = {k: (patch[k] if k in patch and patch[k] is not None else cur[k]) for k in ("name", "kind", "balance", "note")}
+            if "note" in patch:
+                new["note"] = patch["note"]
+            now = time.time()
+            self.db.execute("UPDATE accounts SET name=?, kind=?, balance=?, note=?, updated_ts=? WHERE id=?",
+                            (new["name"], new["kind"], new["balance"], new["note"], now, account_id))
+            if new["balance"] != cur["balance"]:
+                self.db.execute("INSERT INTO account_log(account_id, balance, ts) VALUES(?,?,?)", (account_id, new["balance"], now))
+            self.db.commit()
+            r = self.db.execute(f"SELECT {self._ACC_COLS} FROM accounts WHERE id=?", (account_id,)).fetchone()
+            return self._acc(r)
+
+    async def delete_account(self, account_id):
+        async with self.lock:
+            cur = self.db.execute("DELETE FROM accounts WHERE id=?", (account_id,))
+            self.db.execute("DELETE FROM account_log WHERE account_id=?", (account_id,))
+            self.db.commit()
+            return cur.rowcount > 0
+
+    async def account_history(self, account_id, limit=60):
+        async with self.lock:
+            rows = self.db.execute("SELECT balance, ts FROM account_log WHERE account_id=? ORDER BY id DESC LIMIT ?",
+                                   (account_id, limit)).fetchall()
+        return [{"balance": r[0], "ts": r[1]} for r in reversed(rows)]
+
+    # ---------- بدهی و اقساط ----------
+    _DEBT_COLS = ("id, title, kind, creditor, total, remaining, installment_amount, installments_total, "
+                  "installments_paid, due_day, next_due, status, note")
+
+    @staticmethod
+    def _debt(r):
+        keys = ("id", "title", "kind", "creditor", "total", "remaining", "installment_amount", "installments_total",
+                "installments_paid", "due_day", "next_due", "status", "note")
+        return dict(zip(keys, r))
+
+    async def list_debts(self, include_paid=True):
+        q = f"SELECT {self._DEBT_COLS} FROM debts" + ("" if include_paid else " WHERE status='active'") + " ORDER BY status, next_due IS NULL, next_due, id"
+        async with self.lock:
+            return [self._debt(r) for r in self.db.execute(q).fetchall()]
+
+    async def get_debt(self, debt_id):
+        async with self.lock:
+            r = self.db.execute(f"SELECT {self._DEBT_COLS} FROM debts WHERE id=?", (debt_id,)).fetchone()
+        return self._debt(r) if r else None
+
+    async def add_debt(self, d):
+        async with self.lock:
+            cur = self.db.execute(
+                "INSERT INTO debts(title, kind, creditor, total, remaining, installment_amount, installments_total, "
+                "installments_paid, due_day, next_due, status, note, created_ts) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?)",
+                (d["title"], d.get("kind", "installment"), d.get("creditor"), d.get("total", 0), d.get("remaining", d.get("total", 0)),
+                 d.get("installment_amount", 0), d.get("installments_total"), d.get("installments_paid", 0),
+                 d.get("due_day"), d.get("next_due"), d.get("status", "active"), d.get("note"), time.time()))
+            self.db.commit()
+            return cur.lastrowid
+
+    async def update_debt(self, debt_id, patch):
+        cur = await self.get_debt(debt_id)
+        if not cur:
+            return None
+        cols = ("title", "kind", "creditor", "total", "remaining", "installment_amount", "installments_total",
+                "installments_paid", "due_day", "next_due", "status", "note")
+        new = {k: (patch[k] if k in patch else cur[k]) for k in cols}
+        async with self.lock:
+            self.db.execute(
+                "UPDATE debts SET title=?, kind=?, creditor=?, total=?, remaining=?, installment_amount=?, installments_total=?, "
+                "installments_paid=?, due_day=?, next_due=?, status=?, note=? WHERE id=?",
+                (*[new[k] for k in cols], debt_id))
+            self.db.commit()
+        return await self.get_debt(debt_id)
+
+    async def delete_debt(self, debt_id):
+        async with self.lock:
+            cur = self.db.execute("DELETE FROM debts WHERE id=?", (debt_id,))
             self.db.commit()
             return cur.rowcount > 0
 
