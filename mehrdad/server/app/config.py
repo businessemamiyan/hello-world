@@ -15,7 +15,7 @@ class Config:
     owner_id: int | None = None
     setup_code: str = ""
     anthropic_api_key: str = ""
-    anthropic_model: str = "claude-sonnet-5"
+    anthropic_model: str = "claude-sonnet-5-5"
     telegram_proxy: str = ""
     telegram_api: str = "https://api.telegram.org"
     anthropic_proxy: str = ""
@@ -32,7 +32,7 @@ class Config:
             owner_id=_int(e("OWNER_ID")),
             setup_code=e("SETUP_CODE", ""),
             anthropic_api_key=e("ANTHROPIC_API_KEY", ""),
-            anthropic_model=e("ANTHROPIC_MODEL", "claude-sonnet-5"),
+            anthropic_model=e("ANTHROPIC_MODEL", "claude-sonnet-5-5"),
             telegram_proxy=e("TELEGRAM_PROXY", ""),
             telegram_api=e("TELEGRAM_API_BASE", "https://api.telegram.org"),
             anthropic_proxy=e("ANTHROPIC_PROXY", ""),

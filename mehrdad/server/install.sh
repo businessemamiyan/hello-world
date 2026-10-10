@@ -55,8 +55,14 @@ if ! grep -q '^BOT_TOKEN=.\+' .env || ! grep -q '^ANTHROPIC_API_KEY=.\+' .env; t
   exit 0
 fi
 
-log "بالا آوردن مهرداد (پروفایل proxy — رسیدن به تلگرام/Anthropic از ایران)"
-docker compose --profile proxy up -d --build
+if grep -q '^\(TELEGRAM\|ANTHROPIC\)_PROXY=.\+' .env; then
+  [ -f xray/config.json ] || die "پروکسی در .env فعال است ولی xray/config.json نیست (xray/config.example.json را کپی و پر کن)."
+  log "بالا آوردن مهرداد (با پروفایل proxy — سرور داخل ایران)"
+  docker compose --profile proxy up -d --build
+else
+  log "بالا آوردن مهرداد (اتصال مستقیم — سرور خارج از ایران)"
+  docker compose up -d --build
+fi
 
 log "وضعیت"
 sleep 2

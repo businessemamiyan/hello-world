@@ -26,7 +26,7 @@ async def amain():
         sys.exit(1)
     mem = Memory(os.path.join(cfg.data_dir, "mehrdad.db"))
     tg = Telegram(cfg.bot_token, cfg.telegram_proxy, cfg.telegram_api)
-    brain = Brain(cfg.anthropic_api_key, cfg.anthropic_model, cfg.anthropic_proxy)
+    brain = Brain(cfg.anthropic_api_key, cfg.anthropic_model, cfg.anthropic_proxy, search=mem.search_memory)
     bot = Bot(mem, tg, brain, cfg)
     sched = Scheduler(bot, mem, cfg)
     app = create_app(mem, time.time())

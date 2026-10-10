@@ -10,8 +10,22 @@
 import asyncio
 import datetime
 import os
+import re
 import sqlite3
 import time
+
+_FA_DIGITS = str.maketrans("۰۱۲۳۴۵۶۷۸۹٠١٢٣٤٥٦٧٨٩", "01234567890123456789")
+_NORMALIZE = str.maketrans({"ي": "ی", "ك": "ک", "ۀ": "ه", "ة": "ه", "أ": "ا", "إ": "ا", "ؤ": "و", "‌": " ", "ـ": ""})
+_DIACRITICS = re.compile("[ً-ٰٟ]")
+_TOKEN = re.compile(r"\w+", re.UNICODE)
+
+
+def normalize_fa(text):
+    """یکسان‌سازی متن فارسی برای جست‌وجو: ي/ك عربی، نیم‌فاصله، اعراب، ارقام فارسی/عربی."""
+    if not text:
+        return ""
+    t = _DIACRITICS.sub("", str(text).translate(_FA_DIGITS).translate(_NORMALIZE))
+    return t.lower()
 
 
 def today_str():
@@ -69,8 +83,28 @@ class Memory:
             );
             """
         )
+        self.fts = self._init_fts()
         self.db.commit()
         self.lock = asyncio.Lock()
+
+    def _init_fts(self):
+        """جدول جست‌وجوی متنی (FTS5) روی حافظهٔ بلندمدت؛ اگر SQLite بدون FTS5 باشد، به LIKE برمی‌گردیم.
+        متن نرمال‌شده ذخیره می‌شود؛ ردیف‌های قدیمی که هنوز ایندکس نشده‌اند یک‌بار پر می‌شوند."""
+        try:
+            self.db.execute(
+                "CREATE VIRTUAL TABLE IF NOT EXISTS memory_fts USING fts5("
+                "summary, detail, memory_id UNINDEXED, tokenize='unicode61 remove_diacritics 2')"
+            )
+            missing = self.db.execute(
+                "SELECT id, summary, detail FROM memory WHERE id NOT IN (SELECT memory_id FROM memory_fts)"
+            ).fetchall()
+            self.db.executemany(
+                "INSERT INTO memory_fts(summary, detail, memory_id) VALUES(?,?,?)",
+                [(normalize_fa(s), normalize_fa(d), i) for i, s, d in missing],
+            )
+            return True
+        except sqlite3.OperationalError:
+            return False
 
     # ---------- owner ----------
     async def set_owner(self, chat_id):
@@ -106,14 +140,45 @@ class Memory:
             return
         async with self.lock:
             now = time.time()
-            self.db.executemany(
-                "INSERT INTO memory(type, summary, detail, amount, ts) VALUES(?,?,?,?,?)",
-                [
-                    (e.get("type", "note"), e.get("summary", ""), e.get("detail"), e.get("amount"), now)
-                    for e in entries
-                ],
-            )
+            for e in entries:
+                cur = self.db.execute(
+                    "INSERT INTO memory(type, summary, detail, amount, ts) VALUES(?,?,?,?,?)",
+                    (e.get("type", "note"), e.get("summary", ""), e.get("detail"), e.get("amount"), now),
+                )
+                if self.fts:
+                    self.db.execute(
+                        "INSERT INTO memory_fts(summary, detail, memory_id) VALUES(?,?,?)",
+                        (normalize_fa(e.get("summary")), normalize_fa(e.get("detail")), cur.lastrowid),
+                    )
             self.db.commit()
+
+    async def search_memory(self, query, limit=10):
+        """جست‌وجو در کل حافظهٔ بلندمدت (نه فقط ۴۰ مورد آخر). کلمات با OR ترکیب می‌شوند و پیشوندی‌اند
+        (مثلاً «خرج» → «خرجی»). نتیجه به ترتیب ربط (bm25)؛ بدون نتیجه → []."""
+        tokens = [t for t in _TOKEN.findall(normalize_fa(query)) if len(t) > 1][:8]
+        if not tokens:
+            return []
+        async with self.lock:
+            rows = []
+            if self.fts:
+                match = " OR ".join('"%s"*' % t.replace('"', "") for t in tokens)
+                try:
+                    rows = self.db.execute(
+                        "SELECT m.type, m.summary, m.detail, m.amount, m.ts FROM memory_fts f "
+                        "JOIN memory m ON m.id = f.memory_id WHERE memory_fts MATCH ? "
+                        "ORDER BY bm25(memory_fts) LIMIT ?",
+                        (match, limit),
+                    ).fetchall()
+                except sqlite3.OperationalError:
+                    rows = []
+            else:
+                like = " OR ".join("(summary LIKE ? OR detail LIKE ?)" for _ in tokens)
+                params = [p for t in tokens for p in (f"%{t}%", f"%{t}%")]
+                rows = self.db.execute(
+                    f"SELECT type, summary, detail, amount, ts FROM memory WHERE {like} ORDER BY id DESC LIMIT ?",
+                    (*params, limit),
+                ).fetchall()
+            return [{"type": r[0], "summary": r[1], "detail": r[2], "amount": r[3], "ts": r[4]} for r in rows]
 
     async def recent_memory(self, limit=40):
         async with self.lock:

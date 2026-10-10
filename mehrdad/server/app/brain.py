@@ -12,6 +12,18 @@ log = logging.getLogger("brain")
 
 ANTHROPIC_URL = "https://api.anthropic.com/v1/messages"
 ANTHROPIC_VERSION = "2023-06-01"
+MAX_TOOL_ROUNDS = 4
+
+SEARCH_TOOL = {
+    "name": "search_memory",
+    "description": "جست‌وجو در کل حافظهٔ بلندمدت کاربر (خرج، درآمد، ایده، کار، حس‌وحال، عادت، یادداشت) با کلمات کلیدی فارسی. "
+                   "برای چیزهایی که در ۴۰ خاطرهٔ اخیر پرامپت نیست.",
+    "input_schema": {
+        "type": "object",
+        "properties": {"query": {"type": "string", "description": "کلمات کلیدی، مثلاً «قهوه تیچای قیمت»"}},
+        "required": ["query"],
+    },
+}
 
 SYSTEM_PROMPT = """تو «مهرداد» هستی — مغز دومِ کاربر. نه یک اپ، نه یک فرم؛ یک همراه واقعی که همه‌چیز
 زندگی و کار و پول کاربر را پیگیری می‌کند و کنارش می‌ماند.
@@ -51,6 +63,11 @@ SYSTEM_PROMPT = """تو «مهرداد» هستی — مغز دومِ کاربر
 {"reply": "<جواب فارسی تو به کاربر>", "memory": [{"type": "<expense|income|idea|task|feeling|habit|note|other>", "summary": "<خلاصه یک‌خطی>", "detail": "<جزئیات اختیاری>", "amount": <عدد تومان یا null>}]}
 نوع "habit" فقط برای وقتی است که کاربر درباره‌ی عادتی حرف می‌زند بدون اینکه با /habit ثبتش کرده
 باشد (فقط برای حافظه — ساخت ردیف واقعی عادت و استریک فقط با دستور /habit انجام می‌شود، نه این JSON).
+
+### حافظهٔ قدیمی
+در پرامپت فقط ۴۰ خاطرهٔ آخر هست. اگر کاربر درباره‌ی چیزی می‌پرسد که ممکن است قدیمی‌تر باشد («پارسال دربارهٔ … چی گفتم؟»،
+«این ماه خرجم چقدر بود؟»، اسم یا ماجرایی که نمی‌بینی)، **قبل از جواب دادن** با ابزار `search_memory` جست‌وجو کن؛ حدس نزن.
+اگر چیزی پیدا نشد، صادقانه بگو یادت نیست.
 
 اگر پیام کاربر چیز قابل‌ذخیره‌ای نداشت (مثلاً فقط سلام یا یک سوال عمومی)، memory را [] بگذار.
 جواب‌ها را کوتاه و مستقیم بنویس — مثل یک رفیق باهوش، نه یک مقاله."""
@@ -93,10 +110,60 @@ def _extract_json(text):
 
 
 class Brain:
-    def __init__(self, api_key, model="claude-sonnet-5", proxy=""):
+    def __init__(self, api_key, model="claude-sonnet-5-5", proxy="", search=None):
+        """search: coroutine async (query) -> list[dict] برای ابزار search_memory؛ None یعنی بدون ابزار."""
         self.api_key = api_key
         self.model = model
+        self.search = search
         self.client = httpx.AsyncClient(proxy=proxy or None, timeout=httpx.Timeout(60, connect=15))
+
+    async def _call(self, system, messages, tools):
+        body = {"model": self.model, "max_tokens": 1024, "system": system, "messages": messages}
+        if tools:
+            body["tools"] = tools
+        r = await self.client.post(
+            ANTHROPIC_URL,
+            headers={"x-api-key": self.api_key, "anthropic-version": ANTHROPIC_VERSION,
+                     "content-type": "application/json"},
+            json=body,
+        )
+        if r.status_code >= 400:
+            log.error("anthropic %s: %s", r.status_code, r.text[:300])
+        r.raise_for_status()
+        return r.json()
+
+    async def _run_tool_loop(self, system, messages):
+        """تا MAX_TOOL_ROUNDS دور: اگر مدل ابزار خواست، اجرا و نتیجه را برمی‌گردانیم؛ وگرنه جواب نهایی."""
+        tools = [SEARCH_TOOL] if self.search else None
+        data = await self._call(system, messages, tools)
+        for _ in range(MAX_TOOL_ROUNDS):
+            if data.get("stop_reason") != "tool_use":
+                break
+            content = data.get("content", [])
+            results = []
+            for b in content:
+                if b.get("type") != "tool_use":
+                    continue
+                results.append({"type": "tool_result", "tool_use_id": b["id"], "content": await self._run_tool(b)})
+            if not results:
+                break
+            messages = messages + [{"role": "assistant", "content": content}, {"role": "user", "content": results}]
+            data = await self._call(system, messages, tools)
+        return data
+
+    async def _run_tool(self, block):
+        if block.get("name") != "search_memory" or not self.search:
+            return "ابزار ناشناخته."
+        found = await self.search((block.get("input") or {}).get("query", ""))
+        if not found:
+            return "چیزی پیدا نشد."
+        lines = []
+        for m in found:
+            day = time.strftime("%Y-%m-%d", time.localtime(m["ts"])) if m.get("ts") else "؟"
+            amt = f" ({int(m['amount']):,} تومان)" if m.get("amount") else ""
+            det = f" — {m['detail']}" if m.get("detail") else ""
+            lines.append(f"- {day} [{m['type']}] {m['summary']}{amt}{det}")
+        return "\n".join(lines)
 
     async def think(self, recent_history, recent_memory, user_text, active_habits=None):
         """recent_history: لیست (role, text) از پیام‌های اخیر (بدون پیام جدید).
@@ -121,22 +188,7 @@ class Brain:
         messages.append({"role": "user", "content": user_text})
 
         try:
-            r = await self.client.post(
-                ANTHROPIC_URL,
-                headers={
-                    "x-api-key": self.api_key,
-                    "anthropic-version": ANTHROPIC_VERSION,
-                    "content-type": "application/json",
-                },
-                json={
-                    "model": self.model,
-                    "max_tokens": 1024,
-                    "system": system,
-                    "messages": messages,
-                },
-            )
-            r.raise_for_status()
-            data = r.json()
+            data = await self._run_tool_loop(system, messages)
         except (httpx.HTTPError, ValueError) as e:
             log.warning("anthropic call failed: %s", e)
             return "الان نمی‌تونم فکر کنم (مشکل در اتصال). دوباره امتحان کن.", []
