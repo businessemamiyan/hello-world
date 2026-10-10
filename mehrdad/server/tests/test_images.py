@@ -93,7 +93,7 @@ async def test_telegram_rejects_non_image_and_oversize_and_strangers(tmp_path):
     mem, tg, brain, bot = make(tmp_path, FakeTG(b"MZ" + b"0" * 300))
     await mem.set_owner(7)
     await bot.handle_message({"chat": {"id": 7}, "photo": [{"file_id": "x", "file_size": 100}]})
-    assert brain.images is None and "فقط عکس" in tg.sent[-1]
+    assert brain.images is None and "عکس رو فقط" in tg.sent[-1]
     await bot.handle_message({"chat": {"id": 7}, "photo": [{"file_id": "y", "file_size": media.MAX_IMAGE_BYTES + 1}]})
     assert "بزرگ" in tg.sent[-1] and tg.downloaded == ["x"]
     await bot.handle_message({"chat": {"id": 99}, "photo": [{"file_id": "z", "file_size": 100}]})

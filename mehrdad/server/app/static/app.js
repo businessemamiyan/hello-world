@@ -1,4 +1,4 @@
-/* مهرداد — اپ وب (فارسی/RTL). داده فقط با توکن دستگاه از /api می‌آید؛ هیچ داده‌ای داخل خود فایل‌ها نیست. */
+/* مهرداد — اپ وب (فارسی/RTL). داده فقط با توکن دستگاه از /api میاد؛ هیچ داده‌ای داخل خود فایل‌ها نیست. */
 (() => {
 'use strict';
 const $ = (s, r = document) => r.querySelector(s);
@@ -188,7 +188,7 @@ async function viewToday() {
       <div class="meta"><span>درآمد <b class="num m-pos">${money(f.income)}</b></span><span>خرج <b class="num m-neg">${money(f.expense)}</b></span></div></div>
     <div class="card ai"><div class="row spread"><h2>امروز چی شد؟</h2><span class="pill ai">مهرداد</span></div>
       ${composer('sayToday', 'مثلاً: ۲۰۰ ت فروش داشتم، ناهار برنج خوردم')}
-      <p class="muted small">هر چه بنویسی خودش در بخش درست ثبت می‌شود.</p></div>
+      <p class="muted small">هر چی بنویسی خودش در بخش درست ثبت می‌شه.</p></div>
     ${plannedLine(f)}
     ${groupKpis(d, 4)}
     ${timeBars(d)}
@@ -215,7 +215,7 @@ async function viewWealth() {
     const paidPct = d.total > 0 ? Math.max(0, Math.min(100, (d.total - d.remaining) / d.total * 100)) : 0;
     const due = d.next_due ? new Date(d.next_due + 'T00:00:00') : null;
     const days = due ? Math.round((due - new Date(today.getFullYear(), today.getMonth(), today.getDate())) / 86400000) : null;
-    const pill = days === null ? '' : days < 0 ? `<span class="pill crit">${fa(-days)} روز گذشته</span>` : days <= 7 ? `<span class="pill warn">${days === 0 ? 'امروز' : fa(days) + ' روز دیگر'}</span>` : `<span class="pill">${fa(days)} روز دیگر</span>`;
+    const pill = days === null ? '' : days < 0 ? `<span class="pill crit">${fa(-days)} روز گذشته</span>` : days <= 7 ? `<span class="pill warn">${days === 0 ? 'امروز' : fa(days) + ' روز دیگه'}</span>` : `<span class="pill">${fa(days)} روز دیگه</span>`;
     return `<div class="card m-goal"><div class="row spread"><b>${esc(d.title)}</b><span class="row" style="gap:4px"><span class="pill gold">${DEBTKIND[d.kind] || ''}</span>
       <button class="x" data-act="debt-edit" data-id="${d.id}" aria-label="ویرایش">✎</button><button class="x" data-act="debt-del" data-id="${d.id}" aria-label="حذف">✕</button></span></div>
       <div class="row spread"><span class="muted small">${d.creditor ? esc(d.creditor) + ' · ' : ''}مانده <b class="num">${money(d.remaining)}</b> از <span class="num">${money(d.total)}</span></span>${pill}</div>
@@ -231,9 +231,9 @@ async function viewWealth() {
     <div class="kpis m-k3">${kpi('نقد', money(s.liquid), 'good')}${kpi('اقساط ماهانه', money(s.monthly_obligations), s.monthly_obligations ? 'warn' : '')}${kpi('اقساط ۳۰ روز', money(s.next30_due), s.next30_due > s.liquid ? 'crit' : '')}</div>
     <div class="stack">${s.alerts.map(a => `<div class="issue ${lvl[a.level] || 'info'}"><span class="tag">${esc(a.tag)}</span><div>${esc(a.text)}</div></div>`).join('')}</div>
     <div class="card ai"><div class="row spread"><h2>بررسی با مهرداد</h2><span class="pill ai">مربی</span></div>
-      <p class="muted small">حساب‌ها، اقساط و درآمد/خرج واقعی‌ات را کنار هم می‌بیند و راه‌حل می‌دهد.</p>
-      <div class="row"><button class="btn ai" data-act="ask-fin" data-q="وضعیت مالی‌ام را کامل بررسی کن: حساب‌ها، اقساط، درآمد و خرج. مشکل‌ها و یک برنامهٔ مشخص برای پرداخت بدهی‌ها و پس‌انداز بده.">بررسی کامل</button>
-      <button class="btn" data-act="ask-fin" data-q="این ماه کدام خرج‌هایم را می‌توانم کم کنم تا اقساط را راحت‌تر بدهم؟">کجا خرج کم کنم؟</button></div><div id="finOut"></div></div>
+      <p class="muted small">حساب‌ها، اقساط و درآمد/خرج واقعی‌ات رو کنار هم می‌بینه و راه‌حل می‌ده.</p>
+      <div class="row"><button class="btn ai" data-act="ask-fin" data-q="وضعیت مالی‌ام رو کامل بررسی کن: حساب‌ها، اقساط، درآمد و خرج. مشکل‌ها و یک برنامهٔ مشخص برای پرداخت بدهی‌ها و پس‌انداز بده.">بررسی کامل</button>
+      <button class="btn" data-act="ask-fin" data-q="این ماه کدوم خرج‌هام رو می‌تونم کم کنم تا اقساط رو راحت‌تر بدم؟">کجا خرج کم کنم؟</button></div><div id="finOut"></div></div>
     <div class="card"><div class="row spread"><h2>🏦 حساب‌ها و موجودی</h2><span class="pill num">${fa(f.accounts.length)}</span></div>
       ${f.accounts.length ? f.accounts.map(accRow).join('') : empty('هنوز حسابی ثبت نشده.')}
       <form class="form" data-form="account"><label class="f"><span>نام (مثلاً بانک ملی)</span><input type="text" name="name" required maxlength="60"></label>
@@ -247,12 +247,12 @@ async function viewWealth() {
       <label class="f"><span>نوع</span><select name="kind">${Object.entries(DEBTKIND).map(([k, v]) => `<option value="${k}">${v}</option>`).join('')}</select></label>
       <label class="f"><span>طلبکار</span><input type="text" name="creditor" maxlength="80"></label>
       <label class="f"><span>مبلغ کل</span><input type="number" name="total" inputmode="numeric" required min="0"></label>
-      <label class="f"><span>مانده فعلی (اگر کمتر است)</span><input type="number" name="remaining" inputmode="numeric" min="0"></label>
+      <label class="f"><span>مانده فعلی (اگه کمتره)</span><input type="number" name="remaining" inputmode="numeric" min="0"></label>
       <label class="f"><span>مبلغ هر قسط</span><input type="number" name="installment_amount" inputmode="numeric" min="0"></label>
       <label class="f"><span>تعداد کل اقساط</span><input type="number" name="installments_total" inputmode="numeric" min="1"></label>
       <label class="f"><span>روز سررسید در ماه (۱ تا ۳۱)</span><input type="number" name="due_day" inputmode="numeric" min="1" max="31"></label>
       <button class="btn primary" type="submit">افزودن</button></form></div>
-    ${s.payoff.length ? `<div class="card"><h2>کی بدهی‌ها تمام می‌شود؟</h2>${s.payoff.map(p => `<div class="row spread"><span>${esc(p.title)}</span><span class="pill num">${fa(p.months_left)} ماه · ${esc(p.free_on)}</span></div>`).join('')}</div>` : ''}
+    ${s.payoff.length ? `<div class="card"><h2>کی بدهی‌ها تمام می‌شه؟</h2>${s.payoff.map(p => `<div class="row spread"><span>${esc(p.title)}</span><span class="pill num">${fa(p.months_left)} ماه · ${esc(p.free_on)}</span></div>`).join('')}</div>` : ''}
     ${paid.length ? `<details class="card"><summary>تسویه‌شده‌ها (${fa(paid.length)})</summary>${paid.map(debtCard).join('')}</details>` : ''}
   </section>`;
 }
@@ -270,30 +270,30 @@ async function viewPayroll() {
   const head = d ? `<div class="north"><span class="eyebrow">${s.actual ? 'فیش واقعی' : 'حقوق تخمینی'} · ${esc(s.label)}</span>
       <div class="fig"><strong class="num">${money(d.net)}</strong><span>تومان خالص پرداختی</span></div>
       <div class="meta"><span>جمع پرداختی <b class="num m-pos">${money(d.total_earn)}</b></span><span>جمع کسورات <b class="num m-neg">${money(d.total_ded)}</b></span></div>
-      ${s.actual ? '' : `<div class="muted small" style="color:var(--hero-sub)">از روی فیش واقعی ${esc(s.template_month)} محاسبه شده؛ هر چه اضافه‌کاری/مرخصی بگویی دقیق‌تر می‌شود.</div>`}</div>`
-    : `<div class="card gold"><h2>🧾 فیش حقوقی</h2><p class="muted small">یک بار فیش یکی از ماه‌ها را پایین پر کن (یا عکسش را در چت بفرست)؛ بعد حقوق ماه‌های بعد را خودم حساب می‌کنم و اضافه‌کاری و مرخصی را از حرف‌هایت می‌گیرم.</p></div>`;
+      ${s.actual ? '' : `<div class="muted small" style="color:var(--hero-sub)">از روی فیش واقعی ${esc(s.template_month)} محاسبه شده؛ هر چی اضافه‌کاری/مرخصی بگویی دقیق‌تر می‌شه.</div>`}</div>`
+    : `<div class="card gold"><h2>🧾 فیش حقوقی</h2><p class="muted small">یک بار فیش یکی از ماه‌ها رو پایین پر کن (یا عکسش رو در چت بفرست)؛ بعد حقوق ماه‌های بعد رو خودم حساب می‌کنم و اضافه‌کاری و مرخصی رو از حرف‌هات می‌گیرم.</p></div>`;
   const brk = d ? `<div class="card"><div class="row spread"><h2>پرداختی‌ها</h2><span class="pill gold">${s.actual ? 'واقعی' : 'تخمینی'}</span></div>
       ${L.earn.filter(([key]) => d.earn[key] || key === 'base').map(([key, l]) => row(esc(l), d.earn[key])).join('')}
       <div class="row spread" style="border-top:1px solid var(--line);padding-top:6px"><b>جمع پرداختی</b><b class="num m-pos">${money(d.total_earn)}</b></div>
       <h2 style="margin-top:10px">کسورات</h2>${L.ded.filter(([key]) => d.ded[key]).map(([key, l]) => row(esc(l), d.ded[key], 'm-neg')).join('') || empty('کسوری نیست.')}
       <div class="row spread" style="border-top:1px solid var(--line);padding-top:6px"><b>جمع کسورات</b><b class="num m-neg">${money(d.total_ded)}</b></div>
       <div class="row spread"><b>خالص پرداختی</b><b class="num">${money(d.net)}</b></div>
-      ${s.actual && (s.actual.mismatch || []).length ? '<div class="issue warn"><span class="tag">چک کن</span><div>جمع‌های واردشده با مجموع اقلام نمی‌خواند؛ شاید قلمی جا افتاده یا عددی اشتباه است.</div></div>' : ''}
+      ${s.actual && (s.actual.mismatch || []).length ? '<div class="issue warn"><span class="tag">چک کن</span><div>جمع‌های واردشده با مجموع اقلام نمی‌خونه؛ شاید قلمی جا افتاده یا عددی اشتباه‌ست.</div></div>' : ''}
       <h2 style="margin-top:10px">کارکرد</h2>
       <div class="kpis m-k3">${kpi('روز کارکرد', fa(d.work.days_worked || 0))}${kpi('اضافه‌کاری عادی', fa(d.work.ot_normal_h || 0) + ' س')}${kpi('اضافه‌کاری تعطیلی', fa(d.work.ot_holiday_h || 0) + ' س')}
         ${kpi('مرخصی', fa(d.work.leave_days || 0) + ' روز')}${kpi('ساعت کارکرد', fa(d.work.work_hours || 0))}</div>
-      ${!s.actual && s.estimate ? `<p class="muted small">فرض‌های یادگرفته‌شده از فیش: نرخ بیمه ${fa((s.estimate.assumptions.insurance_rate * 100).toFixed(1))}٪ · نرخ مالیات ${fa((s.estimate.assumptions.tax_rate * 100).toFixed(1))}٪ · ضریب اضافه‌کاری ${fa(s.estimate.assumptions.factor_ot_normal)}. مالیات را شرکت می‌دهد (مزایا ۳) پس روی خالص اثری ندارد.</p>` : ''}
+      ${!s.actual && s.estimate ? `<p class="muted small">فرض‌های یادگرفته‌شده از فیش: نرخ بیمه ${fa((s.estimate.assumptions.insurance_rate * 100).toFixed(1))}٪ · نرخ مالیات ${fa((s.estimate.assumptions.tax_rate * 100).toFixed(1))}٪ · ضریب اضافه‌کاری ${fa(s.estimate.assumptions.factor_ot_normal)}. مالیات رو شرکت می‌ده (مزایا ۳) پس روی خالص اثری نداره.</p>` : ''}
       ${s.actual ? `<div class="row"><button class="btn sm danger" data-act="pay-del">حذف فیش این ماه</button></div>` : ''}</div>` : '';
   const quick = `<div class="card ai"><div class="row spread"><h2>اضافه‌کاری، مرخصی، مساعده</h2><span class="pill ai">${esc(s.label)}</span></div>
-      <p class="muted small">یا همین را در چت به مهرداد بگو: «امروز ۲ ساعت اضافه‌کاری کردم». جمع این ماه: عادی ${fa(s.vars.ot_normal_h || 0)} س · تعطیلی ${fa(s.vars.ot_holiday_h || 0)} س · مرخصی ${fa(s.vars.leave_days || 0)} روز · غیبت ${fa(s.vars.unpaid_days || 0)} روز${s.vars.advance ? ' · مساعده ' + money(s.vars.advance) : ''}.</p>
+      <p class="muted small">یا همین رو در چت به مهرداد بگو: «امروز ۲ ساعت اضافه‌کاری کردم». جمع این ماه: عادی ${fa(s.vars.ot_normal_h || 0)} س · تعطیلی ${fa(s.vars.ot_holiday_h || 0)} س · مرخصی ${fa(s.vars.leave_days || 0)} روز · غیبت ${fa(s.vars.unpaid_days || 0)} روز${s.vars.advance ? ' · مساعده ' + money(s.vars.advance) : ''}.</p>
       <form class="form" data-form="payvar"><label class="f"><span>چه چیزی؟</span><select name="op">${PAY_VARS.map(([v, l]) => `<option value="${v}">${l}</option>`).join('')}</select></label>
         <label class="f"><span>مقدار</span><input type="text" name="value" inputmode="decimal" required></label>
-        <label class="f"><span>نحوه</span><select name="mode"><option value="add">اضافه کن به جمع</option><option value="set">جمع کل ماه این است</option></select></label>
+        <label class="f"><span>نحوه</span><select name="mode"><option value="add">اضافه کن به جمع</option><option value="set">جمع کل ماه اینه</option></select></label>
         <button class="btn primary" type="submit">ثبت</button></form></div>`;
   const src = s.actual || s.template || { earn: {}, ded: {}, work: {} };
   const fld = (grp, key, label) => `<label class="f"><span>${esc(label)}</span><input type="text" inputmode="decimal" name="${grp}_${key}" value="${(src[grp] || {})[key] ? (grp === 'work' ? src[grp][key] : Math.round(src[grp][key] * k)) : ''}"></label>`;
   const form = `<div class="card"><div class="row spread"><h2>${s.actual ? 'ویرایش فیش واقعی' : 'ثبت فیش واقعی (نمونه)'}</h2><span class="muted small">ماه ${esc(s.label)}</span></div>
-      <p class="muted small">${s.actual ? '' : 'یک ماه را کامل پر کن؛ ماه‌های بعد از روی آن حساب می‌شوند. هر ماه که فیش واقعی آمد دوباره پرش کن تا دقیق‌تر شود. '}اقلام خالی = صفر.</p>
+      <p class="muted small">${s.actual ? '' : 'یک ماه رو کامل پر کن؛ ماه‌های بعد از روی اون حساب می‌شن. هر ماه که فیش واقعی اومد دوباره پرش کن تا دقیق‌تر بشه. '}اقلام خالی = صفر.</p>
       <form class="form" data-form="payslip"><label class="f"><span>ماه فیش (مثل ۱۴۰۵-۰۷)</span><input type="text" name="month" value="${esc(fa(s.month))}" required dir="ltr"></label>
         <label class="f"><span>واحد مبلغ‌ها</span><select name="unit"><option value="toman" ${st.unit === 'toman' ? 'selected' : ''}>تومان</option><option value="rial" ${st.unit === 'rial' ? 'selected' : ''}>ریال</option></select></label>
         <div class="full eyebrow">پرداختی‌ها</div>${L.earn.map(([key, l]) => fld('earn', key, l)).join('')}
@@ -308,13 +308,13 @@ async function viewPayroll() {
       <span><span class="pill ${m.actual ? 'good' : ''}">${m.actual ? 'واقعی' : 'تخمینی'}</span> <b class="num">${money(m.net)}</b></span></div>`).join('') || empty('هنوز فیشی نیست.')}</div>`;
   const ins = new Set(st.insurable);
   const sett = `<details class="card"><summary>تنظیمات محاسبه</summary><div class="stack6 small" style="margin-top:8px">
-      <label class="f"><span>مبنای روز</span><select data-act="pay-setting" data-key="day_basis"><option value="auto" ${st.day_basis === 'auto' ? 'selected' : ''}>خودکار (از روی فیش نمونه تشخیص می‌دهد)</option>
-        <option value="month" ${st.day_basis === 'month' ? 'selected' : ''}>ماه کامل = حقوق کامل (۳۰ یا ۳۱ روز فرقی ندارد)</option>
+      <label class="f"><span>مبنای روز</span><select data-act="pay-setting" data-key="day_basis"><option value="auto" ${st.day_basis === 'auto' ? 'selected' : ''}>خودکار (از روی فیش نمونه تشخیص می‌ده)</option>
+        <option value="month" ${st.day_basis === 'month' ? 'selected' : ''}>ماه کامل = حقوق کامل (۳۰ یا ۳۱ روز فرقی نداره)</option>
         <option value="30cap" ${st.day_basis === '30cap' ? 'selected' : ''}>هر ماه ۳۰ روز (حتی ماه ۳۱ روزه)</option>
-        <option value="30" ${st.day_basis === '30' ? 'selected' : ''}>روزمزد = یک‌سی‌ام (ماه ۳۱ روزه ۳۱ روز می‌شود)</option></select></label>
+        <option value="30" ${st.day_basis === '30' ? 'selected' : ''}>روزمزد = یک‌سی‌ام (ماه ۳۱ روزه ۳۱ روز می‌شه)</option></select></label>
       <div class="muted">اقلام مشمول بیمه:</div>
       <div class="row">${L.earn.filter(([key]) => key !== 'benefit3').map(([key, l]) => `<label class="row" style="gap:4px"><input type="checkbox" data-act="pay-ins" value="${key}" ${ins.has(key) ? 'checked' : ''}> ${esc(l)}</label>`).join('')}</div>
-      <div class="muted">محاسبه‌ها همه تخمین‌اند؛ هر ماه که فیش واقعی را ثبت کنی ضریب‌ها از همان دوباره یاد گرفته می‌شود.</div></div></details>`;
+      <div class="muted">محاسبه‌ها همه تخمین‌اند؛ هر ماه که فیش واقعی رو ثبت کنی ضریب‌ها از همون دوباره یاد گرفته می‌شه.</div></div></details>`;
   return `<section class="pane">${mviewSeg()}<div class="pane-title"><h1>فیش حقوقی</h1></div>${nav}${head}${quick}${brk}${form}${hist}${sett}</section>`;
 }
 
@@ -350,7 +350,7 @@ async function viewLife() {
   const sec = (k, title, extra = '') => by(k).length ? `<div class="card"><div class="row spread"><h2>${ICON[k]} ${title}</h2><span class="pill num">${fa(by(k).length)}</span></div>${extra}${timeline(by(k), S.lrange)}</div>` : '';
   const intimacy = S.priv
     ? sec('intimacy', 'زندگی زناشویی')
-    : `<div class="card"><div class="m-lock">🔒 <span>بخش‌های خصوصی پنهان‌اند. با دکمهٔ 🔒 بالا نشانشان بده.</span></div></div>`;
+    : `<div class="card"><div class="m-lock">🔒 <span>بخش‌های خصوصی پنهونن. با دکمهٔ 🔒 بالا نشونشون بده.</span></div></div>`;
   return `<section class="pane">
     <div class="pane-title"><h1>زندگی</h1>${seg('lrange', S.lrange)}</div>
     ${groupKpis(d, 8)}
@@ -379,12 +379,12 @@ async function viewHabits() {
   return `<section class="pane">${gviewSeg()}
     <div class="pane-title"><h1>عادت‌ها و روتین</h1></div>
     <div class="card"><div class="row spread"><h2>🧭 روتین‌های منظم</h2><span class="pill num">${fa(p.routines.length)}</span></div>
-      <p class="muted small">مهرداد از روی چیزهایی که می‌گویی تشخیص می‌دهد (مثلاً «رفتم سر کار ایساتیس») و خودش روتین می‌سازد.</p>
+      <p class="muted small">مهرداد از روی چیزهایی که می‌گی تشخیص می‌ده (مثلاً «رفتم سر کار ایساتیس») و خودش روتین می‌سازه.</p>
       ${p.routines.length ? p.routines.map(r => `<div class="m-tl" style="grid-template-columns:1fr auto"><div class="m-tl-b"><div>${esc(r.name)}</div>
         <div class="muted small">${fa(r.per_week)} روز در هفته · معمولاً <span class="num">${esc(r.avg_start)}${r.avg_end ? '–' + esc(r.avg_end) : ''}</span>${r.avg_minutes ? ' · ' + dur(r.avg_minutes) : ''}</div></div>
-        <span class="pill num">${fa(r.days)} روز</span></div>`).join('') : empty('هنوز روتینی تشخیص داده نشده؛ چند روز روزت را تعریف کن.')}</div>
+        <span class="pill num">${fa(r.days)} روز</span></div>`).join('') : empty('هنوز روتینی تشخیص داده نشده؛ چند روز روزت رو تعریف کن.')}</div>
     <div class="card"><div class="row spread"><h2>🔍 عادت‌هایی که دیده‌ام</h2><span class="pill num">${fa(p.habits.length)}</span></div>
-      <p class="muted small">حتی اگر اسمش را عادت نگذاشته باشی (اسکرول اینستاگرام، قلیان، …)؛ این‌ها در هدف‌گذاری وزن دارند.</p>
+      <p class="muted small">حتی اگه اسمش رو عادت نذاشته باشی (اسکرول اینستاگرام، قلیان، …)؛ این‌ها در هدف‌گذاری وزن دارن.</p>
       ${bad.map(hrow).join('')}${good.map(hrow).join('')}${p.habits.length ? '' : empty('هنوز عادتی دیده نشده.')}</div>
     ${habitsCard(d.habits)}
     <div class="card"><h2>افزودن عادت برای پیگیری</h2><form class="form" data-form="habit">
@@ -409,14 +409,14 @@ async function viewProfile() {
   return `<section class="pane">${gviewSeg()}
     <div class="pane-title"><h1>پروفایل من</h1><span class="pill num">${fa(c.filled)} از ${fa(c.total)} بخش</span></div>
     <div class="card"><div class="bar"><i style="width:${pct}%"></i></div>
-      <p class="muted small">هر چه بیشتر بدانم، هدف‌ها و برنامه‌ها دقیق‌تر می‌شوند. ${c.missing.length ? 'خالی: ' + esc(c.missing.slice(0, 4).join('، ')) : 'همهٔ بخش‌ها پر است 👏'}</p>
+      <p class="muted small">هر چی بیشتر بدونم، هدف‌ها و برنامه‌ها دقیق‌تر می‌شن. ${c.missing.length ? 'خالی: ' + esc(c.missing.slice(0, 4).join('، ')) : 'همهٔ بخش‌ها پره 👏'}</p>
       <div class="row"><button class="btn ai" data-act="say-onboard">شروع مصاحبه در چت</button><span class="muted small">یا در تلگرام: /onboard</span></div></div>
-    <div class="card gold"><div class="row spread"><h2>💌 لینک برای همسرت</h2><span class="pill gold">او دربارهٔ تو جواب می‌دهد</span></div>
-      <p class="muted small">یک لینک امن و فقط برای پرسش‌نامه؛ او هیچ‌چیز از اطلاعات تو را نمی‌بیند. پاسخ‌هایش اینجا برای خودت دیدنی و قابل‌حذف است و او این را در صفحه می‌خواند.</p>
+    <div class="card gold"><div class="row spread"><h2>💌 لینک برای همسرت</h2><span class="pill gold">فقط چند تا سؤال ساده</span></div>
+      <p class="muted small">یه لینک امن فقط برای چند تا سؤال؛ همسرت هیچ‌چیز از اطلاعات تو رو نمی‌بینه. جواب‌هاش همین‌جا توی پروفایلت می‌آد و هر کدوم رو خواستی می‌تونی پاک کنی.</p>
       <div class="row"><button class="btn primary" data-act="make-invite">ساخت لینک تازه</button></div><div id="inviteOut"></div>
       ${inv.invites.length ? `<div class="stack6" style="margin-top:6px">${inv.invites.map(invRow).join('')}</div>` : ''}</div>
     ${secs.filter(k => by[k]).map(k => `<div class="card"><div class="row spread"><h2>${esc(k)}</h2><span class="pill num">${fa(by[k].length)}</span></div>${by[k].slice().reverse().map(fact).join('')}</div>`).join('')
-      || `<div class="card">${empty('هنوز چیزی دربارهٔ تو ثبت نشده. شروع کن: «من … هستم و …» یا مصاحبه را بزن.')}</div>`}
+      || `<div class="card">${empty('هنوز چیزی دربارهٔ تو ثبت نشده. شروع کن: «من … هستم و …» یا مصاحبه رو بزن.')}</div>`}
   </section>`;
 }
 
@@ -437,10 +437,10 @@ async function viewGoals() {
   return `<section class="pane">${gviewSeg()}
     <div class="pane-title"><h1>هدف‌ها و برنامه</h1></div>
     <div class="card gold"><div class="row spread"><h2>🎯 هدف‌گذاری هوشمند</h2><span class="pill gold">بر اساس شناخت از تو</span></div>
-      <p class="muted small">مهرداد بر پایهٔ پروفایل، روتین‌ها، عادت‌ها و مالی‌ات هدف پیشنهاد می‌دهد؛ هر کدام را خودت تأیید می‌کنی.</p>
+      <p class="muted small">مهرداد بر پایهٔ پروفایل، روتین‌ها، عادت‌ها و مالی‌ات هدف پیشنهاد می‌ده؛ هر کدوم رو خودت تأیید می‌کنی.</p>
       <div class="row"><button class="btn primary" data-act="suggest-goals">پیشنهاد هدف</button></div><div id="goalSuggest"></div></div>
     <div class="card ai"><div class="row spread"><h2>برنامه‌ریزی با مهرداد</h2><span class="pill ai">مربی</span></div>
-      <p class="muted small">بر اساس هدف‌ها و کارهای بازت، برنامهٔ هفته را می‌چیند.</p>
+      <p class="muted small">بر اساس هدف‌ها و کارهای بازت، برنامهٔ هفته رو می‌چینه.</p>
       <div class="row"><button class="btn ai" data-act="plan" data-what="هفته">برنامهٔ این هفته</button><button class="btn" data-act="plan" data-what="امروز">برنامهٔ امروز</button></div>
       <div id="planOut"></div></div>
     <h2>🎯 هدف‌ها</h2>
@@ -460,13 +460,13 @@ async function viewChat() {
   const r = await api('/api/history?limit=80');
   const msgs = r.messages.map(m => `<div class="m-b ${m.role === 'user' ? 'me' : 'bot'}">${esc(m.text)}</div>`).join('');
   return `<section class="pane"><div class="pane-title"><h1>گفتگو با مهرداد</h1></div>
-    <div class="m-chatwrap"><div class="m-chat" id="chatList">${msgs || empty('هنوز چیزی نگفته‌ای.')}</div></div>
+    <div class="m-chatwrap"><div class="m-chat" id="chatList">${msgs || empty('هنوز چیزی نگفتی.')}</div></div>
     <div class="m-composer-fixed">${composer('sayChat', 'بنویس یا با 🎤 بگو…')}</div></section>`;
 }
 
 function eveCard(c) {
   const qs = c.evening_questions || [], ans = c.answers || {};
-  return `<div class="card"><div class="row spread"><h2>🌙 مرور شبانه</h2><span class="pill ai">روز را ببند</span></div>
+  return `<div class="card"><div class="row spread"><h2>🌙 مرور شبانه</h2><span class="pill ai">روز رو ببند</span></div>
     ${qs.map((q, i) => { const a = ans['e' + i]; return `<div class="c-q" style="padding:8px 0;border-bottom:1px solid var(--line)"><div class="c-id">${esc(q)}</div>${a ? `<div class="m-b me" style="max-width:100%;margin-top:6px">${esc(a.text)}</div><div class="m-b bot" style="max-width:100%;margin-top:6px">${esc(a.reply)}</div>`
       : `<textarea id="ce${i}" rows="2" placeholder="جوابت…"></textarea><div class="row"><button class="btn sm primary" data-act="coach-answer" data-kind="e" data-i="${i}">ثبت</button></div>`}</div>`; }).join('')}</div>`;
 }
@@ -477,7 +477,7 @@ async function viewCoach() {
   const head = `<div class="pane-title"><h1>مربی</h1><span class="row" style="gap:6px"><span class="pill gold num">🔥 ${fa(st.streak)} روز</span><span class="pill num">سطح ${fa(st.level)}</span></span></div>`;
   if (c.generating) {
     setTimeout(() => { if (S.tab === 'coach') render(); }, 3000);
-    return `<section class="pane">${head}<div class="card ai"><h2><span class="m-spin"></span> مربی دارد برنامهٔ امروزت را می‌چیند…</h2><p class="muted small">معمولاً ۳۰ تا ۶۰ ثانیه؛ از روی چیزهایی که دربارهٔ تو می‌داند.</p></div></section>`;
+    return `<section class="pane">${head}<div class="card ai"><h2><span class="m-spin"></span> مربی داره برنامهٔ امروزت رو می‌چینه…</h2><p class="muted small">معمولاً ۳۰ تا ۶۰ ثانیه؛ از روی چیزهایی که دربارهٔ تو می‌دونه.</p></div></section>`;
   }
   const books = c.books || [];
   const tasks = (key, title, sub, extra = '') => `<div class="m-task ${done[key] ? 'done' : ''}"><button class="m-check" data-act="coach-done" data-key="${key}" aria-label="انجام شد">✓</button>
@@ -489,19 +489,19 @@ async function viewCoach() {
         ${b.status !== 'done' ? `<button class="btn sm" data-act="coach-book" data-id="${b.id}" data-st="done">تمام شد</button>` : ''}<button class="x" data-act="coach-book-del" data-id="${b.id}" aria-label="حذف">✕</button></div><div id="bk${b.id}"></div></div>`;
   const library = `<h2>📚 کتاب و آموزش</h2>
     <div class="card ai"><div class="row spread"><h2>از مربی بپرس / یاد بگیر</h2><span class="pill ai">استاد</span></div>
-      <p class="muted small">هر موضوعی که می‌خواهی (فروش، تمرکز، مدیریت پول، زبان…) برایت درس مستقل و تمرین می‌دهد.</p>
-      <div class="row" style="flex-wrap:nowrap"><input type="text" id="teachTopic" placeholder="مثلاً: چطور فروش فیلترشکن را بالا ببرم؟" maxlength="300"><button class="btn primary" data-act="coach-teach">یاد بده</button></div><div id="teachOut"></div></div>
+      <p class="muted small">هر موضوعی که می‌خوای (فروش، تمرکز، مدیریت پول، زبان…) برات درس مستقل و تمرین می‌ده.</p>
+      <div class="row" style="flex-wrap:nowrap"><input type="text" id="teachTopic" placeholder="مثلاً: چطور فروش فیلترشکن رو بالا ببرم؟" maxlength="300"><button class="btn primary" data-act="coach-teach">یاد بده</button></div><div id="teachOut"></div></div>
     <div class="stack">${books.length ? books.map(bookCard).join('') : `<div class="card">${empty('هنوز کتابی نیست. پیشنهاد بگیر یا خودت اضافه کن.')}</div>`}</div>
     <div class="row"><button class="btn ai" data-act="coach-rec">پیشنهاد کتاب برای من</button></div><div id="recOut"></div>
-    <form class="row" data-form="coach-book" style="flex-wrap:nowrap"><input type="text" name="title" placeholder="اسم کتابی که می‌خواهی یاد بگیری…" required maxlength="120"><button class="btn" type="submit">افزودن</button></form>`;
+    <form class="row" data-form="coach-book" style="flex-wrap:nowrap"><input type="text" name="title" placeholder="اسم کتابی که می‌خوای یاد بگیری…" required maxlength="120"><button class="btn" type="submit">افزودن</button></form>`;
   if (!p) return `<section class="pane">${head}<div class="card ai"><h2>برنامهٔ امروز هنوز ساخته نشده</h2>
-      <p class="muted small">مربی با توجه به شناختی که از تو دارد: تمرکز روز، روتین ساعت‌بندی‌شده، یک درس، یک چالش، چند سؤال و راه تبدیل عادت‌های بد را می‌سازد. هر روز ساعت ۷ صبح هم خودش می‌سازد و در تلگرام می‌فرستد.</p>
+      <p class="muted small">مربی با توجه به شناختی که از تو داره: تمرکز روز، روتین ساعت‌بندی‌شده، یک درس، یک چالش، چند سؤال و راه تبدیل عادت‌های بد رو می‌سازه. هر روز ساعت ۷ صبح هم خودش می‌سازه و در تلگرام می‌فرسته.</p>
       ${c.error ? `<p class="small" style="color:var(--warn)">دفعهٔ قبل نشد: ${esc(c.error)}</p>` : ''}
       <div class="row"><button class="btn primary" data-act="coach-gen">ساخت برنامهٔ امروز</button></div></div>${library}</section>`;
   const t = st.today, pct = t.total ? Math.round(t.done / t.total * 100) : 0;
   const qs = (p.questions || []).map((q, i) => { const a = (c.answers || {})[String(i)];
     return `<div class="c-q" style="padding:8px 0;border-bottom:1px solid var(--line)"><div class="c-id">${esc(q)}</div>${a ? `<div class="m-b me" style="max-width:100%;margin-top:6px">${esc(a.text)}</div><div class="m-b bot" style="max-width:100%;margin-top:6px">${esc(a.reply)}</div>`
-      : `<textarea id="cq${i}" rows="2" placeholder="جوابت را بنویس…"></textarea><div class="row"><button class="btn sm primary" data-act="coach-answer" data-i="${i}">ثبت جواب</button></div>`}</div>`; }).join('');
+      : `<textarea id="cq${i}" rows="2" placeholder="جوابت رو بنویس…"></textarea><div class="row"><button class="btn sm primary" data-act="coach-answer" data-i="${i}">ثبت جواب</button></div>`}</div>`; }).join('');
   const swaps = (p.swaps || []).map((s, i) => `<div class="c-swap"><div><b>${esc(s.bad)}</b> ← <b class="m-pos">${esc(s.replacement)}</b></div>
       ${s.cue ? `<div class="muted small">نشانهٔ احتمالی: ${esc(s.cue)}</div>` : ''}${s.if_then ? `<div class="small">${esc(s.if_then)}</div>` : ''}
       ${s.tiny_step ? `<div class="small">قدم کوچک: ${esc(s.tiny_step)}</div>` : ''}${s.target ? `<div class="small">هدف این هفته: ${esc(s.target)}</div>` : ''}
@@ -518,11 +518,11 @@ async function viewCoach() {
       ${p.lesson.takeaway ? `<div class="c-id" style="margin-top:6px">💡 ${esc(p.lesson.takeaway)}</div>` : ''}${tasks('lesson', 'خواندم و فهمیدم', '')}</div>` : ''}
     ${p.challenge.title ? `<div class="card gold"><div class="row spread"><h2>⚡ چالش امروز</h2>${p.challenge.minutes ? `<span class="pill num">${dur(p.challenge.minutes)}</span>` : ''}</div><div class="c-id">${esc(p.challenge.title)}</div>
       ${(p.challenge.steps || []).length ? `<ol class="small" style="margin:4px 0;padding-inline-start:20px">${p.challenge.steps.map(x => `<li>${esc(x)}</li>`).join('')}</ol>` : ''}${tasks('challenge', 'انجامش دادم', '')}</div>` : ''}
-    ${qs ? `<div class="card"><div class="row spread"><h2>❓ مربی از تو می‌پرسد</h2><span class="pill ai">جواب‌ها ثبت می‌شوند</span></div>${qs}</div>` : ''}
+    ${qs ? `<div class="card"><div class="row spread"><h2>❓ مربی از تو می‌پرسه</h2><span class="pill ai">جواب‌ها ثبت می‌شن</span></div>${qs}</div>` : ''}
     ${eveCard(c)}
-    ${swaps ? `<div class="card"><div class="row spread"><h2>🔁 عادت بد ← عادت خوب</h2></div><p class="muted small">حذف نه؛ جایگزین. هر کدام را بزن تا هر شب بپرسم چطور پیش رفتی.</p>${swaps}</div>` : ''}
+    ${swaps ? `<div class="card"><div class="row spread"><h2>🔁 عادت بد ← عادت خوب</h2></div><p class="muted small">حذف نه؛ جایگزین. هر کدوم رو بزن تا هر شب بپرسم چطور پیش رفتی.</p>${swaps}</div>` : ''}
     ${p.book ? `<div class="card"><div class="row spread"><h2>📚 کتاب پیشنهادی</h2></div><div class="c-id">${esc(p.book.title)}${p.book.author ? ' — ' + esc(p.book.author) : ''}</div>${p.book.why ? `<div class="small muted">${esc(p.book.why)}</div>` : ''}
-      <div class="row"><button class="btn sm primary" data-act="coach-addbook" data-title="${esc(p.book.title)}" data-author="${esc(p.book.author || '')}">اضافه به کتاب‌هایم و شروع آموزش</button></div></div>` : ''}
+      <div class="row"><button class="btn sm primary" data-act="coach-addbook" data-title="${esc(p.book.title)}" data-author="${esc(p.book.author || '')}">اضافه به کتاب‌هام و شروع آموزش</button></div></div>` : ''}
     ${p.note ? `<div class="card"><div class="c-id">${esc(p.note)}</div></div>` : ''}
     ${library}
     <div class="row"><button class="btn sm" data-act="coach-gen" data-force="1">ساخت دوبارهٔ برنامهٔ امروز</button></div>
@@ -552,7 +552,7 @@ async function refreshNow() {
   try { S.cache = {}; await render(); } finally { refreshing = false; if (b) b.classList.remove('spin'); }
 }
 
-// کشیدن صفحه به پایین (وقتی بالای صفحه هستی) = تازه‌سازی؛ نیمه‌کاره‌ها (فرم/پنجره‌ی باز) را خراب نمی‌کند
+// کشیدن صفحه به پایین (وقتی بالای صفحه هستی) = تازه‌سازی؛ نیمه‌کاره‌ها (فرم/پنجره‌ی باز) رو خراب نمی‌کنه
 (function pullToRefresh() {
   const el = $('#ptr'); let y0 = null, dy = 0;
   const TH = 72;
@@ -574,7 +574,7 @@ async function refreshNow() {
     y0 = null; el.hidden = true; el.classList.remove('ready'); el.style.transform = '';
     if (go) refreshNow();
   }, { passive: true });
-  // برگشتن به اپ بعد از چند دقیقه: داده‌ها تازه شوند (مثلاً بعد از ثبت از طریق تلگرام)
+  // برگشتن به اپ بعد از چند دقیقه: داده‌ها تازه بشن (مثلاً بعد از ثبت از طریق تلگرام)
   let hiddenAt = 0;
   document.addEventListener('visibilitychange', () => {
     if (document.hidden) { hiddenAt = Date.now(); return; }
@@ -635,7 +635,7 @@ function openSettings() {
       `<button data-act="theme" data-val="${k}" aria-pressed="${(document.documentElement.dataset.theme || 'night') === k}">${v}</button>`).join('')}</div>
     ${natHtml}
     <label class="row"><input type="checkbox" id="privChk" ${S.priv ? 'checked' : ''}> نمایش بخش‌های خصوصی (🔒)</label>
-    <p class="muted small">پیامک بانکی و اعلان‌های مالی را اپ اندروید می‌فرستد. برای قطع این دستگاه در تلگرام /devices و /unpair.</p>
+    <p class="muted small">پیامک بانکی و اعلان‌های مالی رو اپ اندروید می‌فرسته. برای قطع این دستگاه در تلگرام /devices و /unpair.</p>
     <button class="btn danger" data-act="logout">خروج از این دستگاه</button></div>`);
 }
 
@@ -643,7 +643,7 @@ function openSettings() {
 function pairScreen() {
   $('#nav').hidden = true; $('#subtitle').textContent = 'مغز دوم تو';
   $('#view').innerHTML = `<section class="m-center"><div class="card"><h1>سلام، من مهردادم 👋</h1>
-    <p>برای وصل‌شدن: در تلگرام به مهرداد بنویس <b>/pair</b> و کد ۸ حرفی را اینجا بزن.</p>
+    <p>برای وصل‌شدن: در تلگرام به مهرداد بنویس <b>/pair</b> و کد ۸ حرفی رو اینجا بزن.</p>
     <form class="stack" data-form="pair"><input type="text" name="code" placeholder="کد جفت‌سازی" autocomplete="off" autocapitalize="characters" maxlength="16" dir="ltr" required>
     <button class="btn primary" type="submit">اتصال</button></form></div></section>`;
 }
@@ -663,7 +663,7 @@ async function say(forId) {
     if (forId === 'sayChat') { const t = $('#typing'); if (t) { t.classList.remove('typing'); t.removeAttribute('id'); t.textContent = r.reply; } window.scrollTo(0, document.body.scrollHeight); }
     else { toast(r.reply.length > 110 ? r.reply.slice(0, 110) + '…' : r.reply); await render(); }
   } catch (e) {
-    if (e.message !== 'unauthorized') { toast('نشد: ' + e.message); const t = $('#typing'); if (t) t.textContent = 'نتوانستم به مغز برسم؛ دوباره امتحان کن.'; ta.value = text; }
+    if (e.message !== 'unauthorized') { toast('نشد: ' + e.message); const t = $('#typing'); if (t) t.textContent = 'نتونستم به مغز برسم؛ دوباره امتحان کن.'; ta.value = text; }
   } finally { S.busy = false; const s2 = $(`[data-act=say][data-for=${forId}]`); if (s2) s2.disabled = false; }
 }
 async function downscale(file, max = 1600) {
@@ -685,14 +685,14 @@ async function sendPhoto(file, forId) {
     const list = $('#chatList'); const empt = $('.m-empty', list); if (empt) empt.remove();
     list.insertAdjacentHTML('beforeend', `<div class="m-b me">📷 ${esc(caption || 'عکس')}</div><div class="m-b bot typing" id="typing"><span class="m-spin"></span></div>`);
     window.scrollTo(0, document.body.scrollHeight);
-  } else toast('مهرداد دارد عکس را می‌خواند…');
+  } else toast('مهرداد داره عکس رو می‌خونه…');
   try {
     const image = await downscale(file);
     const r = await api('/api/chat/image', { method: 'POST', body: { image, text: caption } });
     if (inChat) { const t = $('#typing'); if (t) { t.classList.remove('typing'); t.removeAttribute('id'); t.textContent = r.reply; } window.scrollTo(0, document.body.scrollHeight); }
     else { toast(r.reply.length > 110 ? r.reply.slice(0, 110) + '…' : r.reply); await render(); }
   } catch (e) {
-    if (e.message !== 'unauthorized') { toast('نشد: ' + e.message); const t = $('#typing'); if (t) t.textContent = 'عکس را نتوانستم بخوانم؛ دوباره امتحان کن.'; if (ta) ta.value = caption; }
+    if (e.message !== 'unauthorized') { toast('نشد: ' + e.message); const t = $('#typing'); if (t) t.textContent = 'عکس رو نتونستم بخونم؛ دوباره امتحان کن.'; if (ta) ta.value = caption; }
   } finally { S.busy = false; }
 }
 document.addEventListener('change', ev => {
@@ -731,27 +731,27 @@ document.addEventListener('click', async ev => {
     else if (act === 'n-update') { closeSheet(); MehrdadNative.checkUpdate(); }
     else if (act === 'mark-done') { await api('/api/events/' + id, { method: 'PATCH', body: { status: 'done' } }); toast('انجام‌شد ✓'); render(); }
     else if (act === 'gview') { S.gview = b.dataset.val; render(); }
-    else if (act === 'say-onboard') { go('chat'); setTimeout(() => { const ta = $('#sayChat'); if (ta) { ta.value = 'می‌خواهم مصاحبه شروع شود؛ یک‌یک از من سؤال کن تا مرا بشناسی.'; ta.focus(); } }, 300); }
+    else if (act === 'say-onboard') { go('chat'); setTimeout(() => { const ta = $('#sayChat'); if (ta) { ta.value = 'بیا مصاحبه رو شروع کنیم؛ یکی‌یکی ازم سؤال کن تا منو بشناسی.'; ta.focus(); } }, 300); }
     else if (act === 'track-habit') {
-      const good = prompt(`جایگزین خوب برای «${b.dataset.name}» چیست؟`, 'پیاده‌روی ۱۰ دقیقه'); if (!good) return;
+      const good = prompt(`جایگزین خوب برای «${b.dataset.name}» چیه؟`, 'پیاده‌روی ۱۰ دقیقه'); if (!good) return;
       await api('/api/habits', { method: 'POST', body: { good: good.trim(), bad: b.dataset.name } }); toast('عادت ثبت شد؛ هر شب از تو می‌پرسم 🔥'); render();
     }
     else if (act === 'make-invite') {
       const r = await api('/api/invites', { method: 'POST', body: { label: 'همسر', days: 14 } });
-      $('#inviteOut').innerHTML = `<div class="note" style="padding:10px;border-radius:10px;background:var(--surface2)"><div class="small muted">این لینک را فقط برای همسرت بفرست (۱۴ روز، حداکثر ۳ بار ارسال):</div>
+      $('#inviteOut').innerHTML = `<div class="note" style="padding:10px;border-radius:10px;background:var(--surface2)"><div class="small muted">این لینک رو فقط برای همسرت بفرست (۱۴ روز اعتبار داره، حداکثر ۳ بار باز می‌شه):</div>
         <input type="text" readonly dir="ltr" value="${esc(r.url)}" id="inviteUrl" style="margin-top:6px">
         <div class="row" style="margin-top:6px"><button class="btn sm primary" data-act="copy-invite">کپی</button>${navigator.share ? '<button class="btn sm" data-act="share-invite">ارسال…</button>' : ''}</div></div>`;
     }
     else if (act === 'copy-invite') { const el = $('#inviteUrl'); el.select(); try { await navigator.clipboard.writeText(el.value); toast('کپی شد'); } catch { document.execCommand('copy'); toast('کپی شد'); } }
-    else if (act === 'share-invite') { try { await navigator.share({ title: 'چند سؤال دربارهٔ من', text: 'این چند سؤال را دربارهٔ من جواب بده 🙏', url: $('#inviteUrl').value }); } catch {} }
-    else if (act === 'revoke-inv') { if (confirm('این لینک باطل شود؟')) { await api('/api/invites/' + id, { method: 'DELETE' }); render(); } }
+    else if (act === 'share-invite') { try { await navigator.share({ title: 'چند تا سؤال درباره‌ی مهرداد', text: 'سلام عزیزم 🙏 این چند تا سؤال رو درباره‌ی من جواب بده؛ هر چی به ذهنت می‌رسه. جواب درست و غلط نداره 💛', url: $('#inviteUrl').value }); } catch {} }
+    else if (act === 'revoke-inv') { if (confirm('این لینک باطل بشه؟')) { await api('/api/invites/' + id, { method: 'DELETE' }); render(); } }
     else if (act === 'suggest-goals') {
-      const out = $('#goalSuggest'); out.innerHTML = '<span class="m-spin"></span> مهرداد دارد فکر می‌کند…'; b.disabled = true;
+      const out = $('#goalSuggest'); out.innerHTML = '<span class="m-spin"></span> مهرداد داره فکر می‌کنه…'; b.disabled = true;
       try {
         const r = await api('/api/goals/suggest', { method: 'POST' }); S.cache.suggest = r.goals;
         out.innerHTML = r.goals.length ? r.goals.map((g, i) => `<div class="card" style="margin-top:8px"><div class="row spread"><b>${esc(g.title)}</b><span class="pill gold">${esc(g.horizon || '')}</span></div>
           ${g.why ? `<div class="muted small">چرا: ${esc(g.why)}</div>` : ''}${(g.steps || []).length ? `<ul class="small" style="margin:4px 0;padding-inline-start:18px">${g.steps.map(x => `<li>${esc(x)}</li>`).join('')}</ul>` : ''}
-          <button class="btn sm primary" data-act="add-suggest" data-i="${i}">افزودن به هدف‌ها</button></div>`).join('') : empty('هنوز چیز کافی از تو نمی‌دانم؛ در «پروفایل من» مصاحبه را شروع کن.');
+          <button class="btn sm primary" data-act="add-suggest" data-i="${i}">افزودن به هدف‌ها</button></div>`).join('') : empty('هنوز چیز کافی از تو نمی‌دونم؛ در «پروفایل من» مصاحبه رو شروع کن.');
       } catch (e) { out.innerHTML = empty('نشد: ' + esc(e.message)); } finally { b.disabled = false; }
     }
     else if (act === 'add-suggest') {
@@ -764,37 +764,37 @@ document.addEventListener('click', async ev => {
     else if (act === 'coach-done') { const key = b.dataset.key, on = !b.closest('.m-task').classList.contains('done');
       await api('/api/coach/done', { method: 'POST', body: { key, on } }); renderKeep(); }
     else if (act === 'coach-answer') {
-      const i = b.dataset.i, kind = b.dataset.kind || 'q', ta = $('#c' + (kind === 'e' ? 'e' : 'q') + i), text = (ta.value || '').trim(); if (!text) return toast('جوابت را بنویس');
+      const i = b.dataset.i, kind = b.dataset.kind || 'q', ta = $('#c' + (kind === 'e' ? 'e' : 'q') + i), text = (ta.value || '').trim(); if (!text) return toast('جوابت رو بنویس');
       b.disabled = true; b.textContent = 'در حال ثبت…';
       try { await api('/api/coach/answer', { method: 'POST', body: { idx: Number(i), text, kind } }); renderKeep(); } finally { b.disabled = false; }
     }
     else if (act === 'coach-track') { const r = await api(`/api/coach/swap/${b.dataset.i}/track`, { method: 'POST' }); toast(r.existing ? 'از قبل پیگیری می‌شد 🔥' : 'ثبت شد؛ هر شب از تو می‌پرسم 🔥'); b.disabled = true; }
     else if (act === 'coach-teach') {
-      const topic = ($('#teachTopic').value || '').trim(); if (topic.length < 2) return toast('موضوع را بنویس');
-      const out = $('#teachOut'); out.innerHTML = '<span class="m-spin"></span> استاد دارد درس را آماده می‌کند…'; b.disabled = true;
+      const topic = ($('#teachTopic').value || '').trim(); if (topic.length < 2) return toast('موضوع رو بنویس');
+      const out = $('#teachOut'); out.innerHTML = '<span class="m-spin"></span> استاد داره درس رو آماده می‌کنه…'; b.disabled = true;
       try { const r = await api('/api/coach/teach', { method: 'POST', body: { topic } }); out.innerHTML = `<div class="m-b bot c-body" style="max-width:100%;margin-top:8px">${esc(r.text)}</div>`; }
       catch (e) { out.innerHTML = empty('نشد: ' + esc(e.message)); } finally { b.disabled = false; }
     }
     else if (act === 'coach-rec') {
-      const out = $('#recOut'); out.innerHTML = '<span class="m-spin"></span> دارم کتاب‌های مناسب تو را پیدا می‌کنم…'; b.disabled = true;
+      const out = $('#recOut'); out.innerHTML = '<span class="m-spin"></span> دارم کتاب‌های مناسب تو رو پیدا می‌کنم…'; b.disabled = true;
       try { const r = await api('/api/coach/books/recommend', { method: 'POST' }); toast(r.added.length ? 'کتاب‌ها اضافه شد' : 'کتاب تازه‌ای نبود'); await renderKeep(); }
       catch (e) { out.innerHTML = empty('نشد: ' + esc(e.message)); } finally { b.disabled = false; }
     }
-    else if (act === 'coach-addbook') { await api('/api/coach/books', { method: 'POST', body: { title: b.dataset.title, author: b.dataset.author } }); b.disabled = true; toast('اضافه شد؛ پایین‌تر «شروع آموزش کتاب» را بزن'); renderKeep(); }
+    else if (act === 'coach-addbook') { await api('/api/coach/books', { method: 'POST', body: { title: b.dataset.title, author: b.dataset.author } }); b.disabled = true; toast('اضافه شد؛ پایین‌تر «شروع آموزش کتاب» رو بزن'); renderKeep(); }
     else if (act === 'coach-lesson') {
-      const out = $('#bk' + id); out.innerHTML = '<span class="m-spin"></span> استاد درس را آماده می‌کند (حدود ۱ دقیقه)…'; b.disabled = true;
-      try { const r = await api(`/api/coach/books/${id}/lesson`, { method: 'POST' }); if (r.lesson) S.openLesson = id + ':' + r.lesson.n; else toast('این کتاب ۱۲ درس را تمام کرد 🎉'); await renderKeep(); }
+      const out = $('#bk' + id); out.innerHTML = '<span class="m-spin"></span> استاد درس رو آماده می‌کنه (حدود ۱ دقیقه)…'; b.disabled = true;
+      try { const r = await api(`/api/coach/books/${id}/lesson`, { method: 'POST' }); if (r.lesson) S.openLesson = id + ':' + r.lesson.n; else toast('این کتاب ۱۲ درس رو تمام کرد 🎉'); await renderKeep(); }
       catch (e) { out.innerHTML = empty('نشد: ' + esc(e.message)); b.disabled = false; }
     }
     else if (act === 'coach-book') { await api('/api/coach/books/' + id, { method: 'PATCH', body: { status: b.dataset.st } }); renderKeep(); }
-    else if (act === 'coach-book-del') { if (confirm('این کتاب از فهرست حذف شود؟')) { await api('/api/coach/books/' + id, { method: 'DELETE' }); renderKeep(); } }
+    else if (act === 'coach-book-del') { if (confirm('این کتاب از فهرست حذف بشه؟')) { await api('/api/coach/books/' + id, { method: 'DELETE' }); renderKeep(); } }
     else if (act === 'pshift') { S.pmonth = shiftM(S.pmonth, Number(b.dataset.d)); render(); }
     else if (act === 'pmonth') { S.pmonth = b.dataset.val; render(); window.scrollTo(0, 0); }
-    else if (act === 'pay-del') { if (confirm('فیش واقعی این ماه حذف شود؟ (ماه دوباره تخمینی می‌شود)')) { await api('/api/payroll/slips/' + S.pmonth, { method: 'DELETE' }); toast('حذف شد'); render(); } }
+    else if (act === 'pay-del') { if (confirm('فیش واقعی این ماه حذف بشه؟ (ماه دوباره تخمینی می‌شه)')) { await api('/api/payroll/slips/' + S.pmonth, { method: 'DELETE' }); toast('حذف شد'); render(); } }
     else if (act === 'acc-edit') openAccEdit(id);
     else if (act === 'debt-edit') openDebtEdit(id);
-    else if (act === 'acc-del') { if (confirm('این حساب حذف شود؟')) { await api('/api/accounts/' + id, { method: 'DELETE' }); render(); } }
-    else if (act === 'debt-del') { if (confirm('این بدهی حذف شود؟')) { await api('/api/debts/' + id, { method: 'DELETE' }); render(); } }
+    else if (act === 'acc-del') { if (confirm('این حساب حذف بشه؟')) { await api('/api/accounts/' + id, { method: 'DELETE' }); render(); } }
+    else if (act === 'debt-del') { if (confirm('این بدهی حذف بشه؟')) { await api('/api/debts/' + id, { method: 'DELETE' }); render(); } }
     else if (act === 'debt-pay') {
       const d = (S.cache.fin?.debts || []).find(x => x.id === Number(id)); if (!d) return;
       const v = prompt('مبلغ پرداختی (تومان):', String(d.installment_amount || d.remaining)); if (v === null) return;
@@ -802,10 +802,10 @@ document.addEventListener('click', async ev => {
       await api(`/api/debts/${id}/pay`, { method: 'POST', body: { amount } }); toast('قسط ثبت شد ✓ (در حساب‌ها هم خرج شد)'); render();
     }
     else if (act === 'ask-fin') {
-      const out = $('#finOut'); out.innerHTML = '<span class="m-spin"></span> مهرداد دارد حساب‌هایت را بررسی می‌کند…'; b.disabled = true;
+      const out = $('#finOut'); out.innerHTML = '<span class="m-spin"></span> مهرداد داره حساب‌هات رو بررسی می‌کنه…'; b.disabled = true;
       try { const r = await api('/api/chat', { method: 'POST', body: { text: b.dataset.q } }); out.innerHTML = `<div class="m-b bot" style="max-width:100%">${esc(r.reply)}</div>`; } finally { b.disabled = false; }
     }
-    else if (act === 'del') { if (confirm('حذف شود؟')) { await api('/api/events/' + id, { method: 'DELETE' }); closeSheet(); toast('حذف شد'); render(); } }
+    else if (act === 'del') { if (confirm('حذف بشه؟')) { await api('/api/events/' + id, { method: 'DELETE' }); closeSheet(); toast('حذف شد'); render(); } }
     else if (act === 'toggle') { const e = findEvent(id); const done = (e.fields || {}).status === 'done';
       await api('/api/events/' + id, { method: 'PATCH', body: { fields: { status: done ? 'open' : 'done' } } }); render(); }
     else if (act === 'say') say(b.dataset.for);
@@ -814,8 +814,8 @@ document.addEventListener('click', async ev => {
     else if (act === 'theme') { applyTheme(b.dataset.val); $$('.seg [data-act=theme]').forEach(x => x.setAttribute('aria-pressed', x === b)); }
     else if (act === 'logout') { closeSheet(); logout(false); }
     else if (act === 'plan') {
-      const out = $('#planOut'); out.innerHTML = '<span class="m-spin"></span> مهرداد دارد برنامه می‌چیند…'; b.disabled = true;
-      try { const r = await api('/api/chat', { method: 'POST', body: { text: `برنامهٔ ${b.dataset.what}‌ام را بر اساس هدف‌ها و کارهای بازم و عادت‌هایم بچین. کوتاه و قابل‌اجرا، با ساعت‌بندی پیشنهادی.` } });
+      const out = $('#planOut'); out.innerHTML = '<span class="m-spin"></span> مهرداد داره برنامه می‌چینه…'; b.disabled = true;
+      try { const r = await api('/api/chat', { method: 'POST', body: { text: `برنامهٔ ${b.dataset.what}‌ام رو بر اساس هدف‌ها و کارهای بازم و عادت‌هام بچین. کوتاه و قابل‌اجرا، با ساعت‌بندی پیشنهادی.` } });
         out.innerHTML = `<div class="m-b bot" style="max-width:100%">${esc(r.reply)}</div>`; } finally { b.disabled = false; }
     }
   } catch (e) { if (e.message !== 'unauthorized') toast(e.message); }
@@ -847,7 +847,7 @@ document.addEventListener('submit', async ev => {
     if (kind === 'pair') {
       const r = await fetch('/api/pair', { method: 'POST', headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ code: v.code.trim(), name: navigator.userAgent.includes('Android') ? 'مرورگر گوشی' : 'مرورگر' }) });
-      if (!r.ok) return toast(r.status === 429 ? 'تلاش زیاد؛ ۱۰ دقیقه بعد' : 'کد اشتباه یا منقضی است. دوباره /pair بزن.');
+      if (!r.ok) return toast(r.status === 429 ? 'تلاش زیاد؛ ۱۰ دقیقه بعد' : 'کد اشتباه یا منقضیه. دوباره /pair بزن.');
       token = (await r.json()).token; store.set('mehrdad_token', token);
       if (window.MehrdadNative && MehrdadNative.savePairing) MehrdadNative.savePairing(location.origin, token);
       toast('وصل شد ✓'); return boot();
@@ -864,7 +864,7 @@ document.addEventListener('submit', async ev => {
       const body = { earn: g('earn', L.earn.map(x => x[0])), ded: g('ded', L.ded.map(x => x[0])), work: g('work', L.work.map(x => x[0])), unit: v.unit };
       const tot = {}; for (const key of ['total_earn', 'total_ded', 'net']) if (v['tot_' + key]) tot[key] = num(v['tot_' + key]); if (Object.keys(tot).length) body.totals = tot;
       const r = await api('/api/payroll/slips/' + month, { method: 'PUT', body });
-      S.pmonth = r.month; toast((r.mismatch || []).length ? 'ذخیره شد، اما جمع‌ها با اقلام نمی‌خواند ⚠️' : 'فیش ذخیره شد ✓'); return render();
+      S.pmonth = r.month; toast((r.mismatch || []).length ? 'ذخیره شد، اما جمع‌ها با اقلام نمی‌خونه ⚠️' : 'فیش ذخیره شد ✓'); return render();
     }
     if (kind === 'coach-book') { await api('/api/coach/books', { method: 'POST', body: { title: v.title.trim() } }); toast('اضافه شد ✓'); return renderKeep(); }
     if (kind === 'task') await api('/api/events', { method: 'POST', body: { type: 'task', summary: v.title.trim(), fields: { status: 'open' } } });

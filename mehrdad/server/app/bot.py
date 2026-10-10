@@ -19,28 +19,35 @@ from .telegram import TGError, btn
 
 log = logging.getLogger("bot")
 
-HELP = """من مهرداد‌ام — مغز دومت.
+HELP = """سلام، منم مهرداد، مغز دومت 🧠
 
-هر چی بگی رو به‌خاطر می‌سپارم: خرج، درآمد، ایده، کار، حس‌وحال، هرچی.
-فقط باهام حرف بزن، مثل یه رفیق. فرم و دکمه لازم نیست.
+هر چی بگی یادم می‌مونه و خودم تو جای درستش ثبت می‌کنم: خرج، درآمد، غذا، قلیان، کار، حقوق، حس‌وحال، ایده، هر چی.
+راحت باهام حرف بزن، فرم و دکمه لازم نیست. ویس و عکس فیش هم بفرستی می‌فهمم.
 
-برای ساختن عادت:
+ساخت عادت:
 /habit <عادت خوب> — مثلاً: /habit هر روز صبح ۲۰ دقیقه مطالعه
 /habit به‌جای <عادت بد>، <عادت خوب> — مثلاً: /habit به‌جای چک گوشی صبح، ۱۰ دقیقه کشش بدن
-/habits — لیست عادت‌های فعال و استریک‌هاشون + چک‌این امروز
+/habits — عادت‌های فعال، استریک‌ها و چک‌این امروز
 
-اپ اندروید:
-/today /week /month — خلاصهٔ خرج و درآمد، غذا، قلیان، کارها و عادت‌ها
+خلاصه‌ها:
+/today /week /month — خرج و درآمد، غذا، قلیان، کارها و عادت‌های امروز، هفته یا ماه
+/finance — موجودی حساب‌ها، بدهی و اقساط و هشدارها
+/salary — حقوق این ماه (از روی فیش نمونه) و ماه بعد
+/goals — هدف‌هایی که از روی شناختم از تو پیشنهاد می‌دم
+/nova — فروش و درآمد NovaTunnel (فقط می‌خونم)
+/inbox — آخرین پیام‌های ایمیل و تلگرام که ایجنت‌ها دیدن (/mailtest برای تست ایمیل)
 
-/onboard — مصاحبهٔ ۱۵ سؤالی تا بیشتر بشناسمت\n/goals — هدف‌های پیشنهادی بر اساس آنچه از تو می‌دانم\n/inbox — آخرین پیام‌های ایمیل/تلگرامِ ایجنت‌ها (و /mailtest برای تست اتصال ایمیل)\n/wife — لینک پرسش‌نامه برای همسرت (درباره‌ی تو جواب می‌دهد)\n/invites — لینک‌های ساخته‌شده و ابطال\n/nova — فروش و درآمد NovaTunnel (فقط‌خواندنی)
-/finance — موجودی حساب‌ها، بدهی و اقساط، و هشدارها
-/salary — حقوق این ماه (تخمین از روی فیش نمونه) و ماه بعد
+بیشتر بشناسمت:
+/onboard — مصاحبهٔ ۱۵ سؤالی
+/wife — لینک چند تا سؤال برای همسرت
+/invites — لینک‌هایی که ساختی و باطل‌کردنشون
 
-/pair — کد یک‌بارمصرف برای وصل‌کردن اپ (۱۰ دقیقه اعتبار)
-/devices — دستگاه‌های وصل‌شده
-/unpair <شماره> — قطع یک دستگاه
+اپ:
+/pair — کد وصل‌کردن اپ (۱۰ دقیقه اعتبار داره، یه بار مصرفه)
+/devices — گوشی‌های وصل‌شده
+/unpair <شماره> — قطع یکی از اونا
 
-/start <کد> — معرفی خودت به‌عنوان صاحب این مغز (یک‌بار)
+/start <کد> — معرفی خودت به‌عنوان صاحب این مغز (فقط یه بار)
 /help — همین راهنما"""
 
 NO_HABITS = "هنوز عادتی ثبت نکردی. با /habit شروع کن — یه چیز کوچیک و مشخص، نه یه آرزوی بزرگ."
@@ -99,10 +106,10 @@ class Bot:
             if pending_q:      # جواب یک سؤال مصاحبه است: به مغز بگو تا درست در پروفایل ثبتش کند
                 q = profile.question_by_id(pending_q)
                 if q:
-                    brain_text = f"[کاربر دارد به سؤال مصاحبه «{q[2]}» (بخش {q[1]}) جواب می‌دهد؛ جواب را در پروفایل ثبت کن]\n{text}"
+                    brain_text = f"[کاربر داره به سؤال مصاحبه «{q[2]}» (بخش {q[1]}) جواب می‌ده؛ جواب رو در پروفایل ثبت کن]\n{text}"
             if voice:
-                brain_text = ("[این پیام را با ویس گفته و متنش خودکار نوشته شده؛ ممکن است عددها یا اسم‌ها اشتباه شنیده شده باشد. "
-                              "اگر مبلغ یا نام مهمی مبهم است، قبل از ثبت بپرس.]\n" + brain_text)
+                brain_text = ("[این پیام رو با ویس گفته و متنش خودکار نوشته شده؛ ممکنه عددها یا اسم‌ها اشتباه شنیده شده باشه. "
+                              "اگه مبلغ یا نام مهمی مبهمه، قبل از ثبت بپرس.]\n" + brain_text)
             if images:
                 reply, entries = await self.brain.think(history, recent_mem, brain_text, active_habits, images=images)
             else:
@@ -148,10 +155,10 @@ class Bot:
         """پیشنهاد ۳ تا ۵ هدف مشخص بر اساس آنچه مهرداد از کاربر می‌داند. خروجی: لیست {title, horizon, why, steps}."""
         ctx = await self.context_prompt()
         system = ("تو «مهرداد» مربی و مغز دوم کاربری. فقط بر پایهٔ واقعیت‌هایی که پایین می‌بینی هدف پیشنهاد بده (چیزی از خودت نساز).\n\n" + ctx)
-        user = ("بر اساس آنچه از من می‌دانی (پروفایل، روتین‌ها، عادت‌ها، مالی، هدف‌های فعلی) ۳ تا ۵ هدف مشخص و قابل‌اندازه‌گیری پیشنهاد بده؛ "
-                "ترکیبی از هدف کوتاه‌مدت (این ماه) و بلندمدت‌تر. هدف‌های تکراری با هدف‌های باز بالا نده. اگر عادت بدی وقتم را می‌گیرد، یکی از هدف‌ها مربوط به آن باشد. "
+        user = ("بر اساس آنچه از من می‌دونی (پروفایل، روتین‌ها، عادت‌ها، مالی، هدف‌های فعلی) ۳ تا ۵ هدف مشخص و قابل‌اندازه‌گیری پیشنهاد بده؛ "
+                "ترکیبی از هدف کوتاه‌مدت (این ماه) و بلندمدت‌تر. هدف‌های تکراری با هدف‌های باز بالا نده. اگه عادت بدی وقتم رو می‌گیره، یکی از هدف‌ها مربوط به اون باشه. "
                 "فقط و فقط یک آرایهٔ JSON معتبر بده، بدون متن اضافه: "
-                '[{"title": "...", "horizon": "این ماه|۳ ماه|امسال|۳ سال", "why": "چرا برای من مهم است (یک جمله، با استناد به چیزی که از من می‌دانی)", "steps": ["قدم اول", "قدم دوم"]}]')
+                '[{"title": "...", "horizon": "این ماه|۳ ماه|امسال|۳ سال", "why": "چرا برای من مهمه (یک جمله، با استناد به چیزی که از من می‌دونی)", "steps": ["قدم اول", "قدم دوم"]}]')
         async with self.brain_lock:
             raw = await self.brain.complete(system, user)
         m = re.search(r"\[.*\]", raw, re.DOTALL)
@@ -203,7 +210,7 @@ class Bot:
         accounts = await self.mem.list_accounts()
         acc, amb = self._match_name(accounts, op["name"], "name")
         if amb:
-            return "⚠️ نام حساب «%s» مبهم است (%s)؛ نام دقیق‌تر بگو." % (op["name"], " یا ".join(a["name"] for a in amb[:3]))
+            return "⚠️ نام حساب «%s» مبهمه (%s)؛ نام دقیق‌تر بگو." % (op["name"], " یا ".join(a["name"] for a in amb[:3]))
         if acc:
             new = op["balance"] if op["mode"] == "set" else acc["balance"] + op["balance"]
             await self.mem.update_account(acc["id"], {"balance": new})
@@ -222,17 +229,17 @@ class Bot:
         if target is None and op.get("title"):
             target, amb = self._match_name(debts, op["title"], "title")
             if amb:
-                return "⚠️ نام بدهی «%s» مبهم است (%s)؛ دقیق‌تر بگو." % (op["title"], " یا ".join(d["title"] for d in amb[:3]))
+                return "⚠️ نام بدهی «%s» مبهمه (%s)؛ دقیق‌تر بگو." % (op["title"], " یا ".join(d["title"] for d in amb[:3]))
         fields = {k: op[k] for k in ("kind", "creditor", "total", "remaining", "installment_amount", "installments_total",
                                       "installments_paid", "due_day", "next_due") if k in op}
         if op["op"] == "pay":
             if not target:
-                return "⚠️ نفهمیدم کدام قسط را پرداخت کنم؛ اسم بدهی را بگو."
+                return "⚠️ نفهمیدم کدوم قسط رو پرداخت کنم؛ اسم بدهی رو بگو."
             upd = await self.pay_debt(target["id"], op.get("amount"))
             return f"✓ قسط «{target['title']}» پرداخت شد؛ مانده {m(upd['remaining'])} تومان" if upd else None
         if op["op"] == "update" or (op["op"] == "add" and target):          # add روی بدهی هم‌نام = به‌روزرسانی، نه تکرار
             if not target:
-                return "⚠️ نفهمیدم کدام بدهی را به‌روز کنم؛ اسم بدهی را بگو."
+                return "⚠️ نفهمیدم کدوم بدهی رو به‌روز کنم؛ اسم بدهی رو بگو."
             if "due_day" in fields and "next_due" not in fields:
                 fields["next_due"] = finance.next_due_from_day(fields["due_day"], life.now_tehran().date()).isoformat()
             if op.get("title") and op["op"] == "add":
@@ -295,14 +302,14 @@ class Bot:
 
     async def _apply_payslip(self, ps):
         if not ps.get("month"):
-            return "⚠️ ماه فیش را نفهمیدم؛ بگو فیش کدام ماه است (مثلاً ۱۴۰۵-۰۶)."
+            return "⚠️ ماه فیش رو نفهمیدم؛ بگو فیش کدوم ماه‌ست (مثلاً ۱۴۰۵-۰۶)."
         unit = ps.get("unit") or (await self.payroll.settings())["unit"]
         slip, bad = await self.payroll.save_actual(ps["month"], ps["raw"], unit)
         t = payroll_mod.totals(slip)
         f = lambda n: life.fa(f"{int(n):,}")
         line = f"🧾 فیش {payroll_mod.month_label(ps['month'])} ثبت شد: جمع پرداختی {f(t['total_earn'])}، کسورات {f(t['total_ded'])}، خالص {f(t['net'])} تومان"
         if bad:
-            line += "\n⚠️ جمع‌های روی فیش با مجموع اقلام نمی‌خواند؛ عددها را در اپ (حساب‌ها ← فیش حقوقی) چک کن."
+            line += "\n⚠️ جمع‌های روی فیش با مجموع اقلام نمی‌خونه؛ عددها رو در اپ (حساب‌ها ← فیش حقوقی) چک کن."
         return line
 
     async def notify_owner(self, text):
@@ -388,7 +395,7 @@ class Bot:
     async def handle_backup(self, chat_id):
         import os
         dest = await self.do_backup()
-        await self.tg.send(chat_id, f"✅ پشتیبان ساخته شد: {os.path.basename(dest)} ({life.fa(os.path.getsize(dest) // 1024)} کیلوبایت). هر شب ساعت ۰۳:۳۰ هم خودکار ساخته می‌شود (۱۴ روز نگه‌داری).")
+        await self.tg.send(chat_id, f"✅ پشتیبان ساخته شد: {os.path.basename(dest)} ({life.fa(os.path.getsize(dest) // 1024)} کیلوبایت). هر شب ساعت ۰۳:۳۰ هم خودکار ساخته می‌شه (۱۴ روز نگه‌داری).")
 
     async def send_digest(self):
         items = await self.mem.inbox_unnotified(("email", "telegram"))
@@ -401,14 +408,14 @@ class Bot:
     async def handle_inbox(self, chat_id):
         items = await self.mem.recent_inbox(("email", "telegram"), 15)
         if not items:
-            await self.tg.send(chat_id, "پیام ایمیل/تلگرامی ثبت نشده است. ایجنت‌ها هنوز تنظیم نشده‌اند یا چیزی نیامده.")
+            await self.tg.send(chat_id, "پیام ایمیل/تلگرامی ثبت نشده‌ست. ایجنت‌ها هنوز تنظیم نشدن یا چیزی نیومده.")
             return
         await self.tg.send(chat_id, agents.digest_text(list(reversed(items)), limit=15).replace("خلاصهٔ پیام‌های جدید", "آخرین پیام‌ها"))
 
     async def handle_mailtest(self, chat_id):
         agent = getattr(self, "mail_agent", None)
         if agent is None:
-            await self.tg.send(chat_id, "ایجنت ایمیل تنظیم نشده. EMAIL_IMAP_USER و EMAIL_IMAP_PASSWORD (App Password) را در .env بگذار.")
+            await self.tg.send(chat_id, "ایجنت ایمیل تنظیم نشده. EMAIL_IMAP_USER و EMAIL_IMAP_PASSWORD (App Password) رو توی .env بذار.")
             return
         ok, msg = await agent.check()
         await self.tg.send(chat_id, ("✅ " if ok else "❌ ") + msg)
@@ -416,9 +423,8 @@ class Bot:
     async def handle_wife(self, chat_id, arg=""):
         _, token = await self.mem.create_invite("wife", arg.strip() or "همسر", days=14, max_uses=3)
         url = f"{self.cfg.public_url}/who/{token}"
-        await self.tg.send(chat_id, "لینک پرسش‌نامهٔ همسر (۱۴ روز اعتبار، حداکثر ۳ بار ارسال):\n" + url +
-                           "\n\nاین لینک را فقط برای خودش بفرست. او فقط به چند سؤال دربارهٔ تو جواب می‌دهد و هیچ‌کدام از اطلاعات تو را نمی‌بیند. "
-                           "پاسخ‌هایش در اپ (هدف‌ها ← پروفایل) برای خودت دیدنی و قابل‌حذف است. ابطال: /invites")
+        await self.tg.send(chat_id, "لینک چند تا سؤال برای همسرت (۱۴ روز اعتبار داره و حداکثر ۳ بار باز می‌شه):\n" + url +
+                           "\n\nفقط برای خودش بفرست. فقط به چند تا سؤال درباره‌ی تو جواب می‌ده و هیچ‌چیز از اطلاعات تو رو نمی‌بینه. باطل‌کردنش: /invites")
 
     async def handle_invites(self, chat_id):
         inv = await self.mem.list_invites()
@@ -435,7 +441,7 @@ class Bot:
             ok = await self.mem.revoke_invite(int(arg.strip().lstrip("#")))
         except ValueError:
             ok = False
-        await self.tg.send(chat_id, "باطل شد." if ok else "شمارهٔ لینک را درست بنویس: /revoke 1")
+        await self.tg.send(chat_id, "باطل شد." if ok else "شمارهٔ لینک رو درست بنویس: /revoke 1")
 
     async def _onboard_next(self, chat_id):
         """سؤال بعدی مصاحبه (از ۱۵ سؤال) یا پایان."""
@@ -443,7 +449,7 @@ class Bot:
         if i >= len(profile.SELF_QUESTIONS):
             await self.mem.kv_set("onboard_q", None)
             await self.mem.kv_set("onboard_i", None)
-            await self.tg.send(chat_id, "مصاحبه تمام شد 🙏 هر وقت چیزی عوض شد فقط بگو. با /goals برایت هدف پیشنهاد می‌دهم.")
+            await self.tg.send(chat_id, "مصاحبه تمام شد 🙏 هر وقت چیزی عوض شد فقط بگو. با /goals برات هدف پیشنهاد می‌دم.")
             return
         qid, section, text = profile.SELF_QUESTIONS[i]
         await self.mem.kv_set("onboard_q", qid)
@@ -454,22 +460,22 @@ class Bot:
         if arg.strip() == "stop":
             await self.mem.kv_set("onboard_q", None)
             await self.mem.kv_set("onboard_i", None)
-            await self.tg.send(chat_id, "مصاحبه متوقف شد. با /onboard از اول شروع می‌شود.")
+            await self.tg.send(chat_id, "مصاحبه متوقف شد. با /onboard از اول شروع می‌شه.")
             return
         await self.mem.kv_set("onboard_i", "0")
-        await self.tg.send(chat_id, "می‌خواهم تو را از صفر تا صد بشناسم؛ ۱۵ سؤال کوتاه است و هر جوابی که دادی در پروفایلت ثبت می‌شود.")
+        await self.tg.send(chat_id, "می‌خوام تو رو از صفر تا صد بشناسم؛ ۱۵ سؤال کوتاه‌ست و هر جوابی که دادی در پروفایلت ثبت می‌شه.")
         await self._onboard_next(chat_id)
 
     async def handle_goals(self, chat_id):
         await self.tg.send_chat_action(chat_id, "typing")
         goals = await self.suggest_goals()
         if not goals:
-            await self.tg.send(chat_id, "فعلاً چیز کافی از تو نمی‌دانم. با /onboard شروع کن یا چند روز روزت را برایم تعریف کن.")
+            await self.tg.send(chat_id, "فعلاً چیز کافی از تو نمی‌دونم. با /onboard شروع کن یا چند روز روزت رو برام تعریف کن.")
             return
         lines = ["🎯 هدف‌های پیشنهادی:"]
         for n, g in enumerate(goals, 1):
             lines.append(f"{life.fa(n)}. {g['title']} ({g['horizon']})\n   چرا: {g['why']}")
-        await self.tg.send(chat_id, "\n".join(lines) + "\n\nبرای اضافه‌کردن، در اپ ← هدف‌ها ← «پیشنهاد هدف» را بزن.")
+        await self.tg.send(chat_id, "\n".join(lines) + "\n\nبرای اضافه‌کردن، در اپ ← هدف‌ها ← «پیشنهاد هدف» رو بزن.")
 
     async def handle_nova(self, chat_id):
         await self.tg.send(chat_id, novatunnel.format_text(await novatunnel.snapshot(self.cfg.novatunnel_db_url)))
@@ -479,7 +485,7 @@ class Bot:
 
     async def handle_pair(self, chat_id):
         code = await self.mem.create_pair_code()
-        await self.tg.send(chat_id, f"کد جفت‌سازی اپ (۱۰ دقیقه، یک‌بار مصرف):\n\n{code}\n\nدر اپ مهرداد وارد کن.")
+        await self.tg.send(chat_id, f"کد وصل‌کردن اپ (۱۰ دقیقه اعتبار داره، یه بار مصرفه):\n\n{code}\n\nبزنش تو اپ مهرداد.")
 
     async def handle_devices(self, chat_id):
         devs = await self.mem.list_devices()
@@ -493,7 +499,7 @@ class Bot:
         try:
             did = int(arg.strip().lstrip("#"))
         except ValueError:
-            await self.tg.send(chat_id, "شمارهٔ دستگاه را بنویس: /unpair 1")
+            await self.tg.send(chat_id, "شمارهٔ دستگاه رو بنویس: /unpair 1")
             return
         ok = await self.mem.remove_device(did)
         await self.tg.send(chat_id, "قطع شد." if ok else "چنین دستگاهی نیست.")
@@ -508,7 +514,7 @@ class Bot:
             if owner == chat_id:
                 await self.tg.send(chat_id, "از قبل من رو می‌شناسی. بگو چی شده.")
             else:
-                await self.tg.send(chat_id, "این مغز قبلاً معرفی شده و فقط برای صاحبش کار می‌کند.")
+                await self.tg.send(chat_id, "این مغز قبلاً معرفی شده و فقط برای صاحبش کار می‌کنه.")
             return
         if self.cfg.setup_code and arg == self.cfg.setup_code:
             await self.mem.set_owner(chat_id)
@@ -557,7 +563,7 @@ class Bot:
             if self.cfg.owner_id and chat_id == self.cfg.owner_id:
                 await self.mem.set_owner(chat_id)
             else:
-                await self.tg.send(chat_id, "این مغز فقط برای صاحبش کار می‌کند.")
+                await self.tg.send(chat_id, "این مغز فقط برای صاحبش کار می‌کنه.")
                 return
 
         if text == "/help":
@@ -660,11 +666,11 @@ class Bot:
     async def handle_voice(self, chat_id, msg):
         """ویس تلگرام → متن (روی خود سرور) → همان مسیر چت؛ متنِ فهمیده‌شده هم نشان داده می‌شود تا اشتباه‌شنیدن را اصلاح کنی."""
         if not self.stt or not self.stt.enabled:
-            await self.tg.send(chat_id, "فعلاً فقط متن می‌فهمم؛ همان را تایپ کن.")
+            await self.tg.send(chat_id, "فعلاً فقط متن می‌فهمم؛ همون رو تایپ کن.")
             return
         v = msg.get("voice") or msg.get("audio") or {}
         if (v.get("duration") or 0) > 600 or (v.get("file_size") or 0) > 20 * 1024 * 1024:
-            await self.tg.send(chat_id, "این ویس خیلی بلند است (حداکثر ۱۰ دقیقه / ۲۰ مگابایت)؛ تکه‌تکه بفرست.")
+            await self.tg.send(chat_id, "این ویس خیلی بلنده (حداکثر ۱۰ دقیقه / ۲۰ مگابایت)؛ تکه‌تکه بفرست.")
             return
         await self.tg.send_chat_action(chat_id, "typing")
         try:
@@ -673,7 +679,7 @@ class Bot:
             text = await self.stt.transcribe(data, suffix=suffix)
         except Exception:
             log.exception("پردازش ویس ناموفق")
-            await self.tg.send(chat_id, "نتوانستم ویس را بفهمم؛ دوباره بفرست یا تایپ کن.")
+            await self.tg.send(chat_id, "نتونستم ویس رو بفهمم؛ دوباره بفرست یا تایپ کن.")
             return
         if not text:
             await self.tg.send(chat_id, "چیزی از ویس نفهمیدم؛ واضح‌تر بگو یا تایپ کن.")
@@ -687,21 +693,21 @@ class Bot:
         """عکس تلگرام (فیش پرداخت، رسید، همسر، …) → مغز آن را می‌بیند و هر چه باید ثبت می‌کند."""
         file = (msg.get("photo") or [None])[-1] or msg.get("document") or {}
         if not file.get("file_id") or (file.get("file_size") or 0) > MAX_IMAGE_BYTES:
-            await self.tg.send(chat_id, "این عکس برای من زیادی بزرگ است؛ کوچک‌ترش را بفرست.")
+            await self.tg.send(chat_id, "این عکس برای من زیادی بزرگه؛ کوچک‌ترش رو بفرست.")
             return
         await self.tg.send_chat_action(chat_id, "typing")
         try:
             data = await self.tg.download(file["file_id"])
         except Exception:
             log.exception("دانلود عکس تلگرام ناموفق")
-            await self.tg.send(chat_id, "نتوانستم عکس را بگیرم؛ دوباره بفرست.")
+            await self.tg.send(chat_id, "نتونستم عکس رو بگیرم؛ دوباره بفرست.")
             return
         mt = sniff_image(data)
         if not mt or len(data) > MAX_IMAGE_BYTES:
-            await self.tg.send(chat_id, "فقط عکس (jpg/png/webp) می‌فهمم.")
+            await self.tg.send(chat_id, "عکس رو فقط به صورت jpg یا png یا webp می‌فهمم.")
             return
         caption = (msg.get("caption") or "").strip()
-        reply = await self.chat(caption or "این عکس را ببین؛ اگر فیش پرداخت، رسید یا چیز قابل‌ثبت است ثبتش کن و بگو چه خواندی.", images=[(mt, data)])
+        reply = await self.chat(caption or "این عکس رو ببین؛ اگه فیش پرداخت، رسید یا چیز قابل‌ثبته ثبتش کن و بگو چی خوندی.", images=[(mt, data)])
         await self.tg.send(chat_id, reply)
 
     async def handle_callback(self, cq):
@@ -722,7 +728,7 @@ class Bot:
             return
         habit = await self.mem.get_habit(hid)
         if not habit:
-            await self.tg.answer(cq["id"], "این عادت دیگر وجود ندارد.")
+            await self.tg.answer(cq["id"], "این عادت دیگه وجود نداره.")
             return
         result = await self.mem.checkin_habit(hid, done)
         streak = result["streak"]

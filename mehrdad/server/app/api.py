@@ -260,7 +260,7 @@ def create_router(mem, svc):
             q.append(now)
             raise HTTPException(status_code=403, detail="invalid or expired code")
         device_id, token = await mem.add_device(body.name)
-        await svc.notify_owner(f"📱 دستگاه «{body.name}» به مهرداد وصل شد (#{device_id}). اگر خودت نبودی: /unpair {device_id}")
+        await svc.notify_owner(f"📱 دستگاه «{body.name}» به مهرداد وصل شد (#{device_id}). اگه خودت نبودی: /unpair {device_id}")
         return {"token": token, "device_id": device_id}
 
     @router.get("/me")
@@ -551,7 +551,7 @@ def create_router(mem, svc):
             "category": qmap[qid][1], "fields": {"source": "همسر", "qid": qid, "question": qmap[qid][2], **({"who": who} if who else {})}}
             for qid, text in clean.items()])
         await mem.use_invite(inv["id"])
-        await svc.notify_owner(f"✅ همسرت به {life.fa(len(clean))} سؤال دربارهٔ تو جواب داد. در اپ ← هدف‌ها ← پروفایل ببین (و هر چه خواستی حذف کن).")
+        await svc.notify_owner(f"✅ همسرت به {life.fa(len(clean))} سؤال دربارهٔ تو جواب داد. در اپ ← هدف‌ها ← پروفایل ببین (و هر چی خواستی حذف کن).")
         return {"saved": len(clean)}
 
     @router.get("/novatunnel")
@@ -618,7 +618,7 @@ def create_router(mem, svc):
         if not dec:
             raise HTTPException(status_code=422, detail="فقط عکس jpg/png/webp تا ۶ مگابایت")
         try:
-            reply = await svc.chat(body.text.strip() or "این عکس را ببین؛ اگر فیش پرداخت، رسید یا چیز قابل‌ثبت است ثبتش کن و بگو چه خواندی.", images=[dec])
+            reply = await svc.chat(body.text.strip() or "این عکس رو ببین؛ اگه فیش پرداخت، رسید یا چیز قابل‌ثبته ثبتش کن و بگو چی خوندی.", images=[dec])
         except Exception:
             log.exception("image chat failed")
             raise HTTPException(status_code=502, detail="brain unavailable")

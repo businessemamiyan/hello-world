@@ -64,34 +64,34 @@ def summarize(accounts, debts, avg_income, avg_expense, today=None, data_days=90
     for d in overdue:
         days = (today - due_date(d)).days
         alerts.append({"level": "crit", "tag": "سررسید گذشته",
-                       "text": f"«{d['title']}» {fa(days)} روز است که سررسیدش گذشته ({_money(d.get('installment_amount') or 0)} تومان)."})
+                       "text": f"«{d['title']}» {fa(days)} روزه که سررسیدش گذشته ({_money(d.get('installment_amount') or 0)} تومان)."})
     for d in soon:
         days = (due_date(d) - today).days
-        when = "امروز" if days == 0 else f"{fa(days)} روز دیگر"
+        when = "امروز" if days == 0 else f"{fa(days)} روز دیگه"
         alerts.append({"level": "warn", "tag": "سررسید نزدیک",
                        "text": f"قسط «{d['title']}» {when} ({jalali_text(due_date(d))}): {_money(d.get('installment_amount') or 0)} تومان."})
     if next30 > liquid and active:
         alerts.append({"level": "crit", "tag": "کمبود نقدینگی",
-                       "text": f"اقساط ۳۰ روز آینده {_money(next30)} تومان است ولی موجودی نقد {_money(liquid)} تومان."})
+                       "text": f"اقساط ۳۰ روز آینده {_money(next30)} تومانه ولی موجودی نقد {_money(liquid)} تومان."})
     if avg_income > 0 and monthly_oblig > 0:
         ratio = monthly_oblig / avg_income
         if ratio >= 0.8:
             alerts.append({"level": "crit", "tag": "فشار اقساط",
-                           "text": f"اقساط ماهانه {fa(round(ratio * 100))}٪ درآمد میانگینت را می‌خورد؛ بالاتر از ۸۰٪ خطرناک است."})
+                           "text": f"اقساط ماهانه {fa(round(ratio * 100))}٪ درآمد میانگینت رو می‌خوره؛ بالاتر از ۸۰٪ خطرناکه."})
         elif ratio >= 0.5:
             alerts.append({"level": "warn", "tag": "فشار اقساط",
-                           "text": f"اقساط ماهانه {fa(round(ratio * 100))}٪ درآمد میانگینت است (حد امن حدود ۴۰٪)."})
+                           "text": f"اقساط ماهانه {fa(round(ratio * 100))}٪ درآمد میانگینته (حد امن حدود ۴۰٪)."})
     burn = max(avg_expense, monthly_oblig)
     runway = (liquid / burn) if burn > 0 else None
     if runway is not None and runway < 1 and (active or accounts):
         alerts.append({"level": "warn", "tag": "ذخیرهٔ کم",
-                       "text": f"موجودی نقد برای کمتر از یک ماه هزینه‌ها کافی است ({fa(round(runway, 1))} ماه)."})
+                       "text": f"موجودی نقد برای کمتر از یک ماه هزینه‌ها کافیه ({fa(round(runway, 1))} ماه)."})
     if avg_income and avg_expense > avg_income:
         alerts.append({"level": "warn", "tag": "خرج بیش از درآمد",
-                       "text": f"میانگین ماهانهٔ خرج ({_money(avg_expense)}) از درآمد ({_money(avg_income)}) بیشتر است."})
+                       "text": f"میانگین ماهانهٔ خرج ({_money(avg_expense)}) از درآمد ({_money(avg_income)}) بیشتره."})
     if not alerts:
         alerts.append({"level": "good", "tag": "پایدار",
-                       "text": "فعلاً هشدار مالی نداری؛ سررسیدها و نقدینگی در محدودهٔ امن‌اند."})
+                       "text": "فعلاً هشدار مالی نداری؛ سررسیدها و نقدینگی در محدودهٔ امنن."})
 
     plans = []
     for d in sorted(active, key=lambda x: x["remaining"]):

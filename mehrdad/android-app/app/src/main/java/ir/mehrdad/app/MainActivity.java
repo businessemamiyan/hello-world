@@ -51,8 +51,8 @@ import java.io.IOException;
 import java.util.ArrayList;
 
 /**
- * پوستهٔ بومی مهرداد: داشبورد همان اپ وب سرور (/app) است، پس هر تغییر ظاهر بدون APK جدید می‌آید.
- * فقط چیزهایی بومی‌اند که وب نمی‌تواند: پیامک، اعلان‌ها، صدای گوشی، و به‌روزرسانی خود APK.
+ * پوستهٔ بومی مهرداد: داشبورد همون اپ وب سرور (/app) است، پس هر تغییر ظاهر بدون APK جدید میاد.
+ * فقط چیزهایی بومین که وب نمی‌تونه: پیامک، اعلان‌ها، صدای گوشی، و به‌روزرسانی خود APK.
  */
 public class MainActivity extends AppCompatActivity {
     private WebView web;
@@ -99,12 +99,12 @@ public class MainActivity extends AppCompatActivity {
             }
         });
         smsPermission = registerForActivityResult(new ActivityResultContracts.RequestPermission(), granted ->
-                Toast.makeText(this, granted ? "دریافت پیامک بانکی فعال شد" : "بدون مجوز پیامک، پیامک بانکی ثبت نمی‌شود",
+                Toast.makeText(this, granted ? "باشه، پیامک‌های بانکی رو می‌گیرم" : "بدون مجوز پیامک، پیامک‌های بانکی ثبت نمی‌شن",
                         Toast.LENGTH_LONG).show());
 
         micPermission = registerForActivityResult(new ActivityResultContracts.RequestPermission(), granted -> {
             if (granted) startVoice();
-            else Toast.makeText(this, "بدون مجوز میکروفون نمی‌شود حرف زد", Toast.LENGTH_LONG).show();
+            else Toast.makeText(this, "بدون مجوز میکروفون نمی‌تونم صداتو بشنوم", Toast.LENGTH_LONG).show();
         });
         fileChooser = registerForActivityResult(new ActivityResultContracts.StartActivityForResult(), result -> {
             if (filePathCb == null) return;
@@ -137,7 +137,7 @@ public class MainActivity extends AppCompatActivity {
         super.onDestroy();
     }
 
-    /** ویس پیوسته: تشخیص گفتار را بعد از هر مکث دوباره شروع می‌کند تا کاربر حرفش را کامل بزند؛ فقط با «تمام» تمام می‌شود. */
+    /** ویس پیوسته: تشخیص گفتار رو بعد از هر مکث دوباره شروع می‌کنه تا کاربر حرفش رو کامل بزند؛ فقط با «تمام» تمام می‌شه. */
     private class Voice implements RecognitionListener {
         private final SpeechRecognizer sr = SpeechRecognizer.createSpeechRecognizer(MainActivity.this);
         private final Handler h = new Handler(Looper.getMainLooper());
@@ -156,7 +156,7 @@ public class MainActivity extends AppCompatActivity {
             box.setOrientation(LinearLayout.VERTICAL);
             box.setPadding(48, 32, 48, 8);
             TextView hint = new TextView(MainActivity.this);
-            hint.setText("🎤 هر قدر می‌خواهی حرف بزن؛ مکث مهم نیست.\nوقتی تمام شد «تمام» را بزن.");
+            hint.setText("🎤 هر قدر می‌خوای حرف بزن؛ مکث مهم نیست.\nوقتی تموم شد «تمام» رو بزن.");
             hint.setGravity(Gravity.CENTER);
             live = new TextView(MainActivity.this);
             live.setTextSize(17);
@@ -230,10 +230,10 @@ public class MainActivity extends AppCompatActivity {
             if (!partial.isEmpty()) { done.append(done.length() > 0 ? " " : "").append(partial); partial = ""; show(); }
             if (error == SpeechRecognizer.ERROR_NO_MATCH || error == SpeechRecognizer.ERROR_SPEECH_TIMEOUT) { h.postDelayed(this::listen, 150); return; }
             if (error == SpeechRecognizer.ERROR_RECOGNIZER_BUSY && fails++ < 5) { try { sr.cancel(); } catch (Exception ignored) { } h.postDelayed(this::listen, 500); return; }
-            if (error == SpeechRecognizer.ERROR_INSUFFICIENT_PERMISSIONS) { Toast.makeText(MainActivity.this, "مجوز میکروفون لازم است", Toast.LENGTH_LONG).show(); finish(false); return; }
+            if (error == SpeechRecognizer.ERROR_INSUFFICIENT_PERMISSIONS) { Toast.makeText(MainActivity.this, "مجوز میکروفون لازمه", Toast.LENGTH_LONG).show(); finish(false); return; }
             if (error == SpeechRecognizer.ERROR_NETWORK || error == SpeechRecognizer.ERROR_NETWORK_TIMEOUT || error == SpeechRecognizer.ERROR_SERVER) {
                 if (fails++ < 3) { h.postDelayed(this::listen, 800); return; }
-                Toast.makeText(MainActivity.this, "تشخیص گفتار به اینترنت/فیلترشکن نیاز دارد", Toast.LENGTH_LONG).show();
+                Toast.makeText(MainActivity.this, "تشخیص گفتار اینترنت (یا فیلترشکن) می‌خواد", Toast.LENGTH_LONG).show();
             }
             finish(true);
         }
@@ -251,12 +251,12 @@ public class MainActivity extends AppCompatActivity {
             micPermission.launch(Manifest.permission.RECORD_AUDIO);
             return;
         }
-        if (!SpeechRecognizer.isRecognitionAvailable(this)) {          // بدون سرویس Google: همان پنجرهٔ قدیمی سیستم
+        if (!SpeechRecognizer.isRecognitionAvailable(this)) {          // بدون سرویس Google: همون پنجرهٔ قدیمی سیستم
             Intent i = new Intent(RecognizerIntent.ACTION_RECOGNIZE_SPEECH);
             i.putExtra(RecognizerIntent.EXTRA_LANGUAGE_MODEL, RecognizerIntent.LANGUAGE_MODEL_FREE_FORM);
             i.putExtra(RecognizerIntent.EXTRA_LANGUAGE, "fa-IR");
             try { speech.launch(i); } catch (ActivityNotFoundException e) {
-                Toast.makeText(this, "تشخیص گفتار در این گوشی نیست (برنامهٔ Google لازم است؛ شاید فیلترشکن هم).", Toast.LENGTH_LONG).show();
+                Toast.makeText(this, "تشخیص گفتار توی این گوشی نیست (برنامهٔ Google لازمه؛ شاید فیلترشکن هم).", Toast.LENGTH_LONG).show();
             }
             return;
         }
@@ -264,15 +264,15 @@ public class MainActivity extends AppCompatActivity {
         voice.begin();
     }
 
-    /** راهنمای «Restricted setting»: اندروید ۱۳+ برای اپ‌های خارج از فروشگاه، دسترسی اعلان‌ها را تا تأیید دستی قفل می‌کند. */
+    /** راهنمای «Restricted setting»: اندروید ۱۳+ برای اپ‌های خارج از فروشگاه، دسترسی اعلان‌ها رو تا تأیید دستی قفل می‌کنه. */
     private void showNotificationAccessGuide() {
         new AlertDialog.Builder(this)
                 .setTitle("دسترسی اعلان‌ها")
-                .setMessage("اگر پیام «Restricted setting» دیدی، یک‌بار این کار لازم است:\n\n"
-                        + "۱) «اطلاعات برنامه» را باز کن\n"
-                        + "۲) سه‌نقطهٔ بالا-راست ⋮ را بزن\n"
-                        + "۳) «Allow restricted settings» (اجازهٔ تنظیمات محدودشده) را بزن و تأیید کن\n"
-                        + "۴) برگرد و دوباره «دسترسی اعلان‌ها» را بزن و MEHRDAD را روشن کن")
+                .setMessage("اگه پیام «Restricted setting» دیدی، فقط یه بار باید این کار رو بکنی:\n\n"
+                        + "۱) «اطلاعات برنامه» رو باز کن\n"
+                        + "۲) سه‌نقطهٔ بالا-راست ⋮ رو بزن\n"
+                        + "۳) «Allow restricted settings» (اجازهٔ تنظیمات محدودشده) رو بزن و تأیید کن\n"
+                        + "۴) برگرد و دوباره «دسترسی اعلان‌ها» رو بزن و MEHRDAD رو روشن کن")
                 .setPositiveButton("اطلاعات برنامه", (d, w) -> startActivity(new Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS,
                         Uri.fromParts("package", getPackageName(), null))))
                 .setNeutralButton("دسترسی اعلان‌ها", (d, w) -> startActivity(new Intent(Settings.ACTION_NOTIFICATION_LISTENER_SETTINGS)))
@@ -283,7 +283,7 @@ public class MainActivity extends AppCompatActivity {
     protected void onResume() {
         super.onResume();
         if (Prefs.isPaired(this)) {
-            Outbox.schedule(this);               // صف پیامک/اعلان معوق را دوباره امتحان کن
+            Outbox.schedule(this);               // صف پیامک/اعلان معوق رو دوباره امتحان کن
             Updater.check(this, false);          // بی‌صدا، حداکثر هر ۶ ساعت
         }
     }
@@ -310,14 +310,14 @@ public class MainActivity extends AppCompatActivity {
             String base = Prefs.serverUrl(MainActivity.this) + "/app/";
             String html = "<html dir='rtl' lang='fa'><meta name='viewport' content='width=device-width,initial-scale=1'>"
                     + "<body style='background:#0A0F18;color:#E8EDF5;font-family:sans-serif;text-align:center;padding:48px 24px'>"
-                    + "<h2>اتصال برقرار نشد</h2><p style='color:#A7B3C5'>اینترنت یا فیلترشکن را چک کن.</p>"
+                    + "<h2>اتصال برقرار نشد</h2><p style='color:#A7B3C5'>اینترنت یا فیلترشکنت رو چک کن.</p>"
                     + "<p><a style='display:inline-block;margin-top:16px;padding:12px 24px;border-radius:12px;background:#E3B35C;color:#1A1405;"
                     + "text-decoration:none;font-weight:bold' href='" + base + "'>تلاش دوباره</a></p></body></html>";
             view.loadDataWithBaseURL(null, html, "text/html", "UTF-8", null);
         }
     }
 
-    /** مرورگر داخلی confirm/prompt/alert جاوااسکریپت را نشان نمی‌دهد مگر اینجا پیاده شود (اپ وب از آن‌ها استفاده می‌کند). */
+    /** مرورگر داخلی confirm/prompt/alert جاوااسکریپت رو نشان نمی‌ده مگر اینجا پیاده بشه (اپ وب از آن‌ها استفاده می‌کنه). */
     private class Chrome extends WebChromeClient {
         @Override
         public boolean onShowFileChooser(WebView view, ValueCallback<Uri[]> callback, FileChooserParams params) {
@@ -326,7 +326,7 @@ public class MainActivity extends AppCompatActivity {
             Intent pick = new Intent(Intent.ACTION_GET_CONTENT);
             pick.addCategory(Intent.CATEGORY_OPENABLE);
             pick.setType("image/*");
-            Intent chooser = Intent.createChooser(pick, "عکس فیش / رسید");
+            Intent chooser = Intent.createChooser(pick, "عکس فیش یا رسید");
             cameraUri = null;
             try {
                 File dir = new File(getCacheDir(), "images");
@@ -375,7 +375,7 @@ public class MainActivity extends AppCompatActivity {
         }
     }
 
-    /** پل بومی برای اپ وب (فقط صفحات همین سرور داخل WebView بارگذاری می‌شوند). */
+    /** پل بومی برای اپ وب (فقط صفحات همین سرور داخل WebView بارگذاری می‌شن). */
     private class Bridge {
         @JavascriptInterface
         public String getToken() { return Prefs.token(MainActivity.this); }

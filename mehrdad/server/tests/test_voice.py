@@ -66,7 +66,7 @@ async def test_voice_is_transcribed_shown_and_answered(tmp_path):
     await bot.handle_message({"chat": {"id": 7}, "voice": {"file_id": "v1", "duration": 12, "file_size": 5000}})
     assert tg.downloaded == ["v1"] and stt.calls == [(104, ".ogg")]
     assert tg.sent[0] == "🎤 فهمیدم: «موجودی بانک مهر هفت میلیون و نهصد هزار»" and tg.sent[-1] == "ثبت شد"
-    assert "ممکن است عددها یا اسم‌ها اشتباه" in brain.seen[0] and brain.seen[0].endswith("نهصد هزار")     # مغز بداند ویس است
+    assert "ممکنه عددها یا اسم‌ها اشتباه" in brain.seen[0] and brain.seen[0].endswith("نهصد هزار")     # مغز بداند ویس است
     assert (await mem.recent_messages(3))[0][1].startswith("🎤 ")
 
 
@@ -78,7 +78,7 @@ async def test_voice_edge_cases(tmp_path):
     assert "نفهمیدم" in tg.sent[-1] and not brain.seen                           # ویس خالی: مغز صدا زده نمی‌شود
     bot.stt = FakeSTT(STTError("boom"))
     await bot.handle_message({"chat": {"id": 7}, "voice": {"file_id": "b", "duration": 3}})
-    assert "نتوانستم" in tg.sent[-1] and not brain.seen
+    assert "نتونستم" in tg.sent[-1] and not brain.seen
     bot.stt = FakeSTT()
     await bot.handle_message({"chat": {"id": 7}, "voice": {"file_id": "c", "duration": 601}})
     assert "بلند" in tg.sent[-1] and "c" not in tg.downloaded

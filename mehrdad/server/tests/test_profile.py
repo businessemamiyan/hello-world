@@ -150,7 +150,7 @@ async def test_onboarding_flow_asks_next_question_and_tags_answers(tmp_path):
     await bot.handle_message({"chat": {"id": 7}, "text": "/onboard"})
     assert "سؤال ۱ از ۱۵" in tg.sent[-1] and await mem.kv_get("onboard_q") == "s1"
     await bot.handle_message({"chat": {"id": 7}, "text": "مهرداد هستم، ۳۴ ساله"})
-    assert "[کاربر دارد به سؤال مصاحبه" in brain.calls[-1] and "بخش هویت" in brain.calls[-1]      # جواب با زمینهٔ سؤال به مغز رفت
+    assert "[کاربر داره به سؤال مصاحبه" in brain.calls[-1] and "بخش هویت" in brain.calls[-1]      # جواب با زمینهٔ سؤال به مغز رفت
     assert "سؤال ۲ از ۱۵" in tg.sent[-1]
     await bot.handle_message({"chat": {"id": 7}, "text": "رد"})
     assert "سؤال ۳ از ۱۵" in tg.sent[-1]
@@ -179,7 +179,9 @@ def test_wife_invite_full_flow(web):
     tok = url.rsplit("/", 1)[1]
     page = c.get(f"/who/{tok}")
     assert page.status_code == 200 and "noindex" in page.headers["x-robots-tag"] and "no-store" in page.headers["cache-control"]
-    assert "پاسخ‌هایت برای خودش قابل‌دیدن است" in page.text                                       # شفافیت برای همسر
+    assert "جواب درست و غلط نداره" in page.text and "مهرداد ازم خواسته" in page.text                  # لحن صمیمی و بی‌استرس
+    assert "قابل‌دیدن" not in page.text and "حذفشان" not in page.text and "ناراحت" not in page.text   # بدون هشدار «جواب‌هایت را می‌بیند»
+    assert "محرمانه" not in page.text and "private" not in page.text.lower()                         # ولی وعدهٔ محرمانگی هم نمی‌دهیم
 
     info = c.get(f"/api/invite/{tok}").json()                                                    # عمومی، بدون توکن دستگاه
     assert info["valid"] and len(info["questions"]) == len(profile.WIFE_QUESTIONS)
@@ -238,6 +240,6 @@ def test_profile_and_habit_endpoints_and_commands(web):
     assert c.get("/api/profile").status_code == 401
     bot = Bot(mem, tg, StubBrain(), Config(bot_token="x", setup_code="S", anthropic_api_key="k"))
     loop.run_until_complete(bot.handle_message({"chat": {"id": 7}, "text": "/wife همسر من"}))
-    assert "/who/" in tg.sent[-1] and "ابطال" in tg.sent[-1]
+    assert "/who/" in tg.sent[-1] and "باطل" in tg.sent[-1]
     loop.run_until_complete(bot.handle_message({"chat": {"id": 7}, "text": "/invites"}))
     assert "همسر من" in tg.sent[-1] and "۰/۳" not in tg.sent[-1] or "0/3" in tg.sent[-1]

@@ -76,7 +76,7 @@ async def snapshot(dsn, now=None, connect=_connect, use_cache=True):
 
 def format_text(d):
     if not d.get("configured"):
-        return "اتصال NovaTunnel هنوز تنظیم نشده است."
+        return "اتصال NovaTunnel هنوز تنظیم نشده‌ست."
     if d.get("error"):
         return "NovaTunnel در دسترس نیست: " + d["error"]
     m = lambda n: life.fa(f"{int(round(n)):,}")

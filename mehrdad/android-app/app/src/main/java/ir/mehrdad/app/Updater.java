@@ -20,8 +20,8 @@ import java.net.URL;
 import java.security.MessageDigest;
 
 /**
- * به‌روزرسانی از داخل خود اپ: نسخهٔ سرور (/api/app/version) را می‌خواند؛ اگر جدیدتر بود APK را دانلود،
- * SHA-256 را چک و نصب‌کنندهٔ اندروید را باز می‌کند. اندروید فقط APK هم‌امضا (همان کلید) را روی نسخهٔ فعلی می‌نشاند.
+ * به‌روزرسانی از داخل خود اپ: نسخهٔ سرور (/api/app/version) رو می‌خونه؛ اگه جدیدتر بود APK رو دانلود،
+ * SHA-256 رو چک و نصب‌کنندهٔ اندروید رو باز می‌کنه. اندروید فقط APK هم‌امضا (همون کلید) رو روی نسخهٔ فعلی می‌نشونه.
  */
 public class Updater {
     private static final long CHECK_EVERY_MS = 6L * 3600 * 1000;
@@ -44,7 +44,7 @@ public class Updater {
         }
     }
 
-    /** manual=true: همیشه نتیجه را نشان بده؛ false: بی‌صدا و حداکثر هر ۶ ساعت. */
+    /** manual=true: همیشه نتیجه رو نشان بده؛ false: بی‌صدا و حداکثر هر ۶ ساعت. */
     public static void check(Activity act, boolean manual) {
         if (running) return;
         if (!manual && System.currentTimeMillis() - Prefs.lastUpdateCheck(act) < CHECK_EVERY_MS) return;
@@ -53,14 +53,14 @@ public class Updater {
             try {
                 Api.Result r = Api.call(act, Prefs.serverUrl(act), "GET", "/api/app/version", null, false, 15000);
                 if (!r.ok()) {
-                    if (manual) toast(act, "سرور در دسترس نیست (" + r.code + ")");
+                    if (manual) toast(act, "سرور جواب نمی‌ده (" + r.code + ")");
                     return;
                 }
                 Prefs.markUpdateChecked(act);
                 JSONObject v = r.json();
                 long remote = v.optLong("versionCode", 0);
                 if (remote <= installedVersionCode(act)) {
-                    if (manual) toast(act, "اپ به‌روز است (نسخهٔ " + installedVersionName(act) + ")");
+                    if (manual) toast(act, "اپت به‌روزه (نسخهٔ " + installedVersionName(act) + ")");
                     return;
                 }
                 final String name = v.optString("versionName", String.valueOf(remote));
@@ -69,7 +69,7 @@ public class Updater {
                 final String url = Prefs.serverUrl(act) + v.optString("url", "/download/mehrdad.apk");
                 act.runOnUiThread(() -> new AlertDialog.Builder(act)
                         .setTitle("نسخهٔ جدید مهرداد " + name)
-                        .setMessage(notes.isEmpty() ? "یک نسخهٔ تازه آماده است." : notes)
+                        .setMessage(notes.isEmpty() ? "یه نسخهٔ تازه آماده‌ست." : notes)
                         .setPositiveButton("به‌روزرسانی", (d, w) -> download(act, url, sha))
                         .setNegativeButton("بعداً", null)
                         .show());
@@ -82,7 +82,7 @@ public class Updater {
     private static void download(Activity act, String url, String expectedSha) {
         AlertDialog[] dlg = new AlertDialog[1];
         act.runOnUiThread(() -> dlg[0] = new AlertDialog.Builder(act).setTitle("در حال دانلود…")
-                .setMessage("لطفاً صبر کن").setCancelable(false).show());
+                .setMessage("یه لحظه صبر کن").setCancelable(false).show());
         new Thread(() -> {
             File out = null;
             try {
@@ -125,7 +125,7 @@ public class Updater {
 
     private static void install(Activity act, File apk) {
         if (!act.getPackageManager().canRequestPackageInstalls()) {
-            Toast.makeText(act, "اجازهٔ «نصب برنامه‌های ناشناس» را برای مهرداد روشن کن و دوباره به‌روزرسانی را بزن", Toast.LENGTH_LONG).show();
+            Toast.makeText(act, "اجازهٔ «نصب برنامه‌های ناشناس» رو برای مهرداد روشن کن و دوباره به‌روزرسانی رو بزن", Toast.LENGTH_LONG).show();
             act.startActivity(new Intent(Settings.ACTION_MANAGE_UNKNOWN_APP_SOURCES, Uri.parse("package:" + act.getPackageName())));
             return;
         }

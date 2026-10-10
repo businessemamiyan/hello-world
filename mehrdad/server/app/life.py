@@ -282,5 +282,5 @@ def format_text(d, private=False):
     if d["habits"]:
         lines.append("🔥 عادت‌ها: " + "، ".join(f"{h['good']} ({fa(h['streak'])} روز)" for h in d["habits"][:5]))
     if len(lines) == 1:
-        lines.append("هنوز چیزی ثبت نشده. هرچه گذشت برایم بنویس.")
+        lines.append("هنوز چیزی ثبت نشده. هر چی گذشت برام بنویس.")
     return "\n".join(lines)

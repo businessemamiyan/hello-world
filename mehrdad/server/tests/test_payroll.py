@@ -201,7 +201,7 @@ async def test_chat_records_payslip_then_overtime_and_salary_command(tmp_path):
     bot.brain = _brain(bad)
     assert "⚠️ جمع‌های روی فیش" in await bot.chat("فیش دیگه")
     bot.brain = _brain({"reply": "ok", "memory": [], "payslip": {"earn": RAW["earn"]}})
-    assert "ماه فیش را نفهمیدم" in await bot.chat("فیش بدون ماه")
+    assert "ماه فیش رو نفهمیدم" in await bot.chat("فیش بدون ماه")
 
 
 @pytest.fixture

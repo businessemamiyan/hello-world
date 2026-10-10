@@ -43,6 +43,12 @@ SYSTEM_PROMPT = """تو «مهرداد» هستی — مغز دومِ کاربر
 منبع درآمد مستقل (ازجمله فروش قهوه فوری تیچای) و در مسیر یادگیری فروش و هوش مصنوعی برای رسیدن
 به آزادی مالی. بلندپرواز و نتیجه‌گراست؛ تعریف بی‌دلیل نمی‌خواهد، واقعیت و چالش را می‌خواهد.
 
+### لحن (برای همهٔ جواب‌هایت)
+خودمونی، گرم و صمیمی، مثل یک رفیق نزدیک؛ به فارسی محاوره‌ای (می‌خوای، می‌کنه، رو، نمی‌تونم، میاد)، نه رسمی و کتابی و نه اداری
+(نه «می‌توانید»، نه «لطفاً»، نه «بفرمایید»). کوتاه و روشن بنویس. کاربر را «تو» صدا کن (نه «شما») و گاهی، نه زیاد، «داداش» یا «مهرداد جان».
+اسم اپ هم «مهرداد» است (از اسم خودش گرفته شده)؛ خودت را مهرداد معرفی کن. اگر از همسرش حرفی در داده‌ها بود، با گرما و احترام از او یاد کن
+و هیچ‌وقت قضاوت یا افشای جزئیات حساس نکن. صمیمی بودن به معنی چاپلوسی نیست؛ همچنان صادق و روراست باش.
+
 قانون کلیدی: هر پیامی که می‌فرستد را به‌خاطر بسپار — خرج، درآمد، ایده، کار، احساس، هرچی. تو باید
 علاوه بر جواب مکالمه‌ای، واقعیت‌های قابل‌ذخیره را هم استخراج کنی.
 
@@ -163,7 +169,7 @@ def _build_context_block(recent_memory):
 
 def _build_habits_block(active_habits):
     if not active_habits:
-        return "(هنوز هیچ عادتی ثبت نکرده — اگر مناسب بود پیشنهاد بده با /habit شروع کند.)"
+        return "(هنوز هیچ عادتی ثبت نکرده — اگه مناسب بود پیشنهاد بده با /habit شروع کنه.)"
     lines = []
     for h in active_habits:
         base = h["good"] if not h.get("bad") else f"{h['good']} (به‌جای {h['bad']})"
@@ -296,9 +302,9 @@ def parse_cli_output(stdout):
     if isinstance(data, list):
         data = next((d for d in reversed(data) if isinstance(d, dict) and d.get("type") == "result"), None) or {}
     if not isinstance(data, dict):
-        raise CLIError("شکل خروجی CLI ناشناخته است")
+        raise CLIError("شکل خروجی CLI ناشناخته‌ست")
     if data.get("is_error"):
-        raise CLIError(f"CLI خطا برگرداند: {str(data.get('result'))[:300]}")
+        raise CLIError(f"CLI خطا برگردونه: {str(data.get('result'))[:300]}")
     result = data.get("result")
     if not isinstance(result, str):
         raise CLIError("فیلد result در خروجی CLI نیست")
@@ -375,7 +381,7 @@ def _cli_prompt(messages):
     parts.append("پیام تازهٔ کاربر:")
     parts.append(last["content"])
     parts.append("")
-    parts.append("جواب مهرداد را فقط به‌صورت همان JSON گفته‌شده در دستور سیستم بده.")
+    parts.append("جواب مهرداد رو فقط به‌صورت همون JSON گفته‌شده در دستور سیستم بده.")
     return "\n".join(parts)
 
 

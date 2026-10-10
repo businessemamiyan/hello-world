@@ -54,7 +54,7 @@ class MailAgent:
         """تست اتصال برای /mailtest: ورود و باز کردن INBOX به‌صورت فقط‌خواندنی؛ چیزی ثبت نمی‌شود."""
         try:
             top, _ = await asyncio.to_thread(self._fetch_new, None)
-            return True, f"ورود موفق به {self.cfg.email_imap_user}؛ پیام‌های تازه از همین لحظه به بعد بررسی می‌شوند."
+            return True, f"ورود موفق به {self.cfg.email_imap_user}؛ پیام‌های تازه از همین لحظه به بعد بررسی می‌شن."
         except imaplib.IMAP4.error as e:
             return False, "ورود/IMAP ناموفق: " + re.sub(r"\s+", " ", str(e))[:80]
         except Exception as e:
@@ -90,7 +90,7 @@ class MailAgent:
             except imaplib.IMAP4.error as e:
                 if not self._auth_warned:
                     self._auth_warned = True
-                    await self.bot.notify_owner("⚠️ ورود به ایمیل ناموفق بود؛ App Password و فعال‌بودن IMAP را چک کن. (" + re.sub(r"\s+", " ", str(e))[:60] + ")")
+                    await self.bot.notify_owner("⚠️ ورود به ایمیل ناموفق بود؛ App Password و فعال‌بودن IMAP رو چک کن. (" + re.sub(r"\s+", " ", str(e))[:60] + ")")
                 log.warning("mail auth/imap error: %s", type(e).__name__)
             except Exception as e:
                 log.warning("mail poll failed: %s", type(e).__name__)

@@ -332,7 +332,7 @@ class Payroll:
             if e:
                 notes.append(f"   ← حقوق تخمینی {month_label(m)}: خالص {_f(e['net'])} تومان")
             else:
-                notes.append("   (برای محاسبهٔ حقوق، یک فیش واقعی نمونه لازم است؛ فیش را بفرست یا در اپ ثبت کن.)")
+                notes.append("   (برای محاسبهٔ حقوق، یک فیش واقعی نمونه لازمه؛ فیش رو بفرست یا در اپ ثبت کن.)")
         return notes
 
     async def save_actual(self, month, raw, unit="toman"):
@@ -347,10 +347,10 @@ class Payroll:
         slips = await self.slips()
         if not slips:
             return ("### فیش حقوقی: هنوز فیش نمونه‌ای ثبت نشده. اگر کاربر فیش حقوقش را گفت یا عکسش را فرستاد، با «payslip» ثبتش کن؛ "
-                    "اضافه‌کاری/مرخصی/مساعده را هم با «payroll» ثبت کن (بعد از ثبت فیش نمونه محاسبه می‌شود).")
+                    "اضافه‌کاری/مرخصی/مساعده رو هم با «payroll» ثبت کن (بعد از ثبت فیش نمونه محاسبه می‌شه).")
         e = await self.estimate_month(cm, slips)
         v = await self.vars(cm)
-        lines = [f"### فیش حقوقی (محاسبهٔ کد از آخرین فیش واقعی {month_label(self.pick_template(slips, cm))}؛ عددها را از همین بگیر):"]
+        lines = [f"### فیش حقوقی (محاسبهٔ کد از آخرین فیش واقعی {month_label(self.pick_template(slips, cm))}؛ عددها رو از همین بگیر):"]
         if e:
             w = e["work"]
             lines.append(f"{month_label(cm)}: جمع پرداختی {_f(e['total_earn'])}، کسورات {_f(e['total_ded'])}، خالص تخمینی {_f(e['net'])} تومان؛ "

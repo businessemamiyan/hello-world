@@ -4,8 +4,8 @@
 و هیچ‌جا کپی نمی‌شود. ایجنت هیچ پیامی نمی‌فرستد، «خوانده‌شد» نمی‌زند و چت‌های سکرت/کدهای ورود تلگرام را رد می‌کند.
 
 راه‌اندازی (یک‌بار، خودت روی سرور؛ api_id/api_hash را از my.telegram.org بگیر):
-  docker exec -it mehrad-mehrdad-1 python -m app.agent_tg login      ← شماره، کد و رمز دومرحله‌ای را خودت وارد می‌کنی
-  docker exec -it mehrad-mehrdad-1 python -m app.agent_tg list       ← شناسهٔ چت‌ها را ببین و در TG_ALLOW بگذار
+  docker exec -it mehrdad-mehrdad-1 python -m app.agent_tg login      ← شماره، کد و رمز دومرحله‌ای را خودت وارد می‌کنی
+  docker exec -it mehrdad-mehrdad-1 python -m app.agent_tg list       ← شناسهٔ چت‌ها را ببین و در TG_ALLOW بگذار
 """
 import asyncio
 import logging
@@ -63,13 +63,13 @@ class TelegramAgent:
 
     async def run_forever(self):
         if not self.allow:
-            log.warning("TG_ALLOW خالی است؛ ایجنت تلگرام شروع نشد (برای امنیت، بدون allowlist کار نمی‌کند)")
+            log.warning("TG_ALLOW خالیه؛ ایجنت تلگرام شروع نشد (برای امنیت، بدون allowlist کار نمی‌کنه)")
             return
         from telethon import events
         client = self._client()
         await client.connect()
         if not await client.is_user_authorized():
-            await self.bot.notify_owner("⚠️ ایجنت تلگرام وارد حساب نشده؛ روی سرور اجرا کن: docker exec -it mehrad-mehrdad-1 python -m app.agent_tg login")
+            await self.bot.notify_owner("⚠️ ایجنت تلگرام وارد حساب نشده؛ روی سرور اجرا کن: docker exec -it mehrdad-mehrdad-1 python -m app.agent_tg login")
             return
         try:
             os.chmod(session_path(self.cfg) + ".session", 0o600)
@@ -96,7 +96,7 @@ def _cli(argv):
     from telethon import TelegramClient
     cfg = Config.from_env()
     if not (cfg.tg_api_id and cfg.tg_api_hash):
-        sys.exit("TG_API_ID و TG_API_HASH را در .env بگذار (از my.telegram.org).")
+        sys.exit("TG_API_ID و TG_API_HASH رو توی .env بذار (از my.telegram.org).")
     cmd = argv[1] if len(argv) > 1 else ""
 
     async def run():
@@ -104,11 +104,11 @@ def _cli(argv):
         if cmd == "login":
             await client.start()                          # شماره/کد/رمز را خودت تایپ می‌کنی (من نمی‌بینم)
             os.chmod(session_path(cfg) + ".session", 0o600)
-            print("ورود موفق. session با دسترسی ۶۰۰ ذخیره شد. حالا `list` را بزن و TG_ALLOW را پر کن.")
+            print("ورود موفق. session با دسترسی ۶۰۰ ذخیره شد. حالا `list` رو بزن و TG_ALLOW رو پر کن.")
         elif cmd == "list":
             await client.connect()
             if not await client.is_user_authorized():
-                sys.exit("هنوز login نکرده‌ای.")
+                sys.exit("هنوز login نکردی.")
             async for d in client.iter_dialogs(limit=80):
                 print(f"{d.id}\t{d.name}")
         else:
