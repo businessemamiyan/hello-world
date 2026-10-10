@@ -56,6 +56,18 @@ function toast(msg) {
 }
 
 // ------------------------------------------------------------- اجزای کوچک
+function g2j(gy, gm, gd) {
+  const gdm = [0,31,59,90,120,151,181,212,243,273,304,334], gy2 = gm > 2 ? gy + 1 : gy;
+  let days = 355666 + 365 * gy + Math.floor((gy2 + 3) / 4) - Math.floor((gy2 + 99) / 100) + Math.floor((gy2 + 399) / 400) + gd + gdm[gm - 1];
+  let jy = -1595 + 33 * Math.floor(days / 12053); days %= 12053;
+  jy += 4 * Math.floor(days / 1461); days %= 1461;
+  if (days > 365) { jy += Math.floor((days - 1) / 365); days = (days - 1) % 365; }
+  const jm = days < 186 ? 1 + Math.floor(days / 31) : 7 + Math.floor((days - 186) / 30);
+  const jd = days < 186 ? 1 + days % 31 : 1 + (days - 186) % 30;
+  return [jy, jm, jd];
+}
+const jdate = s => { const m = /^(\d{4})-(\d{2})-(\d{2})/.exec(s || ''); if (!m) return s || '';
+  const [y, mo, d] = g2j(+m[1], +m[2], +m[3]); return fa(`${y}/${String(mo).padStart(2, '0')}/${String(d).padStart(2, '0')}`); };
 const kpi = (l, v, cls = '') => `<div class="kpi ${cls}"><div class="v num">${v}</div><div class="l">${l}</div></div>`;
 const seg = (scope, cur) => `<div class="seg" role="group">${Object.entries(RANGES).map(([k, v]) =>
   `<button data-act="seg" data-scope="${scope}" data-val="${k}" aria-pressed="${cur === k}">${v}</button>`).join('')}</div>`;
@@ -83,11 +95,11 @@ function chart(daily, keys) {
   let bars = '', lbl = '';
   daily.forEach((d, i) => {
     keys.forEach((k, j) => {
-      const h = (d[k.k] || 0) / max * inner, w = bw * (0.76 / keys.length), x = i * bw + bw * 0.12 + j * w;
+      const h = (d[k.k] || 0) / max * inner, w = bw * (0.76 / keys.length), x = W - (i + 1) * bw + bw * 0.12 + j * w;
       if (h > 0) bars += `<rect x="${x.toFixed(1)}" y="${(top + inner - h).toFixed(1)}" width="${w.toFixed(1)}" height="${h.toFixed(1)}" rx="3" fill="${k.c}"/>`;
     });
     if (n <= 10 || i % Math.ceil(n / 10) === 0 || i === n - 1)
-      lbl += `<text x="${(i * bw + bw / 2).toFixed(1)}" y="${H - 6}" text-anchor="middle" font-size="10" fill="var(--ink3)">${d.day}</text>`;
+      lbl += `<text x="${(W - i * bw - bw / 2).toFixed(1)}" y="${H - 6}" text-anchor="middle" font-size="10" fill="var(--ink3)">${d.day}</text>`;
   });
   const base = `<line x1="0" y1="${top + inner}" x2="${W}" y2="${top + inner}" stroke="var(--line)"/>`;
   return `<div class="m-chart"><svg viewBox="0 0 ${W} ${H}" preserveAspectRatio="xMidYMid meet" role="img">${base}${bars}${lbl}</svg></div>`;
@@ -110,13 +122,13 @@ function taskRow(t) {
   const done = (t.fields || {}).status === 'done';
   const due = (t.fields || {}).due;
   return `<div class="m-task ${done ? 'done' : ''}"><button class="m-check" data-act="toggle" data-id="${t.id}" aria-label="انجام شد">✓</button>
-    <div><div class="m-t">${esc(t.summary)}</div>${due ? `<div class="muted small">موعد: ${esc(fa(due))}</div>` : ''}</div>
+    <div><div class="m-t">${esc(t.summary)}</div>${due ? `<div class="muted small">موعد: ${esc(jdate(due))}</div>` : ''}</div>
     <button class="x" data-act="edit" data-id="${t.id}" aria-label="ویرایش">✎</button><button class="x" data-act="del" data-id="${t.id}" aria-label="حذف">✕</button></div>`;
 }
 
 function composer(id, ph) {
   const mic = (window.MehrdadNative && MehrdadNative.startVoice) || window.SpeechRecognition || window.webkitSpeechRecognition;
-  return `<div class="m-composer"><textarea id="${id}" rows="1" placeholder="${ph}" aria-label="پیام"></textarea>
+  return `<div class="m-composer"><textarea id="${id}" rows="2" placeholder="${ph}" aria-label="پیام"></textarea>
     ${mic ? `<button class="m-mic" data-act="mic" data-for="${id}" aria-label="گفتن">🎤</button>` : ''}
     <button class="m-send" data-act="say" data-for="${id}" aria-label="ارسال">↑</button></div>`;
 }
@@ -133,7 +145,7 @@ async function viewToday() {
       <div class="fig"><strong class="num">${net < 0 ? '−' : ''}${money(Math.abs(net))}</strong><span>تومان خالص امروز</span></div>
       <div class="meta"><span>درآمد <b class="num m-pos">${money(f.income)}</b></span><span>خرج <b class="num m-neg">${money(f.expense)}</b></span></div></div>
     <div class="card ai"><div class="row spread"><h2>امروز چی شد؟</h2><span class="pill ai">مهرداد</span></div>
-      ${composer('sayToday', 'مثلاً: ۲۰۰ ت فروش فیلترشکن داشتم، ناهار برنج خوردم…')}
+      ${composer('sayToday', 'مثلاً: ۲۰۰ ت فروش داشتم، ناهار برنج خوردم')}
       <p class="muted small">هر چه بنویسی خودش در بخش درست ثبت می‌شود.</p></div>
     <div class="kpis">${kpi('وعدهٔ غذا', fa(c.meal || 0))}${kpi('قلیان/سیگار', fa(c.smoking || 0), c.smoking ? 'warn' : '')}${kpi('ورزش', fa(c.workout || 0), c.workout ? 'good' : '')}${kpi('کار باز', fa(open.length))}</div>
     <div class="card"><div class="row spread"><h2>برنامهٔ امروز</h2><span class="pill num">${fa(open.length)} باز</span></div>
@@ -150,7 +162,7 @@ async function viewMoney() {
   const money_items = (d.items || []).filter(i => i.kind === 'income' || i.kind === 'expense');
   return `<section class="pane">
     <div class="pane-title"><h1>حساب‌ها</h1>${seg('mrange', S.mrange)}</div>
-    <div class="kpis">${kpi('درآمد', money(f.income), 'good')}${kpi('خرج', money(f.expense), f.expense > f.income ? 'crit' : '')}${kpi('خالص', (f.net < 0 ? '−' : '') + money(Math.abs(f.net)), f.net >= 0 ? 'good' : 'crit')}</div>
+    <div class="kpis m-k3">${kpi('درآمد', money(f.income), 'good')}${kpi('خرج', money(f.expense), f.expense > f.income ? 'crit' : '')}${kpi('خالص', (f.net < 0 ? '−' : '') + money(Math.abs(f.net)), f.net >= 0 ? 'good' : 'crit')}</div>
     <div class="card"><div class="row spread"><h2>روند روزانه</h2><div class="m-legend"><span><i style="background:var(--good)"></i>درآمد</span><span><i style="background:var(--crit)"></i>خرج</span></div></div>
       ${chart(d.daily || [], [{k:'income', c:'var(--good)'}, {k:'expense', c:'var(--crit)'}])}</div>
     <div class="card"><h2>درآمد به تفکیک منبع</h2>${catBars(f.by_category.income, 'var(--good)')}</div>

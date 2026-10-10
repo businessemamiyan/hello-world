@@ -57,3 +57,7 @@
 .m-toast[hidden]{display:none}
 .m-spin{display:inline-block;width:14px;height:14px;border:2px solid var(--line2);border-top-color:var(--gold);border-radius:50%;animation:m-r .8s linear infinite;vertical-align:-2px}
 @keyframes m-r{to{transform:rotate(360deg)}}
+
+.m-k3{grid-template-columns:repeat(3,1fr)}
+.m-k3 .kpi .v{font-size:1rem}
+.m-composer textarea{line-height:1.6}
