@@ -1,11 +1,21 @@
 import os
 import time
 
-from fastapi import FastAPI, HTTPException
-from fastapi.responses import FileResponse, RedirectResponse
+from urllib.parse import parse_qs
+
+from fastapi import FastAPI, HTTPException, Request
+from fastapi.responses import FileResponse, HTMLResponse, RedirectResponse
 from fastapi.staticfiles import StaticFiles
 
-from .api import create_router
+from .api import create_router, save_wife_answers
+
+_THANKS = """<!doctype html><html lang="fa" dir="rtl"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="robots" content="noindex,nofollow"><title>%s</title><link rel="stylesheet" href="/app/theme.css"></head>
+<body><div class="wrap"><main class="pane"><div class="card" style="text-align:center;padding:36px 12px"><h2>%s</h2><p>%s</p></div></main></div></body></html>"""
+
+
+def _page(title, text, code=200):
+    return HTMLResponse(_THANKS % (title, title, text), status_code=code, headers={"Cache-Control": "no-store", "Referrer-Policy": "no-referrer"})
 
 
 def create_app(mem, started_at, svc=None):
@@ -30,6 +40,26 @@ def create_app(mem, started_at, svc=None):
             raise HTTPException(status_code=404, detail="not found")
         return FileResponse(path, media_type="text/html; charset=utf-8",
                             headers={"Cache-Control": "no-store", "Referrer-Policy": "no-referrer", "X-Robots-Tag": "noindex"})
+
+    if svc is not None:
+        @app.post("/who/{token}/submit", include_in_schema=False)
+        async def who_submit(token: str, request: Request):
+            """مسیر کمکی بدون جاوااسکریپت: همان فرمِ صفحه را ساده (urlencoded) می‌فرستد؛ برای مرورگرهایی که fetch/JSON‌شان نمی‌رسد."""
+            raw = b""
+            async for chunk in request.stream():
+                raw += chunk
+                if len(raw) > 200_000:
+                    return _page("زیادی بزرگ شد", "جواب‌ها رو یه کم کوتاه‌تر بنویس و دوباره بفرست.", 413)
+            form = parse_qs(raw.decode("utf-8", "replace"))
+            who = (form.pop("__who", [""])[0] or "")
+            answers = {k: v[0] for k, v in form.items() if v}
+            try:
+                n = await save_wife_answers(mem, svc, token, answers, who)
+            except LookupError:
+                return _page("این لینک دیگه کار نمی‌کنه", "شاید مهلتش تموم شده یا باطل شده. از مهرداد بخواه یه لینک تازه برات بفرسته.", 404)
+            except ValueError:
+                return _page("جواب‌ها خالی بود", "برگرد و حداقل یه سؤال رو جواب بده، بعد بفرست 🙏", 422)
+            return _page("مرسی 💛", "جواب‌هات رسید؛ خیلی کمک می‌کنه. می‌تونی صفحه رو ببندی.")
 
     @app.get("/", include_in_schema=False)
     async def root():

@@ -220,6 +220,34 @@ def _client_ip(request: Request):
     return request.headers.get("cf-connecting-ip") or (request.client.host if request.client else "?")
 
 
+async def save_wife_answers(mem, svc, token, answers, who=None):
+    """ثبت پاسخ‌های همسر (هم از fetch/JSON هم از فرم ساده). LookupError = لینک نامعتبر؛ ValueError = بدون پاسخ."""
+    inv = await mem.get_invite(token)
+    if not inv:
+        raise LookupError("invalid")
+    qmap = {q[0]: q for q in profile.WIFE_QUESTIONS}
+    clean = {}
+    for qid, text in (answers or {}).items():
+        text = (text or "").strip()
+        if qid in qmap and text:
+            clean[qid] = text[:1500]
+    if not clean:
+        raise ValueError("no answers")
+    # ارسال دوباره‌ی همان سؤال، پاسخ قبلی را جایگزین می‌کند (نه تکرار)
+    for old in await mem.latest_of_kinds(("profile",), 300):
+        f = old.get("fields") or {}
+        if f.get("source") == "همسر" and f.get("qid") in clean:
+            await mem.delete_event(old["id"])
+    who = (who or "").strip()[:40]
+    await mem.add_memory([{
+        "type": "profile", "summary": text if len(text) <= 280 else text[:277] + "…", "detail": text,
+        "category": qmap[qid][1], "fields": {"source": "همسر", "qid": qid, "question": qmap[qid][2], **({"who": who} if who else {})}}
+        for qid, text in clean.items()])
+    await mem.use_invite(inv["id"])
+    await svc.notify_owner(f"✅ همسرت به {life.fa(len(clean))} سؤال جواب داد. توی اپ ← هدف‌ها ← پروفایل ببین (هر کدوم رو خواستی می‌تونی پاک کنی).")
+    return len(clean)
+
+
 def create_router(mem, svc):
     """svc: شیئی با `async chat(text) -> reply` و `async notify_owner(text)` (همان Bot)."""
     router = APIRouter(prefix="/api")
@@ -529,30 +557,13 @@ def create_router(mem, svc):
     @router.post("/invite/{token}")
     async def invite_submit(token: str, body: WifeIn, request: Request):
         _public_limit(request, limit=20)
-        inv = await mem.get_invite(token)
-        if not inv:
+        try:
+            n = await save_wife_answers(mem, svc, token, body.answers, body.who)
+        except LookupError:
             raise HTTPException(status_code=404, detail="invalid or expired")
-        qmap = {q[0]: q for q in profile.WIFE_QUESTIONS}
-        clean = {}
-        for qid, text in body.answers.items():
-            text = (text or "").strip()
-            if qid in qmap and text:
-                clean[qid] = text[:1500]
-        if not clean:
+        except ValueError:
             raise HTTPException(status_code=422, detail="no answers")
-        # ارسال دوباره‌ی همان سؤال، پاسخ قبلی را جایگزین می‌کند (نه تکرار)
-        for old in await mem.latest_of_kinds(("profile",), 300):
-            f = old.get("fields") or {}
-            if f.get("source") == "همسر" and f.get("qid") in clean:
-                await mem.delete_event(old["id"])
-        who = (body.who or "").strip()[:40]
-        await mem.add_memory([{
-            "type": "profile", "summary": text if len(text) <= 280 else text[:277] + "…", "detail": text,
-            "category": qmap[qid][1], "fields": {"source": "همسر", "qid": qid, "question": qmap[qid][2], **({"who": who} if who else {})}}
-            for qid, text in clean.items()])
-        await mem.use_invite(inv["id"])
-        await svc.notify_owner(f"✅ همسرت به {life.fa(len(clean))} سؤال دربارهٔ تو جواب داد. در اپ ← هدف‌ها ← پروفایل ببین (و هر چی خواستی حذف کن).")
-        return {"saved": len(clean)}
+        return {"saved": n}
 
     @router.get("/novatunnel")
     async def get_novatunnel(dev=Depends(current_device)):

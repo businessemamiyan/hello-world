@@ -47,20 +47,52 @@
         <label class="f"><span>اسمت چیه؟ (اختیاری)</span><input type="text" name="__who" maxlength="40"></label>
         ${d.questions.map((q, i) => `<div class="card q"><span class="sec">${fa(i + 1)} از ${fa(d.questions.length)} · ${esc(q.section)}</span>
           <label>${esc(q.text)}</label><textarea name="${esc(q.id)}" maxlength="1500" placeholder="هر چی به ذهنت می‌رسه…"></textarea></div>`).join('')}
+        <div id="err" class="note" hidden style="background:var(--crit-bg);color:var(--ink)"></div>
         <button class="btn primary" type="submit" id="send">بفرست 💛</button>
       </form>`;
     const total = d.questions.length;
+    const form = $('#f');
+    const DK = 'who_draft_' + token.slice(0, 10);
+    const draftGet = () => { try { return JSON.parse(localStorage.getItem(DK) || '{}'); } catch (e) { return {}; } };
+    const draftSet = () => { try { const o = {}; new FormData(form).forEach((v, k) => { if (String(v).trim()) o[k] = String(v); }); localStorage.setItem(DK, JSON.stringify(o)); } catch (e) {} };
+    const draftDrop = () => { try { localStorage.removeItem(DK); } catch (e) {} };
+    const saved = draftGet();
+    Object.keys(saved).forEach(k => { const el = form.elements[k]; if (el && !el.value) el.value = saved[k]; });
     const upd = () => { const n = [...document.querySelectorAll('textarea')].filter(t => t.value.trim()).length; $('#bar').style.width = (n / total * 100) + '%'; };
-    document.addEventListener('input', upd);
-    $('#f').addEventListener('submit', async ev => {
+    document.addEventListener('input', () => { upd(); draftSet(); });
+    upd();
+    const showErr = (msg, native) => {
+      const e = $('#err'); e.hidden = false;
+      e.innerHTML = esc(msg) + (native ? ' <button type="button" class="btn sm" id="alt">یه روش دیگه امتحان کن</button>' : '');
+      const alt = $('#alt'); if (alt) alt.onclick = () => { form.method = 'post'; form.action = '/who/' + encodeURIComponent(token) + '/submit'; form.acceptCharset = 'utf-8'; HTMLFormElement.prototype.submit.call(form); };
+      $('#send').disabled = false; $('#send').textContent = 'بفرست 💛';
+    };
+    const postJson = (url, body) => new Promise((ok, bad) => {
+      if (window.fetch && window.AbortController) {
+        const ac = new AbortController(); const t = setTimeout(() => ac.abort(), 25000);
+        fetch(url, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body, signal: ac.signal })
+          .then(r => { clearTimeout(t); ok(r); }, e => { clearTimeout(t); bad(e); });
+      } else bad(new Error('no fetch'));
+    });
+    const xhrJson = (url, body) => new Promise((ok, bad) => {
+      const x = new XMLHttpRequest(); x.open('POST', url); x.setRequestHeader('Content-Type', 'application/json'); x.timeout = 25000;
+      x.onload = () => ok({ ok: x.status >= 200 && x.status < 300, status: x.status, json: () => Promise.resolve(JSON.parse(x.responseText || '{}')) });
+      x.onerror = () => bad(new Error('network')); x.ontimeout = () => bad(new Error('timeout')); x.send(body);
+    });
+    form.addEventListener('submit', async ev => {
       ev.preventDefault();
-      const fd = new FormData(ev.target); const answers = {}; let who = '';
-      for (const [k, v] of fd.entries()) { if (k === '__who') who = v; else if (String(v).trim()) answers[k] = v; }
-      if (!Object.keys(answers).length) return alert('یه سؤال رو جواب بده بعد بفرست 🙏');
+      $('#err').hidden = true;
+      const fd = new FormData(form); const answers = {}; let who = '';
+      fd.forEach((v, k) => { if (k === '__who') who = v; else if (String(v).trim()) answers[k] = v; });
+      if (!Object.keys(answers).length) return showErr('یه سؤال رو جواب بده بعد بفرست 🙏', false);
       $('#send').disabled = true; $('#send').textContent = 'دارم می‌فرستم…';
-      const r = await fetch('/api/invite/' + encodeURIComponent(token), { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ answers, who }) });
-      if (r.ok) { const j = await r.json(); app.innerHTML = `<div class="card done"><h2>مرسی 💛</h2><p>${fa(j.saved)} تا جواب رسید. خیلی کمک می‌کنه.</p><p class="muted">می‌تونی صفحه رو ببندی. اگه بعداً چیزی یادت اومد، دوباره همین لینک رو باز کن (تا ۳ بار).</p></div>`; }
-      else { $('#send').disabled = false; $('#send').textContent = 'بفرست 💛'; alert(r.status === 429 ? 'یه کم صبر کن و دوباره امتحان کن' : 'نشد بفرستم؛ دوباره امتحان کن'); }
+      const url = '/api/invite/' + encodeURIComponent(token), body = JSON.stringify({ answers, who });
+      let r;
+      try { r = await postJson(url, body); }
+      catch (e1) { try { r = await xhrJson(url, body); } catch (e2) { return showErr('نت وصل نشد یا قطع شد؛ جواب‌هات همین‌جا نگه داشته شده، دوباره بزن.', true); } }
+      if (r.ok) { const j = await r.json(); draftDrop(); app.innerHTML = `<div class="card done"><h2>مرسی 💛</h2><p>${fa(j.saved)} تا جواب رسید. خیلی کمک می‌کنه.</p><p class="muted">می‌تونی صفحه رو ببندی. اگه بعداً چیزی یادت اومد، دوباره همین لینک رو باز کن (تا ۳ بار).</p></div>`; }
+      else if (r.status === 404) showErr('این لینک دیگه کار نمی‌کنه؛ از مهرداد بخواه یه لینک تازه بفرسته.', false);
+      else showErr((r.status === 429 ? 'یه کم صبر کن و دوباره بزن' : 'نشد بفرستم (کد ' + fa(r.status) + ')') + '؛ جواب‌هات نگه داشته شده.', true);
     });
   }
   load().catch(() => { app.innerHTML = '<div class="card"><h2>وصل نشد</h2><p class="muted">اینترنت یا فیلترشکنت رو چک کن و صفحه رو دوباره باز کن.</p></div>'; });

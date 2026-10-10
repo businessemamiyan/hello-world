@@ -243,3 +243,38 @@ def test_profile_and_habit_endpoints_and_commands(web):
     assert "/who/" in tg.sent[-1] and "باطل" in tg.sent[-1]
     loop.run_until_complete(bot.handle_message({"chat": {"id": 7}, "text": "/invites"}))
     assert "همسر من" in tg.sent[-1] and "۰/۳" not in tg.sent[-1] or "0/3" in tg.sent[-1]
+
+
+def test_wife_form_fallback_without_javascript(tmp_path):
+    """مسیر کمکی: فرم ساده (urlencoded) هم جواب را ثبت می‌کند، حتی اگر fetch/JSON در مرورگر همسر نرسد."""
+    import asyncio, time
+    from urllib.parse import urlencode
+    from fastapi.testclient import TestClient
+    mem = Memory(str(tmp_path / "w.db"))
+    tg = FakeTG()
+
+    class NoBrain:
+        context_provider = None
+
+        async def think(self, *a, **k):
+            return "ok", []
+
+    await_owner = asyncio.new_event_loop()
+    await_owner.run_until_complete(mem.set_owner(7))
+    bot = Bot(mem, tg, NoBrain(), Config(bot_token="x", setup_code="S", anthropic_api_key="k"))
+    loop = asyncio.new_event_loop()
+    code = loop.run_until_complete(mem.create_pair_code())
+    c = TestClient(create_app(mem, time.time(), bot))
+    h = {"Authorization": "Bearer " + c.post("/api/pair", json={"code": code, "name": "t"}).json()["token"]}
+    tok = c.post("/api/invites", json={"label": "همسر", "days": 7}, headers=h).json()["url"].rsplit("/", 1)[1]
+    page = c.get(f"/who/{tok}").text
+    assert "/submit" in page and "یه روش دیگه امتحان کن" in page and "localStorage" in page               # فال‌بک و پیش‌نویس
+    body = urlencode({"__who": "سارا", "w2": "صبور و زحمتکش", "w5": "اینستاگرام شب‌ها", "w3": "  ", "zzz": "x"})
+    r = c.post(f"/who/{tok}/submit", content=body, headers={"Content-Type": "application/x-www-form-urlencoded"})
+    assert r.status_code == 200 and "مرسی" in r.text and "no-store" in r.headers["cache-control"]
+    facts = loop.run_until_complete(mem.latest_of_kinds(("profile",), 20))
+    assert sorted(f["fields"]["qid"] for f in facts) == ["w2", "w5"] and all(f["fields"]["who"] == "سارا" for f in facts)
+    assert any("همسرت به ۲ سؤال" in m for m in tg.sent)
+    assert c.post("/who/BADTOKEN/submit", content="w2=x", headers={"Content-Type": "application/x-www-form-urlencoded"}).status_code == 404
+    assert c.post(f"/who/{tok}/submit", content="w3=%20", headers={"Content-Type": "application/x-www-form-urlencoded"}).status_code == 422
+    assert c.post(f"/who/{tok}/submit", content="w2=" + "a" * 300_000, headers={"Content-Type": "application/x-www-form-urlencoded"}).status_code == 413
