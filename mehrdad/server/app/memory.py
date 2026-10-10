@@ -10,6 +10,7 @@
 import asyncio
 import datetime
 import hashlib
+import json
 import os
 import re
 import secrets
@@ -109,9 +110,18 @@ class Memory:
             );
             """
         )
+        self._migrate_memory_columns()
         self.fts = self._init_fts()
         self.db.commit()
         self.lock = asyncio.Lock()
+
+    def _migrate_memory_columns(self):
+        """ستون‌های رویداد زندگی: زمان واقعی رویداد، دسته، و فیلدهای ساختاری (JSON)."""
+        cols = {r[1] for r in self.db.execute("PRAGMA table_info(memory)").fetchall()}
+        for name, ddl in (("event_ts", "REAL"), ("category", "TEXT"), ("fields", "TEXT")):
+            if name not in cols:
+                self.db.execute(f"ALTER TABLE memory ADD COLUMN {name} {ddl}")
+        self.db.execute("CREATE INDEX IF NOT EXISTS idx_memory_event_ts ON memory(event_ts)")
 
     def _init_fts(self):
         """جدول جست‌وجوی متنی (FTS5) روی حافظهٔ بلندمدت؛ اگر SQLite بدون FTS5 باشد، به LIKE برمی‌گردیم.
@@ -249,9 +259,13 @@ class Memory:
         async with self.lock:
             now = time.time()
             for e in entries:
+                fields = e.get("fields")
                 cur = self.db.execute(
-                    "INSERT INTO memory(type, summary, detail, amount, ts) VALUES(?,?,?,?,?)",
-                    (e.get("type", "note"), e.get("summary", ""), e.get("detail"), e.get("amount"), now),
+                    "INSERT INTO memory(type, summary, detail, amount, ts, event_ts, category, fields) "
+                    "VALUES(?,?,?,?,?,?,?,?)",
+                    (e.get("type", "note"), e.get("summary", ""), e.get("detail"), e.get("amount"), now,
+                     e.get("when_ts"), e.get("category"),
+                     json.dumps(fields, ensure_ascii=False) if fields else None),
                 )
                 if self.fts:
                     self.db.execute(
@@ -259,6 +273,43 @@ class Memory:
                         (normalize_fa(e.get("summary")), normalize_fa(e.get("detail")), cur.lastrowid),
                     )
             self.db.commit()
+
+    async def events_between(self, ts_from, ts_to, kinds=None):
+        """رکوردهای حافظه که زمان واقعی‌شان (event_ts، وگرنه زمان ثبت) در بازه است، با when_ts."""
+        async with self.lock:
+            rows = self.db.execute(
+                "SELECT id, type, summary, detail, amount, category, fields, COALESCE(event_ts, ts) AS w "
+                "FROM memory WHERE COALESCE(event_ts, ts) >= ? AND COALESCE(event_ts, ts) < ? ORDER BY w",
+                (ts_from, ts_to),
+            ).fetchall()
+        out = []
+        for r in rows:
+            if kinds and r[1] not in kinds:
+                continue
+            try:
+                fields = json.loads(r[6]) if r[6] else {}
+            except ValueError:
+                fields = {}
+            out.append({"id": r[0], "type": r[1], "summary": r[2], "detail": r[3], "amount": r[4],
+                        "category": r[5], "fields": fields, "when_ts": r[7]})
+        return out
+
+    async def latest_of_kinds(self, kinds, limit=15):
+        """آخرین کارها/اهداف (بدون محدودیت بازه)."""
+        marks = ",".join("?" for _ in kinds)
+        async with self.lock:
+            rows = self.db.execute(
+                f"SELECT id, type, summary, detail, amount, category, fields, COALESCE(event_ts, ts) FROM memory "
+                f"WHERE type IN ({marks}) ORDER BY id DESC LIMIT ?", (*kinds, limit)).fetchall()
+        out = []
+        for r in rows:
+            try:
+                fields = json.loads(r[6]) if r[6] else {}
+            except ValueError:
+                fields = {}
+            out.append({"id": r[0], "type": r[1], "summary": r[2], "detail": r[3], "amount": r[4],
+                        "category": r[5], "fields": fields, "when_ts": r[7]})
+        return out
 
     async def search_memory(self, query, limit=10):
         """جست‌وجو در کل حافظهٔ بلندمدت (نه فقط ۴۰ مورد آخر). کلمات با OR ترکیب می‌شوند و پیشوندی‌اند

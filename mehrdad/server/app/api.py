@@ -79,6 +79,12 @@ def create_router(mem, svc):
         reply = await svc.chat(body.text)
         return {"reply": reply, "ts": time.time()}
 
+    @router.get("/dashboard")
+    async def dashboard(range: str = "today", dev=Depends(current_device)):
+        if range not in ("today", "week", "month"):
+            raise HTTPException(status_code=422, detail="range must be today|week|month")
+        return await svc.dashboard(range)
+
     @router.get("/history")
     async def history(limit: int = 50, dev=Depends(current_device)):
         return {"messages": await mem.recent_messages_ts(max(1, min(limit, 200)))}

@@ -6,6 +6,7 @@
 import asyncio
 import logging
 
+from . import life
 from .memory import today_str
 from .telegram import TGError, btn
 
@@ -22,6 +23,8 @@ HELP = """من مهرداد‌ام — مغز دومت.
 /habits — لیست عادت‌های فعال و استریک‌هاشون + چک‌این امروز
 
 اپ اندروید:
+/today /week /month — خلاصهٔ خرج و درآمد، غذا، قلیان، کارها و عادت‌ها
+
 /pair — کد یک‌بارمصرف برای وصل‌کردن اپ (۱۰ دقیقه اعتبار)
 /devices — دستگاه‌های وصل‌شده
 /unpair <شماره> — قطع یک دستگاه
@@ -87,6 +90,18 @@ class Bot:
                 await self.tg.send(owner, text)
             except Exception:  # نبودن تلگرام نباید ثبت تراکنش را خراب کند
                 log.exception("ارسال اعلان به صاحب ناموفق")
+
+    async def dashboard(self, label):
+        start, end = life.range_bounds(label)
+        rows = await self.mem.events_between(start, end)
+        habits = await self.mem.list_habits("active")
+        d = life.build_dashboard(rows, habits, label)
+        d["tasks"] = await self.mem.latest_of_kinds(("task",), 10)
+        d["goals"] = await self.mem.latest_of_kinds(("goal",), 10)
+        return d
+
+    async def handle_summary(self, chat_id, label):
+        await self.tg.send(chat_id, life.format_text(await self.dashboard(label)))
 
     async def handle_pair(self, chat_id):
         code = await self.mem.create_pair_code()
@@ -173,6 +188,10 @@ class Bot:
 
         if text == "/help":
             await self.tg.send(chat_id, HELP)
+            return
+
+        if text in ("/today", "/week", "/month"):
+            await self.handle_summary(chat_id, text[1:])
             return
 
         if text == "/pair":

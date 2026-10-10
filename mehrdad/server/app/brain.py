@@ -10,6 +10,8 @@ import time
 
 import httpx
 
+from .life import KINDS, now_tehran, parse_when
+
 log = logging.getLogger("brain")
 
 ANTHROPIC_URL = "https://api.anthropic.com/v1/messages"
@@ -61,8 +63,23 @@ SYSTEM_PROMPT = """تو «مهرداد» هستی — مغز دومِ کاربر
   هنوز ثبتش کرده باشد، کمکش کن محرک (trigger) آن را پیدا کند و یک جایگزین کوچک و عملی پیشنهاد
   بده — نه یک برنامه‌ی غیرواقعی و بزرگ.
 
+### ثبت خودکار در بخش‌های زندگی
+هرچه کاربر می‌گوید باید در بخش درستش ثبت شود؛ از او نخواه «ثبتش کنم؟». هر چیز جداگانه یک ورودی در memory:
+- income: درآمد (مثلاً «۲۰۰ فروش فیلترشکن داشتم» → category «فروش فیلترشکن»)؛ expense: خرج با دسته (خوراک، حمل‌ونقل، قبض…)
+- meal: غذا (fields: {"items": ["برنج","خورشت"], "meal": "ناهار"}) — زمان را در when بگذار
+- smoking: قلیان/سیگار (fields: {"what": "قلیان", "count": 1})
+- intimacy: رابطهٔ زناشویی با همسر (بدون جزئیات اضافه؛ فقط ثبت و در صورت نیاز یک جملهٔ محترمانه)
+- workout: ورزش، sleep: خواب (fields: {"hours": 7})، feeling: حال‌وحال/خلق (fields: {"mood": 1..5} اگر روشن بود)
+- task: کار/برنامه (fields: {"status": "open", "due": "YYYY-MM-DD" اگر گفت})؛ goal: هدف (fields: {"horizon": "ماه|سال|…"})
+- idea، habit، note، other مثل قبل.
+«ت/تومن» در محاوره یعنی هزار تومان («۲۰۰ ت» = ۲۰۰,۰۰۰ تومان) مگر اینکه از زمینه چیز دیگری روشن باشد؛
+«میلیون/ملیون» یعنی میلیون تومان. amount همیشه به تومان و عدد کامل باشد. اگر مبلغ یا معنا مبهم بود، بهترین حدس را ثبت کن
+و در reply یک سؤال کوتاه بپرس (و fields.uncertain را true بگذار).
+زمان: اگر کاربر گفت «ساعت ۱۴»، «دیروز»، «صبح» → when را به وقت تهران به شکل "YYYY-MM-DD HH:MM" بنویس (با «زمان الان»
+پایین‌تر حساب کن)؛ وگرنه when را null بگذار (یعنی همین الان).
+
 **قالب خروجی**: فقط و فقط یک JSON معتبر (بدون ```json و بدون هیچ متن قبل/بعدش) با این شکل:
-{"reply": "<جواب فارسی تو به کاربر>", "memory": [{"type": "<expense|income|idea|task|feeling|habit|note|other>", "summary": "<خلاصه یک‌خطی>", "detail": "<جزئیات اختیاری>", "amount": <عدد تومان یا null>}]}
+{"reply": "<جواب فارسی تو به کاربر>", "memory": [{"type": "<income|expense|meal|smoking|intimacy|workout|sleep|feeling|task|goal|idea|habit|note|other>", "summary": "<خلاصه یک‌خطی>", "detail": "<جزئیات اختیاری>", "amount": <عدد تومان یا null>, "category": "<دسته یا null>", "when": "<YYYY-MM-DD HH:MM یا null>", "fields": {<اختیاری>}}]}
 نوع "habit" فقط برای وقتی است که کاربر درباره‌ی عادتی حرف می‌زند بدون اینکه با /habit ثبتش کرده
 باشد (فقط برای حافظه — ساخت ردیف واقعی عادت و استریک فقط با دستور /habit انجام می‌شود، نه این JSON).
 
@@ -251,8 +268,10 @@ class Brain:
         """
         context = _build_context_block(recent_memory)
         habits_block = _build_habits_block(active_habits or [])
+        now = now_tehran()
         system = (
             SYSTEM_PROMPT
+            + f"\n\n### زمان الان (تهران): {now.strftime('%Y-%m-%d %H:%M')} — {['دوشنبه','سه‌شنبه','چهارشنبه','پنجشنبه','جمعه','شنبه','یکشنبه'][now.weekday()]}"
             + "\n\n### عادت‌های فعال کاربر (برای تشویق/پیگیری، بدون اینکه هر بار درباره‌شان حرف بزنی مگر مرتبط باشد):\n"
             + habits_block
             + "\n\n### خاطرات اخیر کاربر (برای زمینه، تکرار نکن مگر لازم باشد):\n"
@@ -285,13 +304,16 @@ class Brain:
             return raw.strip() or "یه لحظه گیر کردم؛ دوباره بگو چی گفتی؟", []
 
         entries = parsed.get("memory") or []
-        valid_types = {"expense", "income", "idea", "task", "feeling", "habit", "note", "other"}
         clean = []
         for e in entries:
             if not isinstance(e, dict) or not e.get("summary"):
                 continue
-            t = e.get("type") if e.get("type") in valid_types else "note"
+            t = e.get("type") if e.get("type") in KINDS else "note"
             amount = e.get("amount")
-            amount = float(amount) if isinstance(amount, (int, float)) else None
-            clean.append({"type": t, "summary": str(e["summary"]), "detail": e.get("detail"), "amount": amount})
+            amount = float(amount) if isinstance(amount, (int, float)) and not isinstance(amount, bool) else None
+            category = e.get("category")
+            category = str(category)[:60] if category else None
+            fields = e.get("fields") if isinstance(e.get("fields"), dict) else None
+            clean.append({"type": t, "summary": str(e["summary"]), "detail": e.get("detail"), "amount": amount,
+                          "category": category, "when_ts": parse_when(e.get("when"), now), "fields": fields})
         return parsed["reply"], clean
