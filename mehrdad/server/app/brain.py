@@ -161,11 +161,14 @@ async def run_claude_cli(system, prompt, model="sonnet", timeout=150, binary="cl
     except asyncio.TimeoutError:
         proc.kill()
         raise CLIError(f"CLI بعد از {timeout} ثانیه جواب نداد")
+    text = out.decode("utf-8", "replace")
     if proc.returncode != 0:
-        raise CLIError(
-            f"CLI با کد {proc.returncode} خارج شد: {err.decode('utf-8', 'replace')[:300]} {out.decode('utf-8', 'replace')[:200]}"
-        )
-    return parse_cli_output(out.decode("utf-8", "replace"))
+        try:  # CLI معمولاً علت را در JSON خروجی (result + is_error) می‌گذارد، نه stderr
+            detail = parse_cli_output(text)
+        except CLIError as e:
+            detail = str(e)
+        raise CLIError(f"CLI با کد {proc.returncode} خارج شد: {detail} | stderr: {err.decode('utf-8', 'replace')[:200]}")
+    return parse_cli_output(text)
 
 
 def _cli_prompt(messages):
