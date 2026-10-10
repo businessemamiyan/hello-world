@@ -10,13 +10,30 @@ android {
         applicationId "ir.mehrdad.app"
         minSdk 26
         targetSdk 34
-        versionCode 1
-        versionName "1.0"
+        // هر انتشار باید versionCode بزرگ‌تری داشته باشد، وگرنه اندروید به‌روزرسانی را رد می‌کند
+        versionCode 2
+        versionName "1.1"
+    }
+
+    signingConfigs {
+        // کلید امضای ثابت (فقط روی سرور ساخت، با متغیرهای محیطی). بدون آن، دیباگ ساخته می‌شود.
+        release {
+            def ks = System.getenv("MEHRDAD_KEYSTORE")
+            if (ks) {
+                storeFile file(ks)
+                storePassword System.getenv("MEHRDAD_KS_PASS")
+                keyAlias "mehrdad"
+                keyPassword System.getenv("MEHRDAD_KS_PASS")
+            }
+        }
     }
 
     buildTypes {
         release {
             minifyEnabled false
+            if (System.getenv("MEHRDAD_KEYSTORE")) {
+                signingConfig signingConfigs.release
+            }
         }
     }
     compileOptions {

@@ -3,7 +3,9 @@
 احراز هویت: توکن اختصاصی هر دستگاه (Bearer)؛ فقط هش آن در دیتابیس است و با /unpair در تلگرام باطل می‌شود.
 هیچ رمز ثابتی در .env یا داخل اپ نیست. /api/pair با محدودیت تعداد تلاش ناموفق محافظت می‌شود.
 """
+import json
 import logging
+import os
 import time
 from collections import defaultdict, deque
 
@@ -141,6 +143,20 @@ def create_router(mem, svc):
         if not dev:
             raise HTTPException(status_code=401, detail="invalid token")
         return dev
+
+    @router.get("/app/version")
+    async def app_version():
+        """نسخهٔ آخرین APK منتشرشده (عمومی؛ APK هیچ رمزی ندارد و فقط با کلید امضای ثابت قابل نصب روی نسخهٔ قبلی است)."""
+        cfg = getattr(svc, "cfg", None)
+        path = os.path.join(getattr(cfg, "data_dir", "/data"), "apk", "version.json")
+        try:
+            with open(path, encoding="utf-8") as f:
+                v = json.load(f)
+            return {"versionCode": int(v["versionCode"]), "versionName": str(v.get("versionName", "")),
+                    "sha256": str(v["sha256"]), "size": int(v.get("size", 0)), "notes": str(v.get("notes", ""))[:500],
+                    "url": "/download/mehrdad.apk"}
+        except (OSError, ValueError, KeyError):
+            return {"versionCode": 0}
 
     @router.post("/pair")
     async def pair(body: PairIn, request: Request):

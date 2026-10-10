@@ -3,11 +3,15 @@ package ir.mehrdad.app;
 import android.content.Context;
 import android.content.SharedPreferences;
 
-/** تنظیمات روی گوشی: آدرس سرور و توکن اختصاصی این دستگاه (بعد از جفت‌سازی با کد تلگرام). */
+/** تنظیمات روی گوشی: آدرس سرور (پیش‌فرض داخل اپ) و توکن اختصاصی این دستگاه (بعد از جفت‌سازی). */
 public class Prefs {
+    /** آدرس پیش‌فرض: کاربر نیازی به تایپ آدرس ندارد. */
+    public static final String DEFAULT_SERVER = "https://mehrdad.vistaquantum.ir";
+
     private static final String FILE = "mehrdad_prefs";
     private static final String SERVER_URL = "server_url";
     private static final String TOKEN = "device_token";
+    private static final String LAST_UPDATE_CHECK = "last_update_check";
 
     private static SharedPreferences get(Context ctx) {
         return ctx.getApplicationContext().getSharedPreferences(FILE, Context.MODE_PRIVATE);
@@ -15,7 +19,7 @@ public class Prefs {
 
     public static String serverUrl(Context ctx) {
         String u = get(ctx).getString(SERVER_URL, "");
-        if (u == null) return "";
+        if (u == null || u.trim().isEmpty()) u = DEFAULT_SERVER;
         u = u.trim();
         while (u.endsWith("/")) u = u.substring(0, u.length() - 1);
         return u;
@@ -36,5 +40,13 @@ public class Prefs {
 
     public static void clearToken(Context ctx) {
         get(ctx).edit().remove(TOKEN).apply();
+    }
+
+    public static long lastUpdateCheck(Context ctx) {
+        return get(ctx).getLong(LAST_UPDATE_CHECK, 0L);
+    }
+
+    public static void markUpdateChecked(Context ctx) {
+        get(ctx).edit().putLong(LAST_UPDATE_CHECK, System.currentTimeMillis()).apply();
     }
 }

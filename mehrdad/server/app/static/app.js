@@ -346,10 +346,20 @@ function openDebtEdit(id) {
       <label class="f"><span>روز سررسید</span><input type="number" name="due_day" value="${d.due_day ?? ''}" min="1" max="31" inputmode="numeric"></label>
       <button class="btn primary" type="submit">ذخیره</button></form>`);
 }
+function nativeStatus() {
+  try { return window.MehrdadNative && MehrdadNative.status ? JSON.parse(MehrdadNative.status() || '{}') : null; } catch { return null; }
+}
 function openSettings() {
+  const nat = nativeStatus();
+  const natHtml = nat ? `<span class="eyebrow">این گوشی</span><div class="stack6 small">
+      <div>نسخهٔ اپ: <b class="num">${esc(fa(nat.version || '?'))}</b></div>
+      <div>پیامک ${nat.sms ? '✓' : '✗'} · اعلان‌ها ${nat.notif ? '✓' : '✗'} · در صف ارسال: <b class="num">${fa(nat.queue || 0)}</b></div>
+      <div class="row"><button class="btn sm" data-act="n-sms">مجوز پیامک</button><button class="btn sm" data-act="n-notif">دسترسی اعلان‌ها</button>
+      <button class="btn sm primary" data-act="n-update">بررسی به‌روزرسانی</button></div></div>` : '';
   sheet(`<div class="row spread"><h2>تنظیمات</h2><button class="x" data-act="close">✕</button></div>
     <div class="stack"><span class="eyebrow">تم</span><div class="seg">${Object.entries(THEMES).map(([k, v]) =>
       `<button data-act="theme" data-val="${k}" aria-pressed="${(document.documentElement.dataset.theme || 'night') === k}">${v}</button>`).join('')}</div>
+    ${natHtml}
     <label class="row"><input type="checkbox" id="privChk" ${S.priv ? 'checked' : ''}> نمایش بخش‌های خصوصی (🔒)</label>
     <p class="muted small">پیامک بانکی و اعلان‌های مالی را اپ اندروید می‌فرستد. برای قطع این دستگاه در تلگرام /devices و /unpair.</p>
     <button class="btn danger" data-act="logout">خروج از این دستگاه</button></div>`);
@@ -406,6 +416,9 @@ document.addEventListener('click', async ev => {
     else if (act === 'reload') render();
     else if (act === 'seg') { S[b.dataset.scope] = b.dataset.val; render(); }
     else if (act === 'edit') openEdit(id);
+    else if (act === 'n-sms') MehrdadNative.requestSmsPermission();
+    else if (act === 'n-notif') MehrdadNative.openNotificationAccess();
+    else if (act === 'n-update') { closeSheet(); MehrdadNative.checkUpdate(); }
     else if (act === 'mview') { S.mview = b.dataset.val; render(); }
     else if (act === 'acc-edit') openAccEdit(id);
     else if (act === 'debt-edit') openDebtEdit(id);

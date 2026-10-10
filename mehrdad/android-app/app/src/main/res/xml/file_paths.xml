@@ -1,0 +1,5 @@
+<?xml version="1.0" encoding="utf-8"?>
+<paths>
+    <!-- APK دانلودشدهٔ به‌روزرسانی فقط از این پوشهٔ کش به نصب‌کننده داده می‌شود -->
+    <cache-path name="updates" path="updates/" />
+</paths>

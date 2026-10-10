@@ -1,29 +1,30 @@
 package ir.mehrdad.app;
 
 import android.Manifest;
+import android.annotation.SuppressLint;
 import android.content.ActivityNotFoundException;
 import android.content.Intent;
 import android.content.pm.PackageManager;
 import android.graphics.Color;
-import android.graphics.drawable.GradientDrawable;
-import android.os.Build;
+import android.net.Uri;
 import android.os.Bundle;
-import android.os.Handler;
-import android.os.Looper;
 import android.provider.Settings;
 import android.speech.RecognizerIntent;
-import android.text.InputType;
-import android.view.Gravity;
-import android.view.View;
 import android.view.ViewGroup;
-import android.widget.Button;
+import android.webkit.JavascriptInterface;
+import android.webkit.JsPromptResult;
+import android.webkit.JsResult;
+import android.webkit.WebChromeClient;
+import android.webkit.WebResourceError;
+import android.webkit.WebResourceRequest;
+import android.webkit.WebSettings;
+import android.webkit.WebView;
+import android.webkit.WebViewClient;
 import android.widget.EditText;
-import android.widget.LinearLayout;
-import android.widget.PopupMenu;
-import android.widget.ScrollView;
-import android.widget.TextView;
+import android.widget.FrameLayout;
 import android.widget.Toast;
 
+import androidx.activity.OnBackPressedCallback;
 import androidx.activity.result.ActivityResultLauncher;
 import androidx.activity.result.contract.ActivityResultContracts;
 import androidx.appcompat.app.AlertDialog;
@@ -31,350 +32,197 @@ import androidx.appcompat.app.AppCompatActivity;
 import androidx.core.app.NotificationManagerCompat;
 import androidx.core.content.ContextCompat;
 
-import org.json.JSONArray;
 import org.json.JSONObject;
 
 import java.util.ArrayList;
-import java.util.concurrent.ExecutorService;
-import java.util.concurrent.Executors;
 
-/** چت مهرداد روی گوشی + ورودی صوتی + جفت‌سازی. حافظه و مغز همان سرور تلگرام است؛ اپ فقط یک دریچهٔ دیگر است. */
+/**
+ * پوستهٔ بومی مهرداد: داشبورد همان اپ وب سرور (/app) است، پس هر تغییر ظاهر بدون APK جدید می‌آید.
+ * فقط چیزهایی بومی‌اند که وب نمی‌تواند: پیامک، اعلان‌ها، صدای گوشی، و به‌روزرسانی خود APK.
+ */
 public class MainActivity extends AppCompatActivity {
-    private static final int BG = Color.parseColor("#0B1220");
-    private static final int TEXT = Color.parseColor("#E6EDF3");
-    private static final int MUTED = Color.parseColor("#8B98A9");
-    private static final int USER_BUBBLE = Color.parseColor("#1F4E4A");
-    private static final int BOT_BUBBLE = Color.parseColor("#1A2433");
-
-    private final ExecutorService io = Executors.newSingleThreadExecutor();
-    private final Handler ui = new Handler(Looper.getMainLooper());
-
-    private LinearLayout messages;
-    private ScrollView scroll;
-    private EditText input;
-    private Button sendBtn;
-    private TextView status;
-    private boolean busy = false;
-
+    private WebView web;
     private ActivityResultLauncher<Intent> speech;
     private ActivityResultLauncher<String> smsPermission;
 
+    @SuppressLint({"SetJavaScriptEnabled", "AddJavascriptInterface"})
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
-        buildUi();
+
+        FrameLayout root = new FrameLayout(this);
+        root.setBackgroundColor(Color.parseColor("#0A0F18"));
+        root.setFitsSystemWindows(true);
+
+        web = new WebView(this);
+        web.setBackgroundColor(Color.parseColor("#0A0F18"));
+        web.setLayoutParams(new FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT));
+        WebSettings ws = web.getSettings();
+        ws.setJavaScriptEnabled(true);
+        ws.setDomStorageEnabled(true);
+        ws.setAllowFileAccess(false);
+        ws.setAllowContentAccess(false);
+        ws.setMixedContentMode(WebSettings.MIXED_CONTENT_NEVER_ALLOW);
+        ws.setCacheMode(WebSettings.LOAD_DEFAULT);
+        web.addJavascriptInterface(new Bridge(), "MehrdadNative");
+        web.setWebViewClient(new Client());
+        web.setWebChromeClient(new Chrome());
+        root.addView(web);
+        setContentView(root);
 
         speech = registerForActivityResult(new ActivityResultContracts.StartActivityForResult(), result -> {
             Intent data = result.getData();
             if (result.getResultCode() != RESULT_OK || data == null) return;
             ArrayList<String> r = data.getStringArrayListExtra(RecognizerIntent.EXTRA_RESULTS);
             if (r != null && !r.isEmpty()) {
-                input.setText(r.get(0));
-                input.setSelection(input.getText().length());
+                String js = "window.onVoiceText && window.onVoiceText(" + JSONObject.quote(r.get(0)) + ")";
+                web.evaluateJavascript(js, null);
             }
         });
-        smsPermission = registerForActivityResult(new ActivityResultContracts.RequestPermission(), granted -> {
-            toast(granted ? "دریافت پیامک بانکی فعال شد" : "بدون مجوز پیامک، پیامک بانکی ثبت نمی‌شود");
-            refreshStatus();
+        smsPermission = registerForActivityResult(new ActivityResultContracts.RequestPermission(), granted ->
+                Toast.makeText(this, granted ? "دریافت پیامک بانکی فعال شد" : "بدون مجوز پیامک، پیامک بانکی ثبت نمی‌شود",
+                        Toast.LENGTH_LONG).show());
+
+        getOnBackPressedDispatcher().addCallback(this, new OnBackPressedCallback(true) {
+            @Override
+            public void handleOnBackPressed() {
+                if (web.canGoBack()) web.goBack(); else finish();
+            }
         });
 
-        if (Prefs.isPaired(this)) {
-            loadHistory();
-            requestSmsIfNeeded();
-        } else {
-            showPairDialog();
-        }
+        web.loadUrl(Prefs.serverUrl(this) + "/app/");
     }
 
     @Override
     protected void onResume() {
         super.onResume();
-        refreshStatus();
-        if (Prefs.isPaired(this)) Outbox.schedule(this);   // صف معوق را همین حالا دوباره امتحان کن
-    }
-
-    // ---------------------------------------------------------------- UI
-    private void buildUi() {
-        LinearLayout root = new LinearLayout(this);
-        root.setOrientation(LinearLayout.VERTICAL);
-        root.setBackgroundColor(BG);
-        root.setFitsSystemWindows(true);
-        root.setLayoutDirection(View.LAYOUT_DIRECTION_RTL);
-
-        LinearLayout top = new LinearLayout(this);
-        top.setOrientation(LinearLayout.HORIZONTAL);
-        top.setGravity(Gravity.CENTER_VERTICAL);
-        top.setPadding(dp(16), dp(10), dp(8), dp(6));
-        TextView title = new TextView(this);
-        title.setText("مهرداد");
-        title.setTextColor(TEXT);
-        title.setTextSize(20);
-        title.setTypeface(null, android.graphics.Typeface.BOLD);
-        top.addView(title, new LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f));
-        Button menu = new Button(this);
-        menu.setText("⋮");
-        menu.setTextColor(TEXT);
-        menu.setTextSize(20);
-        menu.setBackgroundColor(Color.TRANSPARENT);
-        menu.setOnClickListener(this::showMenu);
-        top.addView(menu, new LinearLayout.LayoutParams(dp(48), dp(48)));
-        root.addView(top);
-
-        status = new TextView(this);
-        status.setTextColor(MUTED);
-        status.setTextSize(12);
-        status.setPadding(dp(16), 0, dp(16), dp(6));
-        root.addView(status);
-
-        scroll = new ScrollView(this);
-        messages = new LinearLayout(this);
-        messages.setOrientation(LinearLayout.VERTICAL);
-        messages.setPadding(dp(10), dp(4), dp(10), dp(8));
-        scroll.addView(messages);
-        root.addView(scroll, new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, 0, 1f));
-
-        LinearLayout bar = new LinearLayout(this);
-        bar.setOrientation(LinearLayout.HORIZONTAL);
-        bar.setGravity(Gravity.CENTER_VERTICAL);
-        bar.setPadding(dp(8), dp(6), dp(8), dp(8));
-
-        Button mic = new Button(this);
-        mic.setText("🎤");
-        mic.setOnClickListener(v -> startVoice());
-        bar.addView(mic, new LinearLayout.LayoutParams(dp(56), dp(48)));
-
-        input = new EditText(this);
-        input.setHint("بنویس یا با 🎤 بگو…");
-        input.setHintTextColor(MUTED);
-        input.setTextColor(TEXT);
-        input.setInputType(InputType.TYPE_CLASS_TEXT | InputType.TYPE_TEXT_FLAG_MULTI_LINE);
-        input.setMaxLines(4);
-        LinearLayout.LayoutParams lpIn = new LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f);
-        lpIn.setMargins(dp(6), 0, dp(6), 0);
-        bar.addView(input, lpIn);
-
-        sendBtn = new Button(this);
-        sendBtn.setText("ارسال");
-        sendBtn.setOnClickListener(v -> {
-            String t = input.getText().toString().trim();
-            if (!t.isEmpty()) sendMessage(t);
-        });
-        bar.addView(sendBtn, new LinearLayout.LayoutParams(dp(72), dp(48)));
-        root.addView(bar);
-
-        setContentView(root);
-    }
-
-    private TextView addBubble(String text, boolean mine) {
-        TextView tv = new TextView(this);
-        tv.setText(text);
-        tv.setTextColor(TEXT);
-        tv.setTextSize(16);
-        tv.setTextIsSelectable(true);
-        tv.setPadding(dp(12), dp(8), dp(12), dp(8));
-        tv.setMaxWidth((int) (getResources().getDisplayMetrics().widthPixels * 0.82));
-        GradientDrawable bg = new GradientDrawable();
-        bg.setColor(mine ? USER_BUBBLE : BOT_BUBBLE);
-        bg.setCornerRadius(dp(14));
-        tv.setBackground(bg);
-        LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(
-                ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT);
-        lp.setMargins(0, dp(3), 0, dp(3));
-        lp.gravity = mine ? Gravity.START : Gravity.END;
-        messages.addView(tv, lp);
-        scroll.post(() -> scroll.fullScroll(View.FOCUS_DOWN));
-        return tv;
-    }
-
-    private void showMenu(View anchor) {
-        PopupMenu m = new PopupMenu(this, anchor);
-        m.getMenu().add(0, 1, 0, "اتصال / جفت‌سازی");
-        m.getMenu().add(0, 2, 1, "دسترسی به اعلان‌ها");
-        m.getMenu().add(0, 3, 2, "مجوز پیامک");
-        m.getMenu().add(0, 4, 3, "دریافت دوباره‌ی تاریخچه");
-        m.getMenu().add(0, 5, 4, "قطع اتصال این گوشی");
-        m.setOnMenuItemClickListener(item -> {
-            switch (item.getItemId()) {
-                case 1: showPairDialog(); return true;
-                case 2: startActivity(new Intent(Settings.ACTION_NOTIFICATION_LISTENER_SETTINGS)); return true;
-                case 3: requestSmsIfNeeded(); return true;
-                case 4: loadHistory(); return true;
-                case 5:
-                    Prefs.clearToken(this);
-                    toast("قطع شد. برای وصل‌شدن دوباره /pair بزن.");
-                    refreshStatus();
-                    return true;
-                default: return false;
-            }
-        });
-        m.show();
-    }
-
-    private void refreshStatus() {
-        boolean sms = ContextCompat.checkSelfPermission(this, Manifest.permission.RECEIVE_SMS)
-                == PackageManager.PERMISSION_GRANTED;
-        boolean notif = NotificationManagerCompat.getEnabledListenerPackages(this).contains(getPackageName());
-        String s = Prefs.isPaired(this) ? "متصل" : "وصل نیست";
-        status.setText(s + " · پیامک " + (sms ? "✓" : "✗") + " · اعلان‌ها " + (notif ? "✓" : "✗")
-                + " · در صف: " + Outbox.size(this));
-    }
-
-    // ---------------------------------------------------------------- جفت‌سازی
-    private void showPairDialog() {
-        LinearLayout box = new LinearLayout(this);
-        box.setOrientation(LinearLayout.VERTICAL);
-        box.setPadding(dp(20), dp(8), dp(20), 0);
-        box.setLayoutDirection(View.LAYOUT_DIRECTION_RTL);
-
-        TextView help = new TextView(this);
-        help.setText("در تلگرام به مهرداد بنویس /pair تا یک کد ۸ حرفی بگیری. آدرس سرور را هم وارد کن (باید https باشد).");
-        help.setTextSize(13);
-        box.addView(help);
-
-        EditText url = new EditText(this);
-        url.setHint("https://mehrdad.example.com");
-        url.setText(Prefs.serverUrl(this));
-        url.setInputType(InputType.TYPE_CLASS_TEXT | InputType.TYPE_TEXT_VARIATION_URI);
-        url.setLayoutDirection(View.LAYOUT_DIRECTION_LTR);
-        box.addView(url);
-
-        EditText code = new EditText(this);
-        code.setHint("کد جفت‌سازی");
-        code.setInputType(InputType.TYPE_CLASS_TEXT | InputType.TYPE_TEXT_FLAG_CAP_CHARACTERS
-                | InputType.TYPE_TEXT_FLAG_NO_SUGGESTIONS);
-        code.setLayoutDirection(View.LAYOUT_DIRECTION_LTR);
-        box.addView(code);
-
-        new AlertDialog.Builder(this)
-                .setTitle("اتصال به مهرداد")
-                .setView(box)
-                .setCancelable(Prefs.isPaired(this))
-                .setPositiveButton("اتصال", (d, w) ->
-                        pair(url.getText().toString().trim(), code.getText().toString().trim()))
-                .setNegativeButton("بعداً", null)
-                .show();
-    }
-
-    private void pair(String rawUrl, String code) {
-        String base = rawUrl;
-        while (base.endsWith("/")) base = base.substring(0, base.length() - 1);
-        if (!base.startsWith("https://")) { toast("آدرس باید با https:// شروع شود"); return; }
-        if (code.isEmpty()) { toast("کد را وارد کن"); return; }
-        final String baseUrl = base;
-        toast("در حال اتصال…");
-        io.submit(() -> {
-            Api.Result r;
-            try {
-                JSONObject body = new JSONObject().put("code", code)
-                        .put("name", (Build.MANUFACTURER + " " + Build.MODEL).trim());
-                r = Api.call(this, baseUrl, "POST", "/api/pair", body, false, 20000);
-            } catch (Exception e) {
-                r = new Api.Result(0, String.valueOf(e.getMessage()));
-            }
-            final Api.Result res = r;
-            ui.post(() -> {
-                if (res.ok() && !res.json().optString("token").isEmpty()) {
-                    Prefs.savePairing(this, baseUrl, res.json().optString("token"));
-                    toast("وصل شد ✓");
-                    loadHistory();
-                    requestSmsIfNeeded();
-                    Outbox.schedule(this);
-                } else if (res.code == 403) {
-                    toast("کد اشتباه است یا منقضی شده. دوباره /pair بزن.");
-                } else if (res.code == 429) {
-                    toast("تلاش ناموفق زیاد بود؛ ۱۰ دقیقه بعد دوباره.");
-                } else {
-                    toast("به سرور نرسیدم (" + res.code + "). آدرس و اینترنت/فیلترشکن را چک کن.");
-                }
-                refreshStatus();
-            });
-        });
-    }
-
-    // ---------------------------------------------------------------- چت
-    private void loadHistory() {
-        if (!Prefs.isPaired(this)) return;
-        io.submit(() -> {
-            Api.Result r = Api.call(this, "GET", "/api/history?limit=60", null, 20000);
-            ui.post(() -> {
-                if (r.code == 401) { onUnauthorized(); return; }
-                if (!r.ok()) return;
-                JSONArray arr = r.json().optJSONArray("messages");
-                if (arr == null) return;
-                messages.removeAllViews();
-                for (int i = 0; i < arr.length(); i++) {
-                    JSONObject m = arr.optJSONObject(i);
-                    if (m != null) addBubble(m.optString("text"), "user".equals(m.optString("role")));
-                }
-            });
-        });
-    }
-
-    private void sendMessage(String text) {
-        if (!Prefs.isPaired(this)) { showPairDialog(); return; }
-        if (busy) return;
-        addBubble(text, true);
-        input.setText("");
-        final TextView typing = addBubble("…", false);
-        setBusy(true);
-        io.submit(() -> {
-            Api.Result r;
-            try {
-                r = Api.call(this, "POST", "/api/chat", new JSONObject().put("text", text), 150000);
-            } catch (Exception e) {
-                r = new Api.Result(0, String.valueOf(e.getMessage()));
-            }
-            final Api.Result res = r;
-            ui.post(() -> {
-                setBusy(false);
-                if (res.code == 401) { messages.removeView(typing); onUnauthorized(); return; }
-                if (res.ok()) {
-                    typing.setText(res.json().optString("reply", "…"));
-                } else {
-                    typing.setText("نتوانستم به سرور برسم (" + res.code + "). دوباره امتحان کن.");
-                }
-                scroll.post(() -> scroll.fullScroll(View.FOCUS_DOWN));
-            });
-        });
-    }
-
-    private void setBusy(boolean b) {
-        busy = b;
-        sendBtn.setEnabled(!b);
-    }
-
-    private void onUnauthorized() {
-        Prefs.clearToken(this);
-        toast("این گوشی دیگر وصل نیست. با /pair دوباره وصلش کن.");
-        refreshStatus();
-        showPairDialog();
-    }
-
-    // ---------------------------------------------------------------- صدا و مجوزها
-    private void startVoice() {
-        Intent i = new Intent(RecognizerIntent.ACTION_RECOGNIZE_SPEECH);
-        i.putExtra(RecognizerIntent.EXTRA_LANGUAGE_MODEL, RecognizerIntent.LANGUAGE_MODEL_FREE_FORM);
-        i.putExtra(RecognizerIntent.EXTRA_LANGUAGE, "fa-IR");
-        i.putExtra(RecognizerIntent.EXTRA_PROMPT, "بگو…");
-        try {
-            speech.launch(i);
-        } catch (ActivityNotFoundException e) {
-            toast("تشخیص گفتار در این گوشی نیست (برنامهٔ Google لازم است؛ شاید فیلترشکن هم).");
+        if (Prefs.isPaired(this)) {
+            Outbox.schedule(this);               // صف پیامک/اعلان معوق را دوباره امتحان کن
+            Updater.check(this, false);          // بی‌صدا، حداکثر هر ۶ ساعت
         }
     }
 
-    private void requestSmsIfNeeded() {
-        if (ContextCompat.checkSelfPermission(this, Manifest.permission.RECEIVE_SMS)
-                != PackageManager.PERMISSION_GRANTED) {
+    private boolean sameOrigin(Uri u) {
+        Uri base = Uri.parse(Prefs.serverUrl(this));
+        return u != null && "https".equals(u.getScheme()) && base.getHost() != null && base.getHost().equals(u.getHost());
+    }
+
+    private class Client extends WebViewClient {
+        @Override
+        public boolean shouldOverrideUrlLoading(WebView view, WebResourceRequest request) {
+            Uri u = request.getUrl();
+            if (sameOrigin(u)) return false;
+            try {
+                startActivity(new Intent(Intent.ACTION_VIEW, u));   // لینک بیرونی: مرورگر، نه داخل اپ (پل بومی فقط برای سرور خودمان)
+            } catch (ActivityNotFoundException ignored) { }
+            return true;
+        }
+
+        @Override
+        public void onReceivedError(WebView view, WebResourceRequest request, WebResourceError error) {
+            if (!request.isForMainFrame()) return;
+            String base = Prefs.serverUrl(MainActivity.this) + "/app/";
+            String html = "<html dir='rtl' lang='fa'><meta name='viewport' content='width=device-width,initial-scale=1'>"
+                    + "<body style='background:#0A0F18;color:#E8EDF5;font-family:sans-serif;text-align:center;padding:48px 24px'>"
+                    + "<h2>اتصال برقرار نشد</h2><p style='color:#A7B3C5'>اینترنت یا فیلترشکن را چک کن.</p>"
+                    + "<p><a style='display:inline-block;margin-top:16px;padding:12px 24px;border-radius:12px;background:#E3B35C;color:#1A1405;"
+                    + "text-decoration:none;font-weight:bold' href='" + base + "'>تلاش دوباره</a></p></body></html>";
+            view.loadDataWithBaseURL(null, html, "text/html", "UTF-8", null);
+        }
+    }
+
+    /** مرورگر داخلی confirm/prompt/alert جاوااسکریپت را نشان نمی‌دهد مگر اینجا پیاده شود (اپ وب از آن‌ها استفاده می‌کند). */
+    private class Chrome extends WebChromeClient {
+        @Override
+        public boolean onJsAlert(WebView view, String url, String message, JsResult result) {
+            new AlertDialog.Builder(MainActivity.this).setMessage(message)
+                    .setPositiveButton("باشه", (d, w) -> result.confirm()).setOnCancelListener(d -> result.cancel()).show();
+            return true;
+        }
+
+        @Override
+        public boolean onJsConfirm(WebView view, String url, String message, JsResult result) {
+            new AlertDialog.Builder(MainActivity.this).setMessage(message)
+                    .setPositiveButton("تأیید", (d, w) -> result.confirm())
+                    .setNegativeButton("لغو", (d, w) -> result.cancel())
+                    .setOnCancelListener(d -> result.cancel()).show();
+            return true;
+        }
+
+        @Override
+        public boolean onJsPrompt(WebView view, String url, String message, String defaultValue, JsPromptResult result) {
+            EditText input = new EditText(MainActivity.this);
+            input.setText(defaultValue);
+            new AlertDialog.Builder(MainActivity.this).setMessage(message).setView(input)
+                    .setPositiveButton("تأیید", (d, w) -> result.confirm(input.getText().toString()))
+                    .setNegativeButton("لغو", (d, w) -> result.cancel())
+                    .setOnCancelListener(d -> result.cancel()).show();
+            return true;
+        }
+    }
+
+    /** پل بومی برای اپ وب (فقط صفحات همین سرور داخل WebView بارگذاری می‌شوند). */
+    private class Bridge {
+        @JavascriptInterface
+        public String getToken() { return Prefs.token(MainActivity.this); }
+
+        @JavascriptInterface
+        public void savePairing(String url, String token) {
+            if (url == null || !url.startsWith("https://") || token == null || token.isEmpty()) return;
+            Prefs.savePairing(MainActivity.this, url, token);
+            runOnUiThread(() -> {
+                Outbox.schedule(MainActivity.this);
+                requestSms();
+            });
+        }
+
+        @JavascriptInterface
+        public void clearToken() { Prefs.clearToken(MainActivity.this); }
+
+        @JavascriptInterface
+        public void startVoice() {
+            runOnUiThread(() -> {
+                Intent i = new Intent(RecognizerIntent.ACTION_RECOGNIZE_SPEECH);
+                i.putExtra(RecognizerIntent.EXTRA_LANGUAGE_MODEL, RecognizerIntent.LANGUAGE_MODEL_FREE_FORM);
+                i.putExtra(RecognizerIntent.EXTRA_LANGUAGE, "fa-IR");
+                i.putExtra(RecognizerIntent.EXTRA_PROMPT, "بگو…");
+                try {
+                    speech.launch(i);
+                } catch (ActivityNotFoundException e) {
+                    Toast.makeText(MainActivity.this, "تشخیص گفتار در این گوشی نیست (برنامهٔ Google لازم است؛ شاید فیلترشکن هم).", Toast.LENGTH_LONG).show();
+                }
+            });
+        }
+
+        @JavascriptInterface
+        public void requestSmsPermission() { runOnUiThread(MainActivity.this::requestSms); }
+
+        @JavascriptInterface
+        public void openNotificationAccess() {
+            runOnUiThread(() -> startActivity(new Intent(Settings.ACTION_NOTIFICATION_LISTENER_SETTINGS)));
+        }
+
+        @JavascriptInterface
+        public void checkUpdate() { runOnUiThread(() -> Updater.check(MainActivity.this, true)); }
+
+        @JavascriptInterface
+        public String status() {
+            try {
+                boolean sms = ContextCompat.checkSelfPermission(MainActivity.this, Manifest.permission.RECEIVE_SMS)
+                        == PackageManager.PERMISSION_GRANTED;
+                boolean notif = NotificationManagerCompat.getEnabledListenerPackages(MainActivity.this)
+                        .contains(getPackageName());
+                return new JSONObject().put("sms", sms).put("notif", notif).put("queue", Outbox.size(MainActivity.this))
+                        .put("version", Updater.installedVersionName(MainActivity.this))
+                        .put("code", Updater.installedVersionCode(MainActivity.this)).toString();
+            } catch (Exception e) {
+                return "{}";
+            }
+        }
+    }
+
+    private void requestSms() {
+        if (ContextCompat.checkSelfPermission(this, Manifest.permission.RECEIVE_SMS) != PackageManager.PERMISSION_GRANTED)
             smsPermission.launch(Manifest.permission.RECEIVE_SMS);
-        }
-    }
-
-    private void toast(String s) {
-        Toast.makeText(this, s, Toast.LENGTH_LONG).show();
-    }
-
-    private int dp(int v) {
-        return (int) (v * getResources().getDisplayMetrics().density);
     }
 }
