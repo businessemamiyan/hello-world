@@ -18,6 +18,9 @@ from .web import create_app
 
 async def amain():
     logging.basicConfig(level=logging.INFO, format="%(asctime)s %(name)s %(levelname)s %(message)s")
+    # آدرس درخواست‌های تلگرام شامل BOT_TOKEN است؛ لاگ INFO کتابخانه‌ها نباید آن را روی دیسک بنویسد
+    for noisy in ("httpx", "httpcore"):
+        logging.getLogger(noisy).setLevel(logging.WARNING)
     cfg = Config.from_env()
     probs = cfg.problems()
     if probs:
