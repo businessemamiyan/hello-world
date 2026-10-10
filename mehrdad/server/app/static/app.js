@@ -23,7 +23,7 @@ let token = store.get('mehrdad_token') || '';
 const hash = new URLSearchParams(location.hash.slice(1));
 if (hash.get('t')) { token = hash.get('t'); store.set('mehrdad_token', token); history.replaceState(null, '', location.pathname); }
 if (!token && window.MehrdadNative && MehrdadNative.getToken) token = MehrdadNative.getToken() || '';
-const S = { tab: store.get('mehrdad_tab') || 'today', mview: 'tx', gview: 'goals', mrange: 'month', lrange: 'week', priv: store.get('mehrdad_priv') === '1',
+const S = { tab: store.get('mehrdad_tab') || 'today', mview: 'tx', pmonth: '', gview: 'goals', mrange: 'month', lrange: 'week', priv: store.get('mehrdad_priv') === '1',
             cache: {}, busy: false };
 applyTheme(store.get('mehrdad_theme') || 'night');
 
@@ -202,7 +202,8 @@ async function viewToday() {
 
 const mviewSeg = () => `<div class="seg" role="group" style="justify-self:start">
   <button data-act="mview" data-val="tx" aria-pressed="${S.mview === 'tx'}">تراکنش‌ها</button>
-  <button data-act="mview" data-val="wealth" aria-pressed="${S.mview === 'wealth'}">دارایی و بدهی</button></div>`;
+  <button data-act="mview" data-val="wealth" aria-pressed="${S.mview === 'wealth'}">دارایی و بدهی</button>
+  <button data-act="mview" data-val="payroll" aria-pressed="${S.mview === 'payroll'}">فیش حقوقی</button></div>`;
 
 async function viewWealth() {
   const f = await api('/api/finance'); S.cache.fin = f;
@@ -256,8 +257,70 @@ async function viewWealth() {
   </section>`;
 }
 
+const PAY_VARS = [['overtime', 'اضافه‌کاری عادی (ساعت)'], ['holiday_overtime', 'اضافه‌کاری تعطیلی (ساعت)'], ['leave', 'مرخصی حقوق‌دار (روز)'],
+  ['unpaid_leave', 'غیبت / مرخصی بدون حقوق (روز)'], ['advance', 'مساعده (تومان)'], ['other_earn', 'سایر پرداختی (تومان)'], ['other_ded', 'سایر کسور (تومان)'],
+  ['days_worked', 'روز کارکردِ کل ماه']];
+const shiftM = (k, n) => { const [y, m] = k.split('-').map(Number); const i = y * 12 + (m - 1) + n; return `${Math.floor(i / 12)}-${String(i % 12 + 1).padStart(2, '0')}`; };
+async function viewPayroll() {
+  const s = await api('/api/payroll' + (S.pmonth ? '?month=' + S.pmonth : '')); S.cache.pay = s; S.pmonth = s.month;
+  const L = s.labels, d = s.actual || s.estimate, st = s.settings, k = st.unit === 'rial' ? 10 : 1;
+  const nav = `<div class="row spread"><button class="btn sm" data-act="pshift" data-d="-1" aria-label="ماه قبل">›</button><b>${esc(s.label)}</b>
+    <button class="btn sm" data-act="pshift" data-d="1" aria-label="ماه بعد">‹</button></div>`;
+  const row = (l, v, cls = '') => `<div class="row spread"><span>${l}</span><b class="num ${cls}">${money(v)}</b></div>`;
+  const head = d ? `<div class="north"><span class="eyebrow">${s.actual ? 'فیش واقعی' : 'حقوق تخمینی'} · ${esc(s.label)}</span>
+      <div class="fig"><strong class="num">${money(d.net)}</strong><span>تومان خالص پرداختی</span></div>
+      <div class="meta"><span>جمع پرداختی <b class="num m-pos">${money(d.total_earn)}</b></span><span>جمع کسورات <b class="num m-neg">${money(d.total_ded)}</b></span></div>
+      ${s.actual ? '' : `<div class="muted small" style="color:var(--hero-sub)">از روی فیش واقعی ${esc(s.template_month)} محاسبه شده؛ هر چه اضافه‌کاری/مرخصی بگویی دقیق‌تر می‌شود.</div>`}</div>`
+    : `<div class="card gold"><h2>🧾 فیش حقوقی</h2><p class="muted small">یک بار فیش یکی از ماه‌ها را پایین پر کن (یا عکسش را در چت بفرست)؛ بعد حقوق ماه‌های بعد را خودم حساب می‌کنم و اضافه‌کاری و مرخصی را از حرف‌هایت می‌گیرم.</p></div>`;
+  const brk = d ? `<div class="card"><div class="row spread"><h2>پرداختی‌ها</h2><span class="pill gold">${s.actual ? 'واقعی' : 'تخمینی'}</span></div>
+      ${L.earn.filter(([key]) => d.earn[key] || key === 'base').map(([key, l]) => row(esc(l), d.earn[key])).join('')}
+      <div class="row spread" style="border-top:1px solid var(--line);padding-top:6px"><b>جمع پرداختی</b><b class="num m-pos">${money(d.total_earn)}</b></div>
+      <h2 style="margin-top:10px">کسورات</h2>${L.ded.filter(([key]) => d.ded[key]).map(([key, l]) => row(esc(l), d.ded[key], 'm-neg')).join('') || empty('کسوری نیست.')}
+      <div class="row spread" style="border-top:1px solid var(--line);padding-top:6px"><b>جمع کسورات</b><b class="num m-neg">${money(d.total_ded)}</b></div>
+      <div class="row spread"><b>خالص پرداختی</b><b class="num">${money(d.net)}</b></div>
+      ${s.actual && (s.actual.mismatch || []).length ? '<div class="issue warn"><span class="tag">چک کن</span><div>جمع‌های واردشده با مجموع اقلام نمی‌خواند؛ شاید قلمی جا افتاده یا عددی اشتباه است.</div></div>' : ''}
+      <h2 style="margin-top:10px">کارکرد</h2>
+      <div class="kpis m-k3">${kpi('روز کارکرد', fa(d.work.days_worked || 0))}${kpi('اضافه‌کاری عادی', fa(d.work.ot_normal_h || 0) + ' س')}${kpi('اضافه‌کاری تعطیلی', fa(d.work.ot_holiday_h || 0) + ' س')}
+        ${kpi('مرخصی', fa(d.work.leave_days || 0) + ' روز')}${kpi('ساعت کارکرد', fa(d.work.work_hours || 0))}</div>
+      ${!s.actual && s.estimate ? `<p class="muted small">فرض‌های یادگرفته‌شده از فیش: نرخ بیمه ${fa((s.estimate.assumptions.insurance_rate * 100).toFixed(1))}٪ · نرخ مالیات ${fa((s.estimate.assumptions.tax_rate * 100).toFixed(1))}٪ · ضریب اضافه‌کاری ${fa(s.estimate.assumptions.factor_ot_normal)}. مالیات را شرکت می‌دهد (مزایا ۳) پس روی خالص اثری ندارد.</p>` : ''}
+      ${s.actual ? `<div class="row"><button class="btn sm danger" data-act="pay-del">حذف فیش این ماه</button></div>` : ''}</div>` : '';
+  const quick = `<div class="card ai"><div class="row spread"><h2>اضافه‌کاری، مرخصی، مساعده</h2><span class="pill ai">${esc(s.label)}</span></div>
+      <p class="muted small">یا همین را در چت به مهراد بگو: «امروز ۲ ساعت اضافه‌کاری کردم». جمع این ماه: عادی ${fa(s.vars.ot_normal_h || 0)} س · تعطیلی ${fa(s.vars.ot_holiday_h || 0)} س · مرخصی ${fa(s.vars.leave_days || 0)} روز · غیبت ${fa(s.vars.unpaid_days || 0)} روز${s.vars.advance ? ' · مساعده ' + money(s.vars.advance) : ''}.</p>
+      <form class="form" data-form="payvar"><label class="f"><span>چه چیزی؟</span><select name="op">${PAY_VARS.map(([v, l]) => `<option value="${v}">${l}</option>`).join('')}</select></label>
+        <label class="f"><span>مقدار</span><input type="text" name="value" inputmode="decimal" required></label>
+        <label class="f"><span>نحوه</span><select name="mode"><option value="add">اضافه کن به جمع</option><option value="set">جمع کل ماه این است</option></select></label>
+        <button class="btn primary" type="submit">ثبت</button></form></div>`;
+  const src = s.actual || s.template || { earn: {}, ded: {}, work: {} };
+  const fld = (grp, key, label) => `<label class="f"><span>${esc(label)}</span><input type="text" inputmode="decimal" name="${grp}_${key}" value="${(src[grp] || {})[key] ? (grp === 'work' ? src[grp][key] : Math.round(src[grp][key] * k)) : ''}"></label>`;
+  const form = `<div class="card"><div class="row spread"><h2>${s.actual ? 'ویرایش فیش واقعی' : 'ثبت فیش واقعی (نمونه)'}</h2><span class="muted small">ماه ${esc(s.label)}</span></div>
+      <p class="muted small">${s.actual ? '' : 'یک ماه را کامل پر کن؛ ماه‌های بعد از روی آن حساب می‌شوند. هر ماه که فیش واقعی آمد دوباره پرش کن تا دقیق‌تر شود. '}اقلام خالی = صفر.</p>
+      <form class="form" data-form="payslip"><label class="f"><span>ماه فیش (مثل ۱۴۰۵-۰۷)</span><input type="text" name="month" value="${esc(fa(s.month))}" required dir="ltr"></label>
+        <label class="f"><span>واحد مبلغ‌ها</span><select name="unit"><option value="toman" ${st.unit === 'toman' ? 'selected' : ''}>تومان</option><option value="rial" ${st.unit === 'rial' ? 'selected' : ''}>ریال</option></select></label>
+        <div class="full eyebrow">پرداختی‌ها</div>${L.earn.map(([key, l]) => fld('earn', key, l)).join('')}
+        <div class="full eyebrow">کسورات</div>${L.ded.map(([key, l]) => fld('ded', key, l)).join('')}
+        <div class="full eyebrow">کارکردها</div>${L.work.map(([key, l]) => fld('work', key, l)).join('')}
+        <div class="full eyebrow">جمع‌های روی فیش (اختیاری؛ برای کنترل اشتباه)</div>
+        <label class="f"><span>جمع پرداختی</span><input type="text" inputmode="decimal" name="tot_total_earn"></label>
+        <label class="f"><span>جمع کسورات</span><input type="text" inputmode="decimal" name="tot_total_ded"></label>
+        <label class="f"><span>خالص پرداختی</span><input type="text" inputmode="decimal" name="tot_net"></label>
+        <button class="btn primary" type="submit">ذخیره فیش</button></form></div>`;
+  const hist = `<div class="card"><h2>ماه‌ها</h2>${s.months.map(m => `<div class="row spread"><button class="btn sm" data-act="pmonth" data-val="${m.month}">${esc(m.label)}</button>
+      <span><span class="pill ${m.actual ? 'good' : ''}">${m.actual ? 'واقعی' : 'تخمینی'}</span> <b class="num">${money(m.net)}</b></span></div>`).join('') || empty('هنوز فیشی نیست.')}</div>`;
+  const ins = new Set(st.insurable);
+  const sett = `<details class="card"><summary>تنظیمات محاسبه</summary><div class="stack6 small" style="margin-top:8px">
+      <label class="f"><span>مبنای روز</span><select data-act="pay-setting" data-key="day_basis"><option value="auto" ${st.day_basis === 'auto' ? 'selected' : ''}>خودکار (از روی فیش نمونه تشخیص می‌دهد)</option>
+        <option value="month" ${st.day_basis === 'month' ? 'selected' : ''}>ماه کامل = حقوق کامل (۳۰ یا ۳۱ روز فرقی ندارد)</option>
+        <option value="30cap" ${st.day_basis === '30cap' ? 'selected' : ''}>هر ماه ۳۰ روز (حتی ماه ۳۱ روزه)</option>
+        <option value="30" ${st.day_basis === '30' ? 'selected' : ''}>روزمزد = یک‌سی‌ام (ماه ۳۱ روزه ۳۱ روز می‌شود)</option></select></label>
+      <div class="muted">اقلام مشمول بیمه:</div>
+      <div class="row">${L.earn.filter(([key]) => key !== 'benefit3').map(([key, l]) => `<label class="row" style="gap:4px"><input type="checkbox" data-act="pay-ins" value="${key}" ${ins.has(key) ? 'checked' : ''}> ${esc(l)}</label>`).join('')}</div>
+      <div class="muted">محاسبه‌ها همه تخمین‌اند؛ هر ماه که فیش واقعی را ثبت کنی ضریب‌ها از همان دوباره یاد گرفته می‌شود.</div></div></details>`;
+  return `<section class="pane">${mviewSeg()}<div class="pane-title"><h1>فیش حقوقی</h1></div>${nav}${head}${quick}${brk}${form}${hist}${sett}</section>`;
+}
+
 async function viewMoney() {
   if (S.mview === 'wealth') return viewWealth();
+  if (S.mview === 'payroll') return viewPayroll();
   const d = await api('/api/dashboard?range=' + S.mrange); S.cache.money = d;
   const f = d.finance;
   const money_items = (d.items || []).filter(i => i.kind === 'income' || i.kind === 'expense');
@@ -725,6 +788,9 @@ document.addEventListener('click', async ev => {
     }
     else if (act === 'coach-book') { await api('/api/coach/books/' + id, { method: 'PATCH', body: { status: b.dataset.st } }); renderKeep(); }
     else if (act === 'coach-book-del') { if (confirm('این کتاب از فهرست حذف شود؟')) { await api('/api/coach/books/' + id, { method: 'DELETE' }); renderKeep(); } }
+    else if (act === 'pshift') { S.pmonth = shiftM(S.pmonth, Number(b.dataset.d)); render(); }
+    else if (act === 'pmonth') { S.pmonth = b.dataset.val; render(); window.scrollTo(0, 0); }
+    else if (act === 'pay-del') { if (confirm('فیش واقعی این ماه حذف شود؟ (ماه دوباره تخمینی می‌شود)')) { await api('/api/payroll/slips/' + S.pmonth, { method: 'DELETE' }); toast('حذف شد'); render(); } }
     else if (act === 'acc-edit') openAccEdit(id);
     else if (act === 'debt-edit') openDebtEdit(id);
     else if (act === 'acc-del') { if (confirm('این حساب حذف شود؟')) { await api('/api/accounts/' + id, { method: 'DELETE' }); render(); } }
@@ -758,6 +824,13 @@ document.addEventListener('click', async ev => {
 document.addEventListener('change', async ev => {
   const t = ev.target;
   if (t.id === 'privChk') { S.priv = t.checked; store.set('mehrdad_priv', S.priv ? '1' : '0'); syncPriv(); render(); }
+  else if (t.dataset.act === 'pay-setting') {
+    try { await api('/api/payroll/settings', { method: 'PUT', body: { [t.dataset.key]: t.value } }); toast('ذخیره شد'); renderKeep(); } catch (e) { toast(e.message); }
+  }
+  else if (t.dataset.act === 'pay-ins') {
+    const vals = $$('[data-act=pay-ins]:checked').map(x => x.value);
+    try { await api('/api/payroll/settings', { method: 'PUT', body: { insurable: vals } }); toast('ذخیره شد'); renderKeep(); } catch (e) { toast(e.message); }
+  }
   else if (t.dataset.act === 'progress') {
     try { await api('/api/events/' + t.dataset.id, { method: 'PATCH', body: { fields: { progress: Number(t.value) } } }); render(); } catch (e) { toast(e.message); }
   }
@@ -778,6 +851,20 @@ document.addEventListener('submit', async ev => {
       token = (await r.json()).token; store.set('mehrdad_token', token);
       if (window.MehrdadNative && MehrdadNative.savePairing) MehrdadNative.savePairing(location.origin, token);
       toast('وصل شد ✓'); return boot();
+    }
+    if (kind === 'payvar') {
+      const val = Number(en(v.value)); if (!(val >= 0)) return toast('مقدار نامعتبر');
+      const r = await api('/api/payroll/vars', { method: 'POST', body: { month: S.pmonth, op: v.op, value: val, mode: v.mode } });
+      toast((r.notes || [])[0] || 'ثبت شد ✓'); return renderKeep();
+    }
+    if (kind === 'payslip') {
+      const num = x => { const n = Number(en(x || '')); return n >= 0 ? n : 0; };
+      const g = (grp, keys) => Object.fromEntries(keys.map(key => [key, num(v[grp + '_' + key])]));
+      const L = S.cache.pay.labels, month = en(v.month).replace('/', '-');
+      const body = { earn: g('earn', L.earn.map(x => x[0])), ded: g('ded', L.ded.map(x => x[0])), work: g('work', L.work.map(x => x[0])), unit: v.unit };
+      const tot = {}; for (const key of ['total_earn', 'total_ded', 'net']) if (v['tot_' + key]) tot[key] = num(v['tot_' + key]); if (Object.keys(tot).length) body.totals = tot;
+      const r = await api('/api/payroll/slips/' + month, { method: 'PUT', body });
+      S.pmonth = r.month; toast((r.mismatch || []).length ? 'ذخیره شد، اما جمع‌ها با اقلام نمی‌خواند ⚠️' : 'فیش ذخیره شد ✓'); return render();
     }
     if (kind === 'coach-book') { await api('/api/coach/books', { method: 'POST', body: { title: v.title.trim() } }); toast('اضافه شد ✓'); return renderKeep(); }
     if (kind === 'task') await api('/api/events', { method: 'POST', body: { type: 'task', summary: v.title.trim(), fields: { status: 'open' } } });

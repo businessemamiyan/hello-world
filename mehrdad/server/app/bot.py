@@ -11,6 +11,8 @@ import re
 
 from . import agents, finance, life, novatunnel, profile
 from .coach import Coach
+from .payroll import Payroll
+from . import payroll as payroll_mod
 from .media import MAX_IMAGE_BYTES, sniff_image
 from .memory import normalize_fa, today_str
 from .telegram import TGError, btn
@@ -32,6 +34,7 @@ HELP = """من مهراد‌ام — مغز دومت.
 
 /onboard — مصاحبهٔ ۱۵ سؤالی تا بیشتر بشناسمت\n/goals — هدف‌های پیشنهادی بر اساس آنچه از تو می‌دانم\n/inbox — آخرین پیام‌های ایمیل/تلگرامِ ایجنت‌ها (و /mailtest برای تست اتصال ایمیل)\n/wife — لینک پرسش‌نامه برای همسرت (درباره‌ی تو جواب می‌دهد)\n/invites — لینک‌های ساخته‌شده و ابطال\n/nova — فروش و درآمد NovaTunnel (فقط‌خواندنی)
 /finance — موجودی حساب‌ها، بدهی و اقساط، و هشدارها
+/salary — حقوق این ماه (تخمین از روی فیش نمونه) و ماه بعد
 
 /pair — کد یک‌بارمصرف برای وصل‌کردن اپ (۱۰ دقیقه اعتبار)
 /devices — دستگاه‌های وصل‌شده
@@ -80,6 +83,7 @@ class Bot:
         self._ctx_ids = set()             # شناسهٔ پروفایل/هدف‌هایی که در آخرین چکیده به مغز نشان داده شد
         self._ctx_debt_ids = set()        # شناسهٔ بدهی‌های فعالی که مغز در همین گفتگو دیده است
         self.coach = Coach(self)
+        self.payroll = Payroll(mem)
         self.stt = None                   # app.stt.STT؛ main آن را وصل می‌کند (None = ویس خاموش)
 
     async def chat(self, text, images=None, voice=False):
@@ -132,6 +136,12 @@ class Bot:
         self._ctx_ids = {e["id"] for e in snap["profile"][-60:]} | {g["id"] for g in snap["goals"]}
         if digest:
             parts.append(digest)
+        try:
+            pay = await self.payroll.prompt()
+            if pay:
+                parts.append(pay)
+        except Exception:
+            log.exception("چکیدهٔ فیش حقوقی ساخته نشد")
         return "\n\n".join(parts)
 
     async def suggest_goals(self):
@@ -242,7 +252,7 @@ class Bot:
     async def _apply_entries(self, entries, allowed_ids):
         """ورودی‌های مغز: جدید → ثبت؛ update_id/delete_id → فقط روی رکوردهای اخیری که مغز دیده؛ account_op/debt_op/habit_new → به‌روزرسانی اپ.
         خروجی: لیست خط‌های تأیید (حقیقت سمت سرور) برای نمایش زیر پاسخ."""
-        adds, notes = [], []
+        adds, notes, pay_ops = [], [], []
         paying = any("debt_op" in e and e["debt_op"]["op"] == "pay" for e in entries)
         for e in entries:
             if "delete_id" in e:
@@ -263,6 +273,10 @@ class Bot:
                 note = await self._apply_debt_op(e["debt_op"])
                 if note:
                     notes.append(note)
+            elif "payroll_op" in e:
+                pay_ops.append(e["payroll_op"])
+            elif "payslip" in e:
+                notes.append(await self._apply_payslip(e["payslip"]))
             elif "habit_new" in e:
                 h = e["habit_new"]
                 existing = [x for x in await self.mem.list_habits("active") if normalize_fa(x["good"]).strip() == normalize_fa(h["good"]).strip()]
@@ -273,9 +287,23 @@ class Bot:
                 if paying and e.get("type") == "expense" and ("قسط" in (e.get("summary") or "") or e.get("category") in ("اقساط", "قسط")):
                     continue            # pay خودش خرج «اقساط» را ثبت می‌کند؛ تکراری نشود
                 adds.append(e)
+        if pay_ops:
+            notes.extend(await self.payroll.apply_ops(pay_ops))
         if adds:
             await self.mem.add_memory(adds)
         return [n for n in notes if n]
+
+    async def _apply_payslip(self, ps):
+        if not ps.get("month"):
+            return "⚠️ ماه فیش را نفهمیدم؛ بگو فیش کدام ماه است (مثلاً ۱۴۰۵-۰۶)."
+        unit = ps.get("unit") or (await self.payroll.settings())["unit"]
+        slip, bad = await self.payroll.save_actual(ps["month"], ps["raw"], unit)
+        t = payroll_mod.totals(slip)
+        f = lambda n: life.fa(f"{int(n):,}")
+        line = f"🧾 فیش {payroll_mod.month_label(ps['month'])} ثبت شد: جمع پرداختی {f(t['total_earn'])}، کسورات {f(t['total_ded'])}، خالص {f(t['net'])} تومان"
+        if bad:
+            line += "\n⚠️ جمع‌های روی فیش با مجموع اقلام نمی‌خواند؛ عددها را در اپ (حساب‌ها ← فیش حقوقی) چک کن."
+        return line
 
     async def notify_owner(self, text):
         owner = await self.mem.get_owner()
@@ -539,6 +567,10 @@ class Bot:
         head = text.split(maxsplit=1)[0] if text else ""
         if head in ("/today", "/week", "/month"):
             await self.handle_summary(chat_id, head[1:], private="private" in text)
+            return
+
+        if text == "/salary":
+            await self.tg.send(chat_id, await self.payroll.text())
             return
 
         if text == "/backup":

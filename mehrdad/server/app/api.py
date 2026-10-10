@@ -13,7 +13,7 @@ from collections import defaultdict, deque
 from fastapi import APIRouter, Depends, Header, HTTPException, Request
 from pydantic import BaseModel, Field
 
-from . import finance, life, novatunnel, profile
+from . import finance, life, novatunnel, payroll as payroll_mod, profile
 from .ingest import is_sensitive, memory_entry, parse_bank_text
 from .media import decode_image_b64
 
@@ -148,6 +148,27 @@ class HabitIn(BaseModel):
 class ChatImageIn(BaseModel):
     image: str = Field(min_length=100, max_length=9_000_000)
     text: str = Field(default="", max_length=2000)
+
+
+class PayslipIn(BaseModel):
+    earn: dict[str, float] = Field(default_factory=dict, max_length=20)
+    ded: dict[str, float] = Field(default_factory=dict, max_length=20)
+    work: dict[str, float] = Field(default_factory=dict, max_length=20)
+    totals: dict[str, float] | None = Field(default=None, max_length=5)
+    unit: str = Field(default="toman", pattern="^(toman|rial)$")
+
+
+class PayVarIn(BaseModel):
+    month: str | None = Field(default=None, max_length=8)
+    op: str = Field(max_length=20)
+    value: float = Field(ge=0, le=1e13)
+    mode: str = Field(default="add", pattern="^(add|set)$")
+
+
+class PayrollSettingsIn(BaseModel):
+    unit: str | None = Field(default=None, pattern="^(toman|rial)$")
+    day_basis: str | None = Field(default=None, pattern="^(auto|month|30|30cap)$")
+    insurable: list[str] | None = Field(default=None, max_length=12)
 
 
 class CoachDoneIn(BaseModel):
@@ -316,6 +337,60 @@ def create_router(mem, svc):
         snap["sections"] = list(profile.SECTIONS)
         snap["next_questions"] = [{"id": q[0], "section": q[1], "text": q[2]} for q in profile.SELF_QUESTIONS]
         return snap
+
+    # ---------- فیش حقوقی ----------
+    def _pay():
+        p = getattr(svc, "payroll", None)
+        if p is None:
+            raise HTTPException(status_code=503, detail="payroll unavailable")
+        return p
+
+    def _month(m):
+        if m is None:
+            return payroll_mod.current_month()
+        pm = payroll_mod.parse_month(m)
+        if not pm:
+            raise HTTPException(status_code=422, detail="ماه نامعتبر (مثل 1405-07)")
+        return payroll_mod.month_key(*pm)
+
+    @router.get("/payroll")
+    async def payroll_state(month: str | None = None, dev=Depends(current_device)):
+        return await _pay().snapshot(_month(month) if month else None)
+
+    @router.put("/payroll/slips/{month}")
+    async def payroll_save_slip(month: str, body: PayslipIn, dev=Depends(current_device)):
+        key = _month(month)
+        raw = {"earn": body.earn, "ded": body.ded, "work": body.work}
+        if body.totals:
+            raw["read_totals"] = body.totals
+        slip, bad = await _pay().save_actual(key, raw, body.unit)
+        snap = await _pay().snapshot(key)
+        snap["mismatch"] = bad
+        return snap
+
+    @router.delete("/payroll/slips/{month}")
+    async def payroll_delete_slip(month: str, dev=Depends(current_device)):
+        if not await _pay().delete_slip(_month(month)):
+            raise HTTPException(status_code=404, detail="not found")
+        return {"ok": True}
+
+    @router.post("/payroll/vars")
+    async def payroll_var(body: PayVarIn, dev=Depends(current_device)):
+        if body.op not in payroll_mod.OPS and body.op != "days_worked":
+            raise HTTPException(status_code=422, detail="نوع نامعتبر")
+        key = _month(body.month)
+        notes = await _pay().apply_ops([{"kind": body.op, "value": body.value, "mode": body.mode, "month": key}])
+        snap = await _pay().snapshot(key)
+        snap["notes"] = notes
+        return snap
+
+    @router.put("/payroll/settings")
+    async def payroll_settings(body: PayrollSettingsIn, dev=Depends(current_device)):
+        patch = body.model_dump(exclude_none=True)
+        if "insurable" in patch:
+            patch["insurable"] = [k for k in patch["insurable"] if k in payroll_mod.EARN_KEYS]
+        await _pay().save_settings(patch)
+        return await _pay().snapshot()
 
     # ---------- مربی ----------
     def _coach():

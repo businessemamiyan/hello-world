@@ -441,6 +441,13 @@ class Memory:
                 self.db.execute("INSERT INTO kv(key, value) VALUES(?,?) ON CONFLICT(key) DO UPDATE SET value=excluded.value", (key, str(value)))
             self.db.commit()
 
+    async def kv_prefix(self, prefix):
+        """همهٔ کلیدهایی که با prefix شروع می‌شوند → {key: value}."""
+        esc = prefix.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_")
+        async with self.lock:
+            rows = self.db.execute("SELECT key, value FROM kv WHERE key LIKE ? ESCAPE '\\'", (esc + "%",)).fetchall()
+        return {k: v for k, v in rows}
+
     # ---------- inbox (پیامک/نوتیفیکیشن ورودی از گوشی) ----------
     async def add_inbox(self, kind, source, text, ts, dedup_key=None, notified=0):
         """None اگر قبلاً همین مورد ثبت شده باشد (تلاش دوباره‌ی اپ/ایجنت نباید دوبار ثبت کند)."""
