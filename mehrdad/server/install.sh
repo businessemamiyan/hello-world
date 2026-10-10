@@ -1,0 +1,69 @@
+#!/usr/bin/env bash
+# نصب یک‌دستوری مهرداد روی سرور — فقط همین سرویس را اضافه می‌کند.
+#
+# این اسکریپت را خودت روی سرور اجرا کن. هیچ سرویس دیگری روی سرور را لمس نمی‌کند:
+#   - همه‌چیز داخل همین پوشه (mehrdad/server) با Docker Compose بالا می‌آید،
+#     با نام پروژه مجزا "mehrdad" (کانتینر/شبکه/ولوم‌های جدا، کاملاً جدا از قطب‌نما).
+#   - پورت پیش‌فرض 127.0.0.1:8081 است (فقط لوکال).
+#   - با --install-docker فقط در صورتی Docker نصب می‌شود که غایب باشد.
+#
+# اجرا:
+#   git clone https://github.com/<owner>/hello-world.git && cd hello-world/mehrdad/server
+#   ./install.sh
+set -euo pipefail
+cd "$(dirname "$0")"
+export COMPOSE_PROJECT_NAME=mehrdad
+
+log(){ printf '\n\033[1;36m==> %s\033[0m\n' "$1"; }
+die(){ printf '\033[1;31mخطا: %s\033[0m\n' "$1" >&2; exit 1; }
+
+INSTALL_DOCKER=0
+for a in "$@"; do [ "$a" = "--install-docker" ] && INSTALL_DOCKER=1; done
+
+log "بررسی Docker"
+if ! command -v docker >/dev/null 2>&1; then
+  if [ "$INSTALL_DOCKER" = 1 ]; then
+    log "نصب Docker (اسکریپت رسمی get.docker.com)"
+    curl -fsSL https://get.docker.com | sh
+  else
+    die "Docker نصب نیست. یا خودت نصبش کن، یا دوباره با ./install.sh --install-docker اجرا کن."
+  fi
+fi
+command -v docker >/dev/null 2>&1 || die "نصب Docker ناموفق بود."
+if ! docker compose version >/dev/null 2>&1; then
+  die "پلاگین 'docker compose' نیست (نسخه قدیمی Docker؟). https://docs.docker.com/compose/install/ را ببین."
+fi
+
+if [ ! -f .env ]; then
+  log "ساخت .env (فقط یک بار)"
+  cp .env.example .env
+  rnd(){ openssl rand -hex "$1" 2>/dev/null || head -c "$1" /dev/urandom | od -An -tx1 | tr -d ' \n'; }
+  sed -i "s/^SETUP_CODE=.*/SETUP_CODE=$(rnd 6)/" .env
+  echo "  .env ساخته شد با SETUP_CODE تصادفی."
+  echo "  ⚠️  هنوز BOT_TOKEN و ANTHROPIC_API_KEY خالی‌اند — قبل از بالا آمدن باید پرشان کنی."
+else
+  log ".env از قبل هست — دست نخورد"
+fi
+
+if ! grep -q '^BOT_TOKEN=.\+' .env || ! grep -q '^ANTHROPIC_API_KEY=.\+' .env; then
+  echo
+  echo "این دو مقدار را در .env پر کن، بعد دوباره همین اسکریپت را اجرا کن:"
+  echo "  BOT_TOKEN          ← از @BotFather در تلگرام (یک ربات تازه، جدا از ربات قطب‌نما)"
+  echo "  ANTHROPIC_API_KEY  ← از https://console.anthropic.com — مغز مهرداد همین است"
+  echo
+  echo "راهنمای کامل: server/README.md"
+  exit 0
+fi
+
+log "بالا آوردن مهرداد (پروفایل proxy — رسیدن به تلگرام/Anthropic از ایران)"
+docker compose --profile proxy up -d --build
+
+log "وضعیت"
+sleep 2
+docker compose ps
+echo
+curl -fsS http://127.0.0.1:8081/health 2>/dev/null || true
+echo
+echo "بعد در تلگرام به ربات بنویس: /start <SETUP_CODE از .env>"
+echo "لاگ‌ها: docker compose logs -f mehrdad"
+echo "توقف (فقط همین سرویس، بقیه سرور دست‌نخورده): docker compose down"
