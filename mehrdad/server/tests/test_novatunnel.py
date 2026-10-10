@@ -61,7 +61,7 @@ async def test_snapshot_reads_only_the_mehrad_schema_in_a_readonly_transaction()
     assert d["last7"][0]["total"] == 300000
     assert conn.readonly is True and conn.closed is True
     assert all(s.lstrip().lower().startswith("select") for s in conn.sql)          # هیچ نوشتنی
-    assert all("public." not in s for s in conn.sql)                                # فقط view‌های schema مهراد
+    assert all("public." not in s for s in conn.sql)                                # فقط view‌های schema مهرداد
     txt = novatunnel.format_text(d)
     assert "۴۵۰,۰۰۰" in txt and "NovaTunnel" in txt and "۳۲۱" in txt
 

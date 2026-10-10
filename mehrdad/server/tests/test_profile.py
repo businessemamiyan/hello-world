@@ -138,7 +138,7 @@ async def test_suggest_goals_parses_and_sanitizes(tmp_path):
     assert [g["title"] for g in goals] == ["ترک قلیان تا ۳ ماه", "پس‌انداز ماهانه"] and goals[0]["steps"][0] == "هفته اول نصف"
     assert goals[1]["steps"] == []
     sys_prompt = brain.calls[0][1]
-    assert "مهراد" in sys_prompt
+    assert "مهرداد" in sys_prompt
     mem2, _, brain2, bot2 = make(tmp_path / "x" if False else tmp_path, completion="not json")
     assert await bot2.suggest_goals() == []
 

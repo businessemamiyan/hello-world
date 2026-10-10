@@ -272,7 +272,7 @@ public class MainActivity extends AppCompatActivity {
                         + "۱) «اطلاعات برنامه» را باز کن\n"
                         + "۲) سه‌نقطهٔ بالا-راست ⋮ را بزن\n"
                         + "۳) «Allow restricted settings» (اجازهٔ تنظیمات محدودشده) را بزن و تأیید کن\n"
-                        + "۴) برگرد و دوباره «دسترسی اعلان‌ها» را بزن و MEHRAD را روشن کن")
+                        + "۴) برگرد و دوباره «دسترسی اعلان‌ها» را بزن و MEHRDAD را روشن کن")
                 .setPositiveButton("اطلاعات برنامه", (d, w) -> startActivity(new Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS,
                         Uri.fromParts("package", getPackageName(), null))))
                 .setNeutralButton("دسترسی اعلان‌ها", (d, w) -> startActivity(new Intent(Settings.ACTION_NOTIFICATION_LISTENER_SETTINGS)))

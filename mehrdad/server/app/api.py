@@ -1,4 +1,4 @@
-"""API اپ اندروید مهراد — جفت‌سازی با کد یک‌بارمصرف، چت، تاریخچه، و دریافت پیامک/اعلان مالی.
+"""API اپ اندروید مهرداد — جفت‌سازی با کد یک‌بارمصرف، چت، تاریخچه، و دریافت پیامک/اعلان مالی.
 
 احراز هویت: توکن اختصاصی هر دستگاه (Bearer)؛ فقط هش آن در دیتابیس است و با /unpair در تلگرام باطل می‌شود.
 هیچ رمز ثابتی در .env یا داخل اپ نیست. /api/pair با محدودیت تعداد تلاش ناموفق محافظت می‌شود.
@@ -260,7 +260,7 @@ def create_router(mem, svc):
             q.append(now)
             raise HTTPException(status_code=403, detail="invalid or expired code")
         device_id, token = await mem.add_device(body.name)
-        await svc.notify_owner(f"📱 دستگاه «{body.name}» به مهراد وصل شد (#{device_id}). اگر خودت نبودی: /unpair {device_id}")
+        await svc.notify_owner(f"📱 دستگاه «{body.name}» به مهرداد وصل شد (#{device_id}). اگر خودت نبودی: /unpair {device_id}")
         return {"token": token, "device_id": device_id}
 
     @router.get("/me")

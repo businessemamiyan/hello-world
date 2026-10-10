@@ -1,4 +1,4 @@
-/* مهراد — اپ وب (فارسی/RTL). داده فقط با توکن دستگاه از /api می‌آید؛ هیچ داده‌ای داخل خود فایل‌ها نیست. */
+/* مهرداد — اپ وب (فارسی/RTL). داده فقط با توکن دستگاه از /api می‌آید؛ هیچ داده‌ای داخل خود فایل‌ها نیست. */
 (() => {
 'use strict';
 const $ = (s, r = document) => r.querySelector(s);
@@ -87,7 +87,7 @@ function tlItem(i) {
   const pending = i.status === 'planned' || i.status === 'maybe' || i.status === 'ongoing';
   const span = i.end_time ? `${i.time}–${i.end_time}` : i.time;
   return `<div class="m-tl${st && i.status !== 'ongoing' ? ' m-plan' : ''}"><span class="m-ic">${ICON[i.kind] || '•'}</span>
-    <div class="m-tl-b"><div>${esc(i.summary)}${i.uncertain ? ' <span class="pill warn" title="مهراد مطمئن نیست">؟</span>' : ''}</div>
+    <div class="m-tl-b"><div>${esc(i.summary)}${i.uncertain ? ' <span class="pill warn" title="مهرداد مطمئن نیست">؟</span>' : ''}</div>
       <div class="muted small">${esc(i.label)}${i.category ? ' · ' + esc(i.category) : ''} · <span class="num">${i.range === 'today' ? '' : esc(i.date) + ' '}${esc(span)}</span>${i.minutes ? ' · <span class="num">' + dur(i.minutes) + '</span>' : ''}${st ? ` <span class="pill ${st[1]}">${st[0]}</span>` : ''}</div></div>
     ${i.amount ? `<b class="num ${cls}">${sign}${money(i.amount)}</b>` : '<span></span>'}
     ${pending ? `<button class="x" data-act="mark-done" data-id="${i.id}" aria-label="انجام شد" title="انجام شد">✓</button>` : '<span></span>'}
@@ -186,14 +186,14 @@ async function viewToday() {
     <div class="north"><span class="eyebrow">امروز · ${esc(d.today_jalali)}</span>
       <div class="fig"><strong class="num">${net < 0 ? '−' : ''}${money(Math.abs(net))}</strong><span>تومان خالص امروز</span></div>
       <div class="meta"><span>درآمد <b class="num m-pos">${money(f.income)}</b></span><span>خرج <b class="num m-neg">${money(f.expense)}</b></span></div></div>
-    <div class="card ai"><div class="row spread"><h2>امروز چی شد؟</h2><span class="pill ai">مهراد</span></div>
+    <div class="card ai"><div class="row spread"><h2>امروز چی شد؟</h2><span class="pill ai">مهرداد</span></div>
       ${composer('sayToday', 'مثلاً: ۲۰۰ ت فروش داشتم، ناهار برنج خوردم')}
       <p class="muted small">هر چه بنویسی خودش در بخش درست ثبت می‌شود.</p></div>
     ${plannedLine(f)}
     ${groupKpis(d, 4)}
     ${timeBars(d)}
     <div class="card"><div class="row spread"><h2>برنامهٔ امروز</h2><span class="pill num">${fa(open.length)} باز</span></div>
-      ${open.length ? open.map(taskRow).join('') : empty('کار بازی نیست. یکی اضافه کن یا به مهراد بگو.')}
+      ${open.length ? open.map(taskRow).join('') : empty('کار بازی نیست. یکی اضافه کن یا به مهرداد بگو.')}
       <form class="row" data-form="task" style="flex-wrap:nowrap"><input type="text" name="title" placeholder="کار تازه…" required maxlength="200"><button class="btn primary" type="submit">افزودن</button></form></div>
     ${habitsCard(d.habits)}
     <div class="card"><div class="row spread"><h2>امروز چه گذشت</h2><span class="muted small">${fa((d.items || []).filter(i => !hidden(i.kind)).length)} مورد</span></div>${timeline(d.items || [], 'today')}</div>
@@ -230,7 +230,7 @@ async function viewWealth() {
       <div class="meta"><span>دارایی <b class="num m-pos">${money(s.assets)}</b></span><span>بدهی <b class="num m-neg">${money(s.debts_total)}</b></span></div></div>
     <div class="kpis m-k3">${kpi('نقد', money(s.liquid), 'good')}${kpi('اقساط ماهانه', money(s.monthly_obligations), s.monthly_obligations ? 'warn' : '')}${kpi('اقساط ۳۰ روز', money(s.next30_due), s.next30_due > s.liquid ? 'crit' : '')}</div>
     <div class="stack">${s.alerts.map(a => `<div class="issue ${lvl[a.level] || 'info'}"><span class="tag">${esc(a.tag)}</span><div>${esc(a.text)}</div></div>`).join('')}</div>
-    <div class="card ai"><div class="row spread"><h2>بررسی با مهراد</h2><span class="pill ai">مربی</span></div>
+    <div class="card ai"><div class="row spread"><h2>بررسی با مهرداد</h2><span class="pill ai">مربی</span></div>
       <p class="muted small">حساب‌ها، اقساط و درآمد/خرج واقعی‌ات را کنار هم می‌بیند و راه‌حل می‌دهد.</p>
       <div class="row"><button class="btn ai" data-act="ask-fin" data-q="وضعیت مالی‌ام را کامل بررسی کن: حساب‌ها، اقساط، درآمد و خرج. مشکل‌ها و یک برنامهٔ مشخص برای پرداخت بدهی‌ها و پس‌انداز بده.">بررسی کامل</button>
       <button class="btn" data-act="ask-fin" data-q="این ماه کدام خرج‌هایم را می‌توانم کم کنم تا اقساط را راحت‌تر بدهم؟">کجا خرج کم کنم؟</button></div><div id="finOut"></div></div>
@@ -285,7 +285,7 @@ async function viewPayroll() {
       ${!s.actual && s.estimate ? `<p class="muted small">فرض‌های یادگرفته‌شده از فیش: نرخ بیمه ${fa((s.estimate.assumptions.insurance_rate * 100).toFixed(1))}٪ · نرخ مالیات ${fa((s.estimate.assumptions.tax_rate * 100).toFixed(1))}٪ · ضریب اضافه‌کاری ${fa(s.estimate.assumptions.factor_ot_normal)}. مالیات را شرکت می‌دهد (مزایا ۳) پس روی خالص اثری ندارد.</p>` : ''}
       ${s.actual ? `<div class="row"><button class="btn sm danger" data-act="pay-del">حذف فیش این ماه</button></div>` : ''}</div>` : '';
   const quick = `<div class="card ai"><div class="row spread"><h2>اضافه‌کاری، مرخصی، مساعده</h2><span class="pill ai">${esc(s.label)}</span></div>
-      <p class="muted small">یا همین را در چت به مهراد بگو: «امروز ۲ ساعت اضافه‌کاری کردم». جمع این ماه: عادی ${fa(s.vars.ot_normal_h || 0)} س · تعطیلی ${fa(s.vars.ot_holiday_h || 0)} س · مرخصی ${fa(s.vars.leave_days || 0)} روز · غیبت ${fa(s.vars.unpaid_days || 0)} روز${s.vars.advance ? ' · مساعده ' + money(s.vars.advance) : ''}.</p>
+      <p class="muted small">یا همین را در چت به مهرداد بگو: «امروز ۲ ساعت اضافه‌کاری کردم». جمع این ماه: عادی ${fa(s.vars.ot_normal_h || 0)} س · تعطیلی ${fa(s.vars.ot_holiday_h || 0)} س · مرخصی ${fa(s.vars.leave_days || 0)} روز · غیبت ${fa(s.vars.unpaid_days || 0)} روز${s.vars.advance ? ' · مساعده ' + money(s.vars.advance) : ''}.</p>
       <form class="form" data-form="payvar"><label class="f"><span>چه چیزی؟</span><select name="op">${PAY_VARS.map(([v, l]) => `<option value="${v}">${l}</option>`).join('')}</select></label>
         <label class="f"><span>مقدار</span><input type="text" name="value" inputmode="decimal" required></label>
         <label class="f"><span>نحوه</span><select name="mode"><option value="add">اضافه کن به جمع</option><option value="set">جمع کل ماه این است</option></select></label>
@@ -379,7 +379,7 @@ async function viewHabits() {
   return `<section class="pane">${gviewSeg()}
     <div class="pane-title"><h1>عادت‌ها و روتین</h1></div>
     <div class="card"><div class="row spread"><h2>🧭 روتین‌های منظم</h2><span class="pill num">${fa(p.routines.length)}</span></div>
-      <p class="muted small">مهراد از روی چیزهایی که می‌گویی تشخیص می‌دهد (مثلاً «رفتم سر کار ایساتیس») و خودش روتین می‌سازد.</p>
+      <p class="muted small">مهرداد از روی چیزهایی که می‌گویی تشخیص می‌دهد (مثلاً «رفتم سر کار ایساتیس») و خودش روتین می‌سازد.</p>
       ${p.routines.length ? p.routines.map(r => `<div class="m-tl" style="grid-template-columns:1fr auto"><div class="m-tl-b"><div>${esc(r.name)}</div>
         <div class="muted small">${fa(r.per_week)} روز در هفته · معمولاً <span class="num">${esc(r.avg_start)}${r.avg_end ? '–' + esc(r.avg_end) : ''}</span>${r.avg_minutes ? ' · ' + dur(r.avg_minutes) : ''}</div></div>
         <span class="pill num">${fa(r.days)} روز</span></div>`).join('') : empty('هنوز روتینی تشخیص داده نشده؛ چند روز روزت را تعریف کن.')}</div>
@@ -437,9 +437,9 @@ async function viewGoals() {
   return `<section class="pane">${gviewSeg()}
     <div class="pane-title"><h1>هدف‌ها و برنامه</h1></div>
     <div class="card gold"><div class="row spread"><h2>🎯 هدف‌گذاری هوشمند</h2><span class="pill gold">بر اساس شناخت از تو</span></div>
-      <p class="muted small">مهراد بر پایهٔ پروفایل، روتین‌ها، عادت‌ها و مالی‌ات هدف پیشنهاد می‌دهد؛ هر کدام را خودت تأیید می‌کنی.</p>
+      <p class="muted small">مهرداد بر پایهٔ پروفایل، روتین‌ها، عادت‌ها و مالی‌ات هدف پیشنهاد می‌دهد؛ هر کدام را خودت تأیید می‌کنی.</p>
       <div class="row"><button class="btn primary" data-act="suggest-goals">پیشنهاد هدف</button></div><div id="goalSuggest"></div></div>
-    <div class="card ai"><div class="row spread"><h2>برنامه‌ریزی با مهراد</h2><span class="pill ai">مربی</span></div>
+    <div class="card ai"><div class="row spread"><h2>برنامه‌ریزی با مهرداد</h2><span class="pill ai">مربی</span></div>
       <p class="muted small">بر اساس هدف‌ها و کارهای بازت، برنامهٔ هفته را می‌چیند.</p>
       <div class="row"><button class="btn ai" data-act="plan" data-what="هفته">برنامهٔ این هفته</button><button class="btn" data-act="plan" data-what="امروز">برنامهٔ امروز</button></div>
       <div id="planOut"></div></div>
@@ -459,7 +459,7 @@ async function viewGoals() {
 async function viewChat() {
   const r = await api('/api/history?limit=80');
   const msgs = r.messages.map(m => `<div class="m-b ${m.role === 'user' ? 'me' : 'bot'}">${esc(m.text)}</div>`).join('');
-  return `<section class="pane"><div class="pane-title"><h1>گفتگو با مهراد</h1></div>
+  return `<section class="pane"><div class="pane-title"><h1>گفتگو با مهرداد</h1></div>
     <div class="m-chatwrap"><div class="m-chat" id="chatList">${msgs || empty('هنوز چیزی نگفته‌ای.')}</div></div>
     <div class="m-composer-fixed">${composer('sayChat', 'بنویس یا با 🎤 بگو…')}</div></section>`;
 }
@@ -642,8 +642,8 @@ function openSettings() {
 // ------------------------------------------------------------- جفت‌سازی
 function pairScreen() {
   $('#nav').hidden = true; $('#subtitle').textContent = 'مغز دوم تو';
-  $('#view').innerHTML = `<section class="m-center"><div class="card"><h1>سلام، من مهرادم 👋</h1>
-    <p>برای وصل‌شدن: در تلگرام به مهراد بنویس <b>/pair</b> و کد ۸ حرفی را اینجا بزن.</p>
+  $('#view').innerHTML = `<section class="m-center"><div class="card"><h1>سلام، من مهردادم 👋</h1>
+    <p>برای وصل‌شدن: در تلگرام به مهرداد بنویس <b>/pair</b> و کد ۸ حرفی را اینجا بزن.</p>
     <form class="stack" data-form="pair"><input type="text" name="code" placeholder="کد جفت‌سازی" autocomplete="off" autocapitalize="characters" maxlength="16" dir="ltr" required>
     <button class="btn primary" type="submit">اتصال</button></form></div></section>`;
 }
@@ -685,7 +685,7 @@ async function sendPhoto(file, forId) {
     const list = $('#chatList'); const empt = $('.m-empty', list); if (empt) empt.remove();
     list.insertAdjacentHTML('beforeend', `<div class="m-b me">📷 ${esc(caption || 'عکس')}</div><div class="m-b bot typing" id="typing"><span class="m-spin"></span></div>`);
     window.scrollTo(0, document.body.scrollHeight);
-  } else toast('مهراد دارد عکس را می‌خواند…');
+  } else toast('مهرداد دارد عکس را می‌خواند…');
   try {
     const image = await downscale(file);
     const r = await api('/api/chat/image', { method: 'POST', body: { image, text: caption } });
@@ -746,7 +746,7 @@ document.addEventListener('click', async ev => {
     else if (act === 'share-invite') { try { await navigator.share({ title: 'چند سؤال دربارهٔ من', text: 'این چند سؤال را دربارهٔ من جواب بده 🙏', url: $('#inviteUrl').value }); } catch {} }
     else if (act === 'revoke-inv') { if (confirm('این لینک باطل شود؟')) { await api('/api/invites/' + id, { method: 'DELETE' }); render(); } }
     else if (act === 'suggest-goals') {
-      const out = $('#goalSuggest'); out.innerHTML = '<span class="m-spin"></span> مهراد دارد فکر می‌کند…'; b.disabled = true;
+      const out = $('#goalSuggest'); out.innerHTML = '<span class="m-spin"></span> مهرداد دارد فکر می‌کند…'; b.disabled = true;
       try {
         const r = await api('/api/goals/suggest', { method: 'POST' }); S.cache.suggest = r.goals;
         out.innerHTML = r.goals.length ? r.goals.map((g, i) => `<div class="card" style="margin-top:8px"><div class="row spread"><b>${esc(g.title)}</b><span class="pill gold">${esc(g.horizon || '')}</span></div>
@@ -802,7 +802,7 @@ document.addEventListener('click', async ev => {
       await api(`/api/debts/${id}/pay`, { method: 'POST', body: { amount } }); toast('قسط ثبت شد ✓ (در حساب‌ها هم خرج شد)'); render();
     }
     else if (act === 'ask-fin') {
-      const out = $('#finOut'); out.innerHTML = '<span class="m-spin"></span> مهراد دارد حساب‌هایت را بررسی می‌کند…'; b.disabled = true;
+      const out = $('#finOut'); out.innerHTML = '<span class="m-spin"></span> مهرداد دارد حساب‌هایت را بررسی می‌کند…'; b.disabled = true;
       try { const r = await api('/api/chat', { method: 'POST', body: { text: b.dataset.q } }); out.innerHTML = `<div class="m-b bot" style="max-width:100%">${esc(r.reply)}</div>`; } finally { b.disabled = false; }
     }
     else if (act === 'del') { if (confirm('حذف شود؟')) { await api('/api/events/' + id, { method: 'DELETE' }); closeSheet(); toast('حذف شد'); render(); } }
@@ -814,7 +814,7 @@ document.addEventListener('click', async ev => {
     else if (act === 'theme') { applyTheme(b.dataset.val); $$('.seg [data-act=theme]').forEach(x => x.setAttribute('aria-pressed', x === b)); }
     else if (act === 'logout') { closeSheet(); logout(false); }
     else if (act === 'plan') {
-      const out = $('#planOut'); out.innerHTML = '<span class="m-spin"></span> مهراد دارد برنامه می‌چیند…'; b.disabled = true;
+      const out = $('#planOut'); out.innerHTML = '<span class="m-spin"></span> مهرداد دارد برنامه می‌چیند…'; b.disabled = true;
       try { const r = await api('/api/chat', { method: 'POST', body: { text: `برنامهٔ ${b.dataset.what}‌ام را بر اساس هدف‌ها و کارهای بازم و عادت‌هایم بچین. کوتاه و قابل‌اجرا، با ساعت‌بندی پیشنهادی.` } });
         out.innerHTML = `<div class="m-b bot" style="max-width:100%">${esc(r.reply)}</div>`; } finally { b.disabled = false; }
     }

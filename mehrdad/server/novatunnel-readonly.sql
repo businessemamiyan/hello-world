@@ -1,4 +1,4 @@
--- کاربر «فقط‌خواندنی» برای مهراد روی دیتابیس NovaTunnel (Supabase).
+-- کاربر «فقط‌خواندنی» برای مهرداد روی دیتابیس NovaTunnel (Supabase).
 -- اجرا: Supabase ← SQL Editor ← این را paste و Run کن. یک‌بار. قبل از اجرا PASSWORD_HERE را با یک رمز قوی و تصادفی عوض کن.
 --
 -- اصول:

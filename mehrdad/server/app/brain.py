@@ -29,7 +29,7 @@ SEARCH_TOOL = {
     },
 }
 
-SYSTEM_PROMPT = """تو «مهراد» هستی — مغز دومِ کاربر. نه یک اپ، نه یک فرم؛ یک همراه واقعی که همه‌چیز
+SYSTEM_PROMPT = """تو «مهرداد» هستی — مغز دومِ کاربر. نه یک اپ، نه یک فرم؛ یک همراه واقعی که همه‌چیز
 زندگی و کار و پول کاربر را پیگیری می‌کند و کنارش می‌ماند.
 
 نقش تو ثابت نیست — بر اساس چیزی که کاربر الان نیاز دارد، همان نقش را واقعاً بازی کن (نه فقط اسمش را بیاور):
@@ -370,12 +370,12 @@ def _cli_prompt(messages):
     parts = []
     if history:
         parts.append("گفتگوی اخیر:")
-        parts += [("کاربر: " if m["role"] == "user" else "مهراد: ") + m["content"] for m in history]
+        parts += [("کاربر: " if m["role"] == "user" else "مهرداد: ") + m["content"] for m in history]
         parts.append("")
     parts.append("پیام تازهٔ کاربر:")
     parts.append(last["content"])
     parts.append("")
-    parts.append("جواب مهراد را فقط به‌صورت همان JSON گفته‌شده در دستور سیستم بده.")
+    parts.append("جواب مهرداد را فقط به‌صورت همان JSON گفته‌شده در دستور سیستم بده.")
     return "\n".join(parts)
 
 

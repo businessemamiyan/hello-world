@@ -21,7 +21,7 @@
 </head>
 <body>
 <div class="wrap">
-  <header class="top"><div class="brand"><b>MEHRAD</b><small>دستیار شخصی</small></div></header>
+  <header class="top"><div class="brand"><b>MEHRDAD</b><small>دستیار شخصی</small></div></header>
   <main id="app" class="pane"><div class="card"><div class="muted">در حال بارگذاری…</div></div></main>
 </div>
 <script>
@@ -39,7 +39,7 @@
     const d = await r.json();
     app.innerHTML = `
       <div class="card gold"><h2>سلام 👋</h2>
-        <p>من <b>MEHRAD</b> هستم، دستیار شخصی همسرت. او می‌خواهد در رسیدن به هدف‌هایش (سلامت، پول، عادت‌ها، آرامش) کمکش کنم و برای این باید او را <b>واقعاً</b> بشناسم.
+        <p>من <b>MEHRDAD</b> هستم، دستیار شخصی همسرت. او می‌خواهد در رسیدن به هدف‌هایش (سلامت، پول، عادت‌ها، آرامش) کمکش کنم و برای این باید او را <b>واقعاً</b> بشناسم.
         تو بهتر از همه او را می‌شناسی؛ چند سؤال کوتاه دارم. صادق باش؛ هدف کمک‌کردن به اوست، نه قضاوت.</p></div>
       <div class="note">🔒 فقط به همین چند سؤال دربارهٔ او جواب می‌دهی و هیچ‌چیزِ او را اینجا نمی‌بینی. <b>پاسخ‌هایت برای خودش قابل‌دیدن است</b> (و می‌تواند حذفشان کند)؛ پس همان‌طور بنویس که اگر بخواند ناراحت نشود.
         هر سؤال را که نمی‌خواهی جواب نده؛ خالی بگذار.</div>
@@ -48,7 +48,7 @@
         <label class="f"><span>اسمت (اختیاری)</span><input type="text" name="__who" maxlength="40"></label>
         ${d.questions.map((q, i) => `<div class="card q"><span class="sec">${fa(i + 1)} از ${fa(d.questions.length)} · ${esc(q.section)}</span>
           <label>${esc(q.text)}</label><textarea name="${esc(q.id)}" maxlength="1500" placeholder="هر چه به ذهنت می‌رسد…"></textarea></div>`).join('')}
-        <button class="btn primary" type="submit" id="send">ارسال برای MEHRAD</button>
+        <button class="btn primary" type="submit" id="send">ارسال برای MEHRDAD</button>
       </form>`;
     const total = d.questions.length;
     const upd = () => { const n = [...document.querySelectorAll('textarea')].filter(t => t.value.trim()).length; $('#bar').style.width = (n / total * 100) + '%'; };
@@ -61,7 +61,7 @@
       $('#send').disabled = true; $('#send').textContent = 'در حال ارسال…';
       const r = await fetch('/api/invite/' + encodeURIComponent(token), { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ answers, who }) });
       if (r.ok) { const j = await r.json(); app.innerHTML = `<div class="card done"><h2>ممنونم 💛</h2><p>${fa(j.saved)} پاسخ ثبت شد. به او کمک می‌کند بهتر به هدف‌هایش برسد.</p><p class="muted">می‌توانی این صفحه را ببندی. اگر چیزی یادت آمد، دوباره همین لینک را باز کن (تا ۳ بار).</p></div>`; }
-      else { $('#send').disabled = false; $('#send').textContent = 'ارسال برای MEHRAD'; alert(r.status === 429 ? 'کمی بعد دوباره امتحان کن' : 'ارسال نشد؛ دوباره امتحان کن'); }
+      else { $('#send').disabled = false; $('#send').textContent = 'ارسال برای MEHRDAD'; alert(r.status === 429 ? 'کمی بعد دوباره امتحان کن' : 'ارسال نشد؛ دوباره امتحان کن'); }
     });
   }
   load().catch(() => { app.innerHTML = '<div class="card"><h2>اتصال برقرار نشد</h2><p class="muted">اینترنت یا فیلترشکن را چک کن و صفحه را دوباره باز کن.</p></div>'; });
