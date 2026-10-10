@@ -20,7 +20,7 @@ def create_app(mem, started_at, svc=None):
     async def no_cache_for_app(request, call_next):
         resp = await call_next(request)
         if request.url.path.startswith("/app"):
-            resp.headers["Cache-Control"] = "no-cache"
+            resp.headers["Cache-Control"] = "no-store, no-cache, must-revalidate, max-age=0"   # نه مرورگر، نه Cloudflare نسخهٔ قدیمی نگه ندارد
         return resp
 
     @app.get("/", include_in_schema=False)

@@ -41,7 +41,7 @@ def web(tmp_path):
 def test_static_app_served_without_data_and_not_cached(web):
     _, client, _ = web
     r = client.get("/app/")
-    assert r.status_code == 200 and "مهرداد" in r.text and r.headers["cache-control"] == "no-cache"
+    assert r.status_code == 200 and "مهرداد" in r.text and "no-store" in r.headers["cache-control"]
     for f in ("app.js", "app.css", "theme.css", "manifest.webmanifest", "icon.svg"):
         assert client.get(f"/app/{f}").status_code == 200
     assert client.get("/", follow_redirects=False).headers["location"] == "/app/"
