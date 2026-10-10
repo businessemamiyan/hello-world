@@ -10,7 +10,7 @@ import json
 import re
 
 from . import agents, finance, life, novatunnel, profile
-from .memory import today_str
+from .memory import normalize_fa, today_str
 from .telegram import TGError, btn
 
 log = logging.getLogger("bot")
@@ -76,6 +76,7 @@ class Bot:
         self.cfg = cfg
         self.brain_lock = asyncio.Lock()  # تلگرام و اپ هم‌زمان یک پروسهٔ مغز را نگیرند
         self._ctx_ids = set()             # شناسهٔ پروفایل/هدف‌هایی که در آخرین چکیده به مغز نشان داده شد
+        self._ctx_debt_ids = set()        # شناسهٔ بدهی‌های فعالی که مغز در همین گفتگو دیده است
 
     async def chat(self, text):
         """یک نوبت مکالمه (هم تلگرام هم اپ): تاریخچه و حافظه را می‌خواند، می‌پرسد، و ذخیره می‌کند."""
@@ -91,9 +92,12 @@ class Bot:
                 if q:
                     brain_text = f"[کاربر دارد به سؤال مصاحبه «{q[2]}» (بخش {q[1]}) جواب می‌دهد؛ جواب را در پروفایل ثبت کن]\n{text}"
             reply, entries = await self.brain.think(history, recent_mem, brain_text, active_habits)
-            await self.mem.add_message("assistant", reply)
+            notes = []
             if entries:
-                await self._apply_entries(entries, {m["id"] for m in recent_mem if m.get("id")} | self._ctx_ids)
+                notes = await self._apply_entries(entries, {m["id"] for m in recent_mem if m.get("id")} | self._ctx_ids)
+            if notes:       # حقیقتِ سمت سرور: دقیقاً چه چیزی در اپ ثبت شد (مستقل از حرف مدل)
+                reply = reply.rstrip() + "\n\n" + "\n".join(notes)
+            await self.mem.add_message("assistant", reply)
         return reply
 
     async def profile_snapshot(self):
@@ -143,13 +147,96 @@ class Bot:
                             "why": str(g.get("why", ""))[:300], "steps": steps})
         return out
 
+    @staticmethod
+    def _match_name(items, name, key):
+        """هم‌نام دقیق → همان؛ وگرنه فقط اگر دقیقاً یک مورد شامل/مشمول نام باشد. (match, [ambiguous])"""
+        n = normalize_fa(name).strip()
+        exact = [x for x in items if normalize_fa(x[key]).strip() == n]
+        if exact:
+            return exact[0], []
+        cands = [x for x in items if len(n) >= 3 and len(normalize_fa(x[key])) >= 3
+                 and (n in normalize_fa(x[key]) or normalize_fa(x[key]) in n)]
+        return (cands[0], []) if len(cands) == 1 else (None, cands)
+
+    async def pay_debt(self, debt_id, amount=None, record_expense=True):
+        """پرداخت یک قسط: مانده کم می‌شود، سررسید یک ماه جلالی جلو می‌رود، و (اختیاری) خرج «اقساط» هم ثبت می‌شود."""
+        import datetime
+        d = await self.mem.get_debt(debt_id)
+        if not d or d["status"] != "active":
+            return None
+        amount = amount if amount is not None else (d["installment_amount"] or d["remaining"])
+        remaining = max(0.0, d["remaining"] - amount)
+        patch = {"remaining": remaining, "installments_paid": d["installments_paid"] + 1}
+        if remaining <= 0:
+            patch.update(status="paid", next_due=None)
+        elif d.get("next_due"):
+            patch["next_due"] = finance.add_jalali_months(datetime.date.fromisoformat(d["next_due"]), 1, d.get("due_day")).isoformat()
+        updated = await self.mem.update_debt(debt_id, patch)
+        if record_expense and amount:
+            await self.mem.add_memory([{"type": "expense", "summary": f"قسط {d['title']}", "amount": float(amount),
+                                        "category": "اقساط", "fields": {"debt_id": debt_id}}])
+        return updated
+
+    async def _apply_account_op(self, op):
+        m = lambda n: life.fa(f"{int(round(n)):,}")
+        accounts = await self.mem.list_accounts()
+        acc, amb = self._match_name(accounts, op["name"], "name")
+        if amb:
+            return "⚠️ نام حساب «%s» مبهم است (%s)؛ نام دقیق‌تر بگو." % (op["name"], " یا ".join(a["name"] for a in amb[:3]))
+        if acc:
+            new = op["balance"] if op["mode"] == "set" else acc["balance"] + op["balance"]
+            await self.mem.update_account(acc["id"], {"balance": new})
+            return f"🏦 {acc['name']}: موجودی {m(new)} تومان"
+        base = op["balance"]
+        await self.mem.add_account(op["name"], op["kind"], base)
+        return f"🏦 حساب تازهٔ «{op['name']}» ساخته شد: موجودی {m(base)} تومان"
+
+    async def _apply_debt_op(self, op):
+        import datetime
+        m = lambda n: life.fa(f"{int(round(n)):,}")
+        debts = [d for d in await self.mem.list_debts() if d["status"] == "active"]
+        target = None
+        if op.get("id") is not None and op["id"] in self._ctx_debt_ids:      # فقط شناسه‌هایی که مغز دیده است
+            target = next((d for d in debts if d["id"] == op["id"]), None)
+        if target is None and op.get("title"):
+            target, amb = self._match_name(debts, op["title"], "title")
+            if amb:
+                return "⚠️ نام بدهی «%s» مبهم است (%s)؛ دقیق‌تر بگو." % (op["title"], " یا ".join(d["title"] for d in amb[:3]))
+        fields = {k: op[k] for k in ("kind", "creditor", "total", "remaining", "installment_amount", "installments_total",
+                                      "installments_paid", "due_day", "next_due") if k in op}
+        if op["op"] == "pay":
+            if not target:
+                return "⚠️ نفهمیدم کدام قسط را پرداخت کنم؛ اسم بدهی را بگو."
+            upd = await self.pay_debt(target["id"], op.get("amount"))
+            return f"✓ قسط «{target['title']}» پرداخت شد؛ مانده {m(upd['remaining'])} تومان" if upd else None
+        if op["op"] == "update" or (op["op"] == "add" and target):          # add روی بدهی هم‌نام = به‌روزرسانی، نه تکرار
+            if not target:
+                return "⚠️ نفهمیدم کدام بدهی را به‌روز کنم؛ اسم بدهی را بگو."
+            if "due_day" in fields and "next_due" not in fields:
+                fields["next_due"] = finance.next_due_from_day(fields["due_day"], life.now_tehran().date()).isoformat()
+            if op.get("title") and op["op"] == "add":
+                fields.setdefault("title", op["title"])
+            upd = await self.mem.update_debt(target["id"], fields)
+            return f"⛓ {upd['title']}: مانده {m(upd['remaining'])}، قسط {m(upd['installment_amount'])} تومان"
+        total = fields.get("total", fields.get("remaining", 0.0))
+        d = {"title": op["title"], "kind": fields.get("kind", "installment"), "creditor": fields.get("creditor"), "total": total,
+             "remaining": fields.get("remaining", total), "installment_amount": fields.get("installment_amount", 0.0),
+             "installments_total": fields.get("installments_total"), "installments_paid": fields.get("installments_paid", 0),
+             "due_day": fields.get("due_day"), "next_due": fields.get("next_due")}
+        if not d["next_due"] and d["due_day"]:
+            d["next_due"] = finance.next_due_from_day(d["due_day"], life.now_tehran().date()).isoformat()
+        await self.mem.add_debt(d)
+        return f"⛓ بدهی تازه «{d['title']}»: مانده {m(d['remaining'])}، قسط {m(d['installment_amount'])} تومان"
+
     async def _apply_entries(self, entries, allowed_ids):
-        """ورودی‌های مغز: جدید → ثبت؛ update_id/delete_id → فقط روی رکوردهای اخیری که مغز در همین گفتگو دیده است."""
-        adds = []
+        """ورودی‌های مغز: جدید → ثبت؛ update_id/delete_id → فقط روی رکوردهای اخیری که مغز دیده؛ account_op/debt_op/habit_new → به‌روزرسانی اپ.
+        خروجی: لیست خط‌های تأیید (حقیقت سمت سرور) برای نمایش زیر پاسخ."""
+        adds, notes = [], []
         for e in entries:
             if "delete_id" in e:
                 if e["delete_id"] in allowed_ids:
                     await self.mem.delete_event(e["delete_id"])
+                    notes.append("🗑 یک رکورد اشتباه حذف شد")
                 else:
                     log.warning("delete_id %s خارج از رکوردهای اخیر؛ نادیده", e["delete_id"])
             elif "update_id" in e:
@@ -158,10 +245,23 @@ class Bot:
                     await self.mem.update_event(e["update_id"], patch)
                 else:
                     log.warning("update_id %s خارج از رکوردهای اخیر؛ نادیده", e["update_id"])
+            elif "account_op" in e:
+                notes.append(await self._apply_account_op(e["account_op"]))
+            elif "debt_op" in e:
+                note = await self._apply_debt_op(e["debt_op"])
+                if note:
+                    notes.append(note)
+            elif "habit_new" in e:
+                h = e["habit_new"]
+                existing = [x for x in await self.mem.list_habits("active") if normalize_fa(x["good"]).strip() == normalize_fa(h["good"]).strip()]
+                if not existing:
+                    await self.mem.add_habit(h["good"], h.get("bad"))
+                    notes.append(f"🔥 عادت «{h['good']}» برای پیگیری ثبت شد")
             else:
                 adds.append(e)
         if adds:
             await self.mem.add_memory(adds)
+        return [n for n in notes if n]
 
     async def notify_owner(self, text):
         owner = await self.mem.get_owner()
@@ -196,6 +296,7 @@ class Bot:
 
     async def finance_prompt(self):
         snap = await self.finance_snapshot()
+        self._ctx_debt_ids = {d["id"] for d in snap["debts"] if d["status"] == "active"}
         return finance.as_prompt(snap["accounts"], snap["debts"], snap["summary"], life.now_tehran().date())
 
     async def handle_finance(self, chat_id):

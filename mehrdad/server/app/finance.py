@@ -113,11 +113,11 @@ def as_prompt(accounts, debts, summary, today=None):
     today = today or datetime.date.today()
     lines = []
     if accounts:
-        lines.append("حساب‌ها: " + "؛ ".join(f"{a['name']} {_money(a['balance'])}" for a in accounts))
+        lines.append("حساب‌ها: " + "؛ ".join((f"#{a['id']} " if a.get("id") else "") + f"{a['name']} {_money(a['balance'])}" for a in accounts))
     act = [d for d in debts if d.get("status", "active") == "active"]
     if act:
         lines.append("بدهی/اقساط: " + "؛ ".join(
-            f"{d['title']} (مانده {_money(d['remaining'])}، قسط {_money(d.get('installment_amount') or 0)}"
+            (f"#{d['id']} " if d.get("id") else "") + f"{d['title']} (مانده {_money(d['remaining'])}، قسط {_money(d.get('installment_amount') or 0)}"
             + (f"، سررسید {jalali_text(datetime.date.fromisoformat(d['next_due']))}" if d.get('next_due') else "") + ")"
             for d in act))
     if lines:

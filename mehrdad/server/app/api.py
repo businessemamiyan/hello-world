@@ -405,22 +405,9 @@ def create_router(mem, svc):
 
     @router.post("/debts/{debt_id}/pay")
     async def pay_debt(debt_id: int, body: PayIn, dev=Depends(current_device)):
-        import datetime
-        d = await mem.get_debt(debt_id)
-        if not d or d["status"] != "active":
+        updated = await svc.pay_debt(debt_id, body.amount, body.record_expense)
+        if not updated:
             raise HTTPException(status_code=404, detail="not found")
-        amount = body.amount if body.amount is not None else (d["installment_amount"] or d["remaining"])
-        remaining = max(0.0, d["remaining"] - amount)
-        patch = {"remaining": remaining, "installments_paid": d["installments_paid"] + 1}
-        if remaining <= 0:
-            patch.update(status="paid", next_due=None)
-        elif d.get("next_due"):
-            base = datetime.date.fromisoformat(d["next_due"])
-            patch["next_due"] = finance.add_jalali_months(base, 1, d.get("due_day")).isoformat()
-        updated = await mem.update_debt(debt_id, patch)
-        if body.record_expense and amount:
-            await mem.add_memory([{"type": "expense", "summary": f"قسط {d['title']}", "amount": float(amount),
-                                   "category": "اقساط", "fields": {"debt_id": debt_id}}])
         return updated
 
     @router.get("/history")

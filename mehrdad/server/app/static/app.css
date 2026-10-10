@@ -65,3 +65,12 @@
 .m-plan{opacity:.82}
 .m-plan .m-ic{border:1px dashed var(--line2);background:transparent}
 .m-tl{grid-template-columns:34px 1fr auto auto auto auto}
+
+html,body{overscroll-behavior-y:contain}
+.ptr{position:fixed;top:56px;left:50%;z-index:30;width:38px;height:38px;border-radius:50%;display:flex;align-items:center;justify-content:center;
+  background:var(--surface,#fff);color:var(--gold,#c9a24a);border:1px solid var(--line,#888);box-shadow:0 4px 14px rgba(0,0,0,.18);font-size:1.3rem;
+  transform:translate(-50%,0);pointer-events:none}
+.ptr.ready{background:var(--gold,#c9a24a);color:#fff}
+.ptr[hidden]{display:none}
+.m-hb.spin{animation:m-spin .8s linear infinite}
+@keyframes m-spin{to{transform:rotate(360deg)}}

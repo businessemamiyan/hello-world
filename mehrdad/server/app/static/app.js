@@ -414,6 +414,44 @@ async function render() {
   if (S.tab === 'chat') window.scrollTo(0, document.body.scrollHeight);
 }
 
+let refreshing = false;
+async function refreshNow() {
+  if (!token || refreshing) return;
+  refreshing = true;
+  const b = $('#refBtn'); if (b) b.classList.add('spin');
+  try { S.cache = {}; await render(); } finally { refreshing = false; if (b) b.classList.remove('spin'); }
+}
+
+// کشیدن صفحه به پایین (وقتی بالای صفحه هستی) = تازه‌سازی؛ نیمه‌کاره‌ها (فرم/پنجره‌ی باز) را خراب نمی‌کند
+(function pullToRefresh() {
+  const el = $('#ptr'); let y0 = null, dy = 0;
+  const TH = 72;
+  addEventListener('touchstart', e => {
+    const open = !$('#modal').hidden || /^(INPUT|TEXTAREA|SELECT)$/.test((e.target.tagName || ''));
+    y0 = (window.scrollY <= 0 && !open && e.touches.length === 1) ? e.touches[0].clientY : null; dy = 0;
+  }, { passive: true });
+  addEventListener('touchmove', e => {
+    if (y0 === null) return;
+    dy = e.touches[0].clientY - y0;
+    if (dy <= 0 || window.scrollY > 0) { el.hidden = true; return; }
+    el.hidden = false;
+    const p = Math.min(dy, TH * 1.6);
+    el.style.transform = `translate(-50%, ${p * 0.6}px) rotate(${p * 4}deg)`;
+    el.classList.toggle('ready', dy >= TH);
+  }, { passive: true });
+  addEventListener('touchend', () => {
+    const go = y0 !== null && dy >= TH;
+    y0 = null; el.hidden = true; el.classList.remove('ready'); el.style.transform = '';
+    if (go) refreshNow();
+  }, { passive: true });
+  // برگشتن به اپ بعد از چند دقیقه: داده‌ها تازه شوند (مثلاً بعد از ثبت از طریق تلگرام)
+  let hiddenAt = 0;
+  document.addEventListener('visibilitychange', () => {
+    if (document.hidden) { hiddenAt = Date.now(); return; }
+    if (hiddenAt && Date.now() - hiddenAt > 120000 && $('#modal').hidden && S.tab !== 'chat') refreshNow();
+  });
+})();
+
 function go(tab) { S.tab = tab; store.set('mehrdad_tab', tab); render(); window.scrollTo(0, 0); }
 
 // ------------------------------------------------------------- ویرایش / تنظیمات
@@ -513,6 +551,7 @@ function mic(forId) {
 document.addEventListener('click', async ev => {
   const nav = ev.target.closest('#nav button'); if (nav) return go(nav.dataset.tab);
   if (ev.target.id === 'setBtn') return openSettings();
+  if (ev.target.id === 'refBtn') return refreshNow();
   if (ev.target.id === 'privBtn') { S.priv = !S.priv; store.set('mehrdad_priv', S.priv ? '1' : '0'); syncPriv(); return render(); }
   if (ev.target.id === 'modal') return closeSheet();
   const b = ev.target.closest('[data-act]'); if (!b) return;
