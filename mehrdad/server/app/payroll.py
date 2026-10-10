@@ -86,6 +86,11 @@ def _f(n):
     return life.fa(f"{int(round(n)):,}")
 
 
+def _g(x):
+    """۲٫۵ / ۳۰ — بدون «.۰» اضافه."""
+    return life.fa(("%g" % round(float(x), 2)).replace(".", "٫"))
+
+
 def _num(x, scale=1.0, integer=True, hi=MAX_AMOUNT):
     if isinstance(x, bool):
         return 0
@@ -318,7 +323,7 @@ class Payroll:
             v, final = apply_op(v, op["kind"], op["value"], op.get("mode", "add"))
             await self.set_vars(month, v)
             unit = OP_UNIT.get(op["kind"], "تومان")
-            amt = _f(final) if unit == "تومان" else life.fa(final)
+            amt = _f(final) if unit == "تومان" else _g(final)
             notes.append(f"🧾 {OP_LABEL[op['kind']]} {month_label(month)}: جمع ماه {amt} {unit}")
             if month not in touched:
                 touched.append(month)
@@ -349,7 +354,7 @@ class Payroll:
         if e:
             w = e["work"]
             lines.append(f"{month_label(cm)}: جمع پرداختی {_f(e['total_earn'])}، کسورات {_f(e['total_ded'])}، خالص تخمینی {_f(e['net'])} تومان؛ "
-                         f"کارکرد {life.fa(w['days_worked'])} روز، اضافه‌کاری عادی {life.fa(w['ot_normal_h'])} و تعطیلی {life.fa(w['ot_holiday_h'])} ساعت، مرخصی {life.fa(w['leave_days'])} روز"
+                         f"کارکرد {_g(w['days_worked'])} روز، اضافه‌کاری عادی {_g(w['ot_normal_h'])} و تعطیلی {_g(w['ot_holiday_h'])} ساعت، مرخصی {_g(w['leave_days'])} روز"
                          + (f"، مساعده {_f(v.get('advance', 0))}" if v.get("advance") else "") + ".")
         return "\n".join(lines)
 

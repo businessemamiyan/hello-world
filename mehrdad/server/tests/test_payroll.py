@@ -126,7 +126,7 @@ async def test_payroll_store_snapshot_and_ops(tmp_path):
     s, bad = await p.save_actual("1405-06", RAW)
     assert bad == [] and (await p.slips())["1405-06"]["earn"]["base"] == 8_000_000
     notes = await p.apply_ops([{"kind": "overtime", "value": 3, "mode": "add", "month": M}, {"kind": "advance", "value": 2_000_000, "mode": "add", "month": M}])
-    assert any("جمع ماه ۵" in n for n in notes) and any("خالص" in n for n in notes)
+    assert any("جمع ماه ۵ ساعت" in n for n in notes) and any("خالص" in n for n in notes)
     snap = await p.snapshot(M)
     assert snap["template_month"] == "1405-06" and snap["estimate"]["work"]["ot_normal_h"] == 5 and snap["estimate"]["ded"]["advance"] == 2_000_000
     assert snap["actual"] is None and snap["next_month"] == "1405-08" and snap["next"]["work"]["ot_normal_h"] == 0
@@ -249,3 +249,7 @@ def test_auto_day_basis_reads_thirty_in_a_31_day_month_as_full_attendance():
     t2 = slip({"earn": {"base": 3_000_000}, "work": {"days_worked": 27}})                           # غیبت واقعی در ماه ۳۰ روزه
     assert pr.estimate(t2, "1405-07", "1405-08", {})["assumptions"]["day_basis"] == "month"
     assert pr.resolve_basis(slip(), 30, "30") == "30"
+
+
+def test_number_formatting_has_no_trailing_zero():
+    assert pr._g(2.0) == "۲" and pr._g(2.5) == "۲٫۵" and pr._g(30) == "۳۰"
