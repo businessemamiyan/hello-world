@@ -1,0 +1,11 @@
+<resources>
+    <!-- تم تیره‌ی ثابت (نه DayNight) تا دیالوگ‌ها هم تیره و خوانا بمانند -->
+    <style name="Theme.Mehrdad" parent="Theme.AppCompat.NoActionBar">
+        <item name="colorPrimary">#4FB3A5</item>
+        <item name="colorPrimaryDark">#0B1220</item>
+        <item name="colorAccent">#4FB3A5</item>
+        <item name="android:windowBackground">#0B1220</item>
+        <item name="android:statusBarColor">#0B1220</item>
+        <item name="android:navigationBarColor">#0B1220</item>
+    </style>
+</resources>
