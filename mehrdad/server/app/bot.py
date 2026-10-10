@@ -100,8 +100,8 @@ class Bot:
         d["goals"] = await self.mem.latest_of_kinds(("goal",), 10)
         return d
 
-    async def handle_summary(self, chat_id, label):
-        await self.tg.send(chat_id, life.format_text(await self.dashboard(label)))
+    async def handle_summary(self, chat_id, label, private=False):
+        await self.tg.send(chat_id, life.format_text(await self.dashboard(label), private=private))
 
     async def handle_pair(self, chat_id):
         code = await self.mem.create_pair_code()
@@ -190,8 +190,9 @@ class Bot:
             await self.tg.send(chat_id, HELP)
             return
 
-        if text in ("/today", "/week", "/month"):
-            await self.handle_summary(chat_id, text[1:])
+        head = text.split(maxsplit=1)[0] if text else ""
+        if head in ("/today", "/week", "/month"):
+            await self.handle_summary(chat_id, head[1:], private="private" in text)
             return
 
         if text == "/pair":

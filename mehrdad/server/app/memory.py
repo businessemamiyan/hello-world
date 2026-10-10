@@ -255,7 +255,8 @@ class Memory:
     async def add_memory(self, entries):
         """entries: لیستی از dict با کلیدهای type/summary/detail/amount."""
         if not entries:
-            return
+            return []
+        ids = []
         async with self.lock:
             now = time.time()
             for e in entries:
@@ -267,12 +268,14 @@ class Memory:
                      e.get("when_ts"), e.get("category"),
                      json.dumps(fields, ensure_ascii=False) if fields else None),
                 )
+                ids.append(cur.lastrowid)
                 if self.fts:
                     self.db.execute(
                         "INSERT INTO memory_fts(summary, detail, memory_id) VALUES(?,?,?)",
                         (normalize_fa(e.get("summary")), normalize_fa(e.get("detail")), cur.lastrowid),
                     )
             self.db.commit()
+        return ids
 
     async def events_between(self, ts_from, ts_to, kinds=None):
         """رکوردهای حافظه که زمان واقعی‌شان (event_ts، وگرنه زمان ثبت) در بازه است، با when_ts."""
@@ -293,6 +296,57 @@ class Memory:
             out.append({"id": r[0], "type": r[1], "summary": r[2], "detail": r[3], "amount": r[4],
                         "category": r[5], "fields": fields, "when_ts": r[7]})
         return out
+
+    @staticmethod
+    def _event_row(r):
+        try:
+            fields = json.loads(r[6]) if r[6] else {}
+        except ValueError:
+            fields = {}
+        return {"id": r[0], "type": r[1], "summary": r[2], "detail": r[3], "amount": r[4],
+                "category": r[5], "fields": fields, "when_ts": r[7]}
+
+    _EVENT_COLS = "id, type, summary, detail, amount, category, fields, COALESCE(event_ts, ts)"
+
+    async def get_event(self, event_id):
+        async with self.lock:
+            r = self.db.execute(f"SELECT {self._EVENT_COLS} FROM memory WHERE id=?", (event_id,)).fetchone()
+        return self._event_row(r) if r else None
+
+    async def update_event(self, event_id, patch):
+        """patch: summary/detail/amount/category/when_ts و fields (ادغام با فیلدهای قبلی). None = بدون تغییر."""
+        cur = await self.get_event(event_id)
+        if not cur:
+            return None
+        merged_fields = dict(cur["fields"])
+        if isinstance(patch.get("fields"), dict):
+            merged_fields.update(patch["fields"])
+        new = {
+            "summary": patch.get("summary") if patch.get("summary") else cur["summary"],
+            "detail": patch["detail"] if "detail" in patch else cur["detail"],
+            "amount": patch["amount"] if "amount" in patch else cur["amount"],
+            "category": patch["category"] if "category" in patch else cur["category"],
+            "event_ts": patch["when_ts"] if patch.get("when_ts") else cur["when_ts"],
+        }
+        async with self.lock:
+            self.db.execute(
+                "UPDATE memory SET summary=?, detail=?, amount=?, category=?, event_ts=?, fields=? WHERE id=?",
+                (new["summary"], new["detail"], new["amount"], new["category"], new["event_ts"],
+                 json.dumps(merged_fields, ensure_ascii=False) if merged_fields else None, event_id))
+            if self.fts:
+                self.db.execute("DELETE FROM memory_fts WHERE memory_id=?", (event_id,))
+                self.db.execute("INSERT INTO memory_fts(summary, detail, memory_id) VALUES(?,?,?)",
+                                (normalize_fa(new["summary"]), normalize_fa(new["detail"]), event_id))
+            self.db.commit()
+        return await self.get_event(event_id)
+
+    async def delete_event(self, event_id):
+        async with self.lock:
+            cur = self.db.execute("DELETE FROM memory WHERE id=?", (event_id,))
+            if self.fts:
+                self.db.execute("DELETE FROM memory_fts WHERE memory_id=?", (event_id,))
+            self.db.commit()
+            return cur.rowcount > 0
 
     async def latest_of_kinds(self, kinds, limit=15):
         """آخرین کارها/اهداف (بدون محدودیت بازه)."""

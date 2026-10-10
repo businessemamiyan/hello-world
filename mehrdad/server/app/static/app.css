@@ -1,0 +1,59 @@
+/* افزوده‌های مهرداد روی سیستم طراحی قطب‌نما (theme.css) */
+.m-logo{display:inline-grid;place-items:center;width:34px;height:34px;border-radius:11px;background:linear-gradient(145deg,var(--gold),var(--ai));color:var(--gold-ink);font-weight:900;font-size:1.05rem}
+.m-hb{font-size:1.1rem;padding:8px 10px}
+.m-hb.on{color:var(--gold);background:var(--gold-soft)}
+.m-center{min-height:70vh;display:grid;align-content:center;gap:14px}
+.m-center h1{font-size:1.5rem;font-weight:900}
+
+/* خط زمان */
+.m-tl{display:grid;grid-template-columns:34px 1fr auto auto auto;gap:8px;align-items:center;padding:9px 0;border-bottom:1px solid var(--line)}
+.m-tl:last-child{border-bottom:0}
+.m-ic{display:grid;place-items:center;width:34px;height:34px;border-radius:10px;background:var(--surface2);font-size:1.05rem}
+.m-tl-b{min-width:0}
+.m-tl-b>div:first-child{overflow-wrap:anywhere}
+.m-pos{color:var(--good)} .m-neg{color:var(--crit)}
+.m-empty{color:var(--ink3);text-align:center;padding:14px 4px;font-size:.88rem}
+
+/* نوشتن سریع / چت */
+.m-composer{display:flex;gap:8px;align-items:flex-end}
+.m-composer textarea{min-height:44px;max-height:120px;border-radius:14px;resize:none;flex:1}
+.m-send{min-width:44px;min-height:44px;border-radius:14px;font-size:1.1rem;border:0;background:var(--gold);color:var(--gold-ink);font-weight:900}
+.m-send:disabled{opacity:.4}
+.m-mic{min-width:44px;min-height:44px;border-radius:14px;border:1px solid var(--line2);background:var(--surface2)}
+.m-mic.on{background:var(--crit-bg);border-color:var(--crit)}
+.m-chat{display:grid;gap:8px}
+.m-b{max-width:86%;padding:9px 13px;border-radius:16px;white-space:pre-wrap;overflow-wrap:anywhere;line-height:1.75}
+.m-b.me{background:var(--gold-soft);border:1px solid var(--line2);justify-self:start;border-end-start-radius:4px}
+.m-b.bot{background:var(--surface);border:1px solid var(--line);justify-self:end;border-end-end-radius:4px}
+.m-b.typing{opacity:.65}
+.m-chatwrap{display:grid;gap:12px;padding-bottom:6px}
+.m-composer-fixed{position:sticky;bottom:calc(74px + env(safe-area-inset-bottom,0px));background:var(--bg);padding:8px 0 4px;z-index:5}
+
+/* نمودار و دسته‌ها */
+.m-chart svg{width:100%;height:auto;display:block}
+.m-legend{display:flex;gap:14px;font-size:.78rem;color:var(--ink2)}
+.m-legend i{display:inline-block;width:10px;height:10px;border-radius:3px;margin-inline-end:5px;vertical-align:-1px}
+.m-cat{display:grid;grid-template-columns:110px 1fr auto;gap:10px;align-items:center;font-size:.88rem}
+.m-cat .bar{height:9px}
+
+/* کارها و اهداف */
+.m-task{display:grid;grid-template-columns:auto 1fr auto auto;gap:10px;align-items:center;padding:9px 0;border-bottom:1px solid var(--line)}
+.m-task:last-child{border-bottom:0}
+.m-check{width:26px;height:26px;border-radius:8px;border:2px solid var(--line2);background:transparent;display:grid;place-items:center;color:transparent;font-weight:900;padding:0}
+.m-task.done .m-check{background:var(--good);border-color:var(--good);color:#04160F}
+.m-task.done .m-t{color:var(--ink3);text-decoration:line-through}
+.m-goal{display:grid;gap:8px}
+.m-goal input[type=range]{margin:0}
+
+/* خصوصی */
+.m-lock{display:flex;gap:10px;align-items:center;color:var(--ink3);font-size:.88rem}
+.m-blur{filter:blur(5px);user-select:none;pointer-events:none}
+
+/* مودال و اعلان */
+#modal{position:fixed;inset:0;z-index:20;background:rgba(0,0,0,.55);display:grid;align-items:end;justify-items:center}
+#modal[hidden]{display:none}
+.m-sheet{width:min(560px,100%);background:var(--surface);border:1px solid var(--line2);border-radius:18px 18px 0 0;padding:16px 16px calc(18px + env(safe-area-inset-bottom,0px));display:grid;gap:12px;max-height:88vh;overflow:auto}
+.m-toast{position:fixed;inset-inline:16px;bottom:calc(86px + env(safe-area-inset-bottom,0px));z-index:30;background:var(--ink);color:var(--bg);padding:10px 14px;border-radius:12px;text-align:center;font-weight:700;box-shadow:0 8px 30px rgba(0,0,0,.4);max-width:520px;margin-inline:auto}
+.m-toast[hidden]{display:none}
+.m-spin{display:inline-block;width:14px;height:14px;border:2px solid var(--line2);border-top-color:var(--gold);border-radius:50%;animation:m-r .8s linear infinite;vertical-align:-2px}
+@keyframes m-r{to{transform:rotate(360deg)}}

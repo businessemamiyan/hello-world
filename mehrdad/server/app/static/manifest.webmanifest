@@ -1,0 +1,12 @@
+{
+  "name": "مهرداد — مغز دوم",
+  "short_name": "مهرداد",
+  "lang": "fa",
+  "dir": "rtl",
+  "start_url": "./",
+  "scope": "./",
+  "display": "standalone",
+  "background_color": "#0A0F18",
+  "theme_color": "#0A0F18",
+  "icons": [{"src": "icon.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "any maskable"}]
+}

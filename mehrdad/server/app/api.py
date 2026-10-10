@@ -10,6 +10,7 @@ from collections import defaultdict, deque
 from fastapi import APIRouter, Depends, Header, HTTPException, Request
 from pydantic import BaseModel, Field
 
+from . import life
 from .ingest import is_sensitive, memory_entry, parse_bank_text
 
 log = logging.getLogger("api")
@@ -25,6 +26,33 @@ class PairIn(BaseModel):
 
 class ChatIn(BaseModel):
     text: str = Field(min_length=1, max_length=4000)
+
+
+KIND_PATTERN = "^(" + "|".join(life.KINDS) + ")$"
+
+
+class EventIn(BaseModel):
+    type: str = Field(pattern=KIND_PATTERN)
+    summary: str = Field(min_length=1, max_length=300)
+    detail: str | None = Field(default=None, max_length=1000)
+    amount: float | None = Field(default=None, ge=0, le=1e12)
+    category: str | None = Field(default=None, max_length=60)
+    when: str | None = Field(default=None, max_length=20)
+    fields: dict | None = None
+
+
+class EventPatch(BaseModel):
+    summary: str | None = Field(default=None, min_length=1, max_length=300)
+    detail: str | None = Field(default=None, max_length=1000)
+    amount: float | None = Field(default=None, ge=0, le=1e12)
+    category: str | None = Field(default=None, max_length=60)
+    when: str | None = Field(default=None, max_length=20)
+    fields: dict | None = None
+
+
+def _check_fields(fields):
+    if fields is not None and len(str(fields)) > 2000:
+        raise HTTPException(status_code=422, detail="fields too large")
 
 
 class IngestItem(BaseModel):
@@ -84,6 +112,38 @@ def create_router(mem, svc):
         if range not in ("today", "week", "month"):
             raise HTTPException(status_code=422, detail="range must be today|week|month")
         return await svc.dashboard(range)
+
+    @router.get("/events")
+    async def list_events(kind: str = "", limit: int = 50, dev=Depends(current_device)):
+        kinds = tuple(k for k in kind.split(",") if k in life.KINDS)
+        if not kinds:
+            raise HTTPException(status_code=422, detail="kind required")
+        return {"events": await mem.latest_of_kinds(kinds, max(1, min(limit, 200)))}
+
+    @router.post("/events")
+    async def create_event(body: EventIn, dev=Depends(current_device)):
+        _check_fields(body.fields)
+        ids = await mem.add_memory([{
+            "type": body.type, "summary": body.summary, "detail": body.detail, "amount": body.amount,
+            "category": body.category, "fields": body.fields, "when_ts": life.parse_when(body.when)}])
+        return await mem.get_event(ids[0])
+
+    @router.patch("/events/{event_id}")
+    async def patch_event(event_id: int, body: EventPatch, dev=Depends(current_device)):
+        _check_fields(body.fields)
+        patch = body.model_dump(exclude_unset=True)
+        if "when" in patch:
+            patch["when_ts"] = life.parse_when(patch.pop("when"))
+        ev = await mem.update_event(event_id, patch)
+        if not ev:
+            raise HTTPException(status_code=404, detail="not found")
+        return ev
+
+    @router.delete("/events/{event_id}")
+    async def delete_event(event_id: int, dev=Depends(current_device)):
+        if not await mem.delete_event(event_id):
+            raise HTTPException(status_code=404, detail="not found")
+        return {"ok": True}
 
     @router.get("/history")
     async def history(limit: int = 50, dev=Depends(current_device)):

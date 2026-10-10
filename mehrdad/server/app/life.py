@@ -125,6 +125,15 @@ def build_dashboard(rows, habits, label, now=None):
     by_cat = {"income": {}, "expense": {}}
     counts = {}
     items = []
+    # سری روزانه برای نمودار: هر روز بازه، با جمع درآمد/خرج و تعداد چند نوع
+    daily_map = {}
+    day = datetime.datetime.fromtimestamp(start, TEHRAN).date()
+    last = datetime.datetime.fromtimestamp(end - 1, TEHRAN).date()
+    while day <= last:
+        jm, jd = g2j(day.year, day.month, day.day)[1:]
+        daily_map[day] = {"date": fa("%02d/%02d" % (jm, jd)), "day": fa(jd), "income": 0, "expense": 0,
+                          "meal": 0, "smoking": 0, "workout": 0}
+        day += datetime.timedelta(days=1)
     for r in sorted(rows, key=lambda x: x["when_ts"]):
         kind = r["type"]
         fields = r.get("fields") or {}
@@ -139,9 +148,15 @@ def build_dashboard(rows, habits, label, now=None):
             cat = r.get("category") or "بدون دسته"
             by_cat[kind][cat] = by_cat[kind].get(cat, 0) + amt
         t = datetime.datetime.fromtimestamp(r["when_ts"], TEHRAN)
+        bucket = daily_map.get(t.date())
+        if bucket is not None:
+            if kind in ("income", "expense"):
+                bucket[kind] += amt
+            elif kind in ("meal", "smoking", "workout"):
+                bucket[kind] += n
         items.append({"id": r.get("id"), "kind": kind, "label": LABELS.get(kind, kind), "summary": r["summary"],
-                      "amount": amt or None, "category": r.get("category"), "time": t.strftime("%H:%M"),
-                      "date": jalali_str(t)})
+                      "amount": amt or None, "category": r.get("category"), "time": fa(t.strftime("%H:%M")),
+                      "date": jalali_str(t), "fields": fields})
     return {
         "range": label,
         "from": datetime.datetime.fromtimestamp(start, TEHRAN).isoformat(),
@@ -149,6 +164,7 @@ def build_dashboard(rows, habits, label, now=None):
         "today_jalali": jalali_str(now),
         "finance": {"income": income, "expense": expense, "net": income - expense, "by_category": by_cat},
         "counts": counts,
+        "daily": list(daily_map.values()),
         "items": items,
         "habits": [{"id": h["id"], "good": h["good"], "bad": h.get("bad"), "streak": h["streak"],
                     "best_streak": h["best_streak"]} for h in habits],
@@ -159,8 +175,8 @@ def _money(n):
     return fa(f"{int(round(n)):,}")
 
 
-def format_text(d):
-    """خلاصهٔ تلگرامی از خروجی build_dashboard."""
+def format_text(d, private=False):
+    """خلاصهٔ تلگرامی از خروجی build_dashboard. بخش‌های حساس (رابطه) فقط با private=True نشان داده می‌شوند."""
     title = {"today": "امروز", "week": "۷ روز اخیر", "month": "این ماه (جلالی)"}[d["range"]]
     lines = [f"📅 {title} — {d['today_jalali']}"]
     f = d["finance"]
@@ -173,6 +189,8 @@ def format_text(d):
     emoji = {"meal": "🍽", "smoking": "💨", "intimacy": "❤️", "workout": "🏃", "sleep": "😴", "feeling": "💭",
              "task": "✅", "goal": "🎯", "idea": "💡"}
     for kind in ("meal", "smoking", "intimacy", "workout", "sleep", "feeling", "task", "goal", "idea"):
+        if kind == "intimacy" and not private:
+            continue
         its = [i for i in d["items"] if i["kind"] == kind]
         if not its:
             continue
