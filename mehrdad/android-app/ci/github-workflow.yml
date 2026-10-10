@@ -1,0 +1,35 @@
+name: Mehrdad Android APK
+
+on:
+  push:
+    branches: [mehrdad/foundations]
+    paths:
+      - "mehrdad/android-app/**"
+      - ".github/workflows/mehrdad-android.yml"
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: mehrdad/android-app
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+
+      - name: Build debug APK
+        run: |
+          chmod +x gradlew
+          ./gradlew assembleDebug --no-daemon --stacktrace
+
+      # APK عمداً فقط به‌صورت artifact (نیاز به لاگین GitHub دارد) نگه داشته می‌شود، نه Release عمومی
+      - uses: actions/upload-artifact@v4
+        with:
+          name: mehrdad-debug-apk
+          path: mehrdad/android-app/app/build/outputs/apk/debug/app-debug.apk
+          retention-days: 30

@@ -1,0 +1,30 @@
+# محیط ساخت یک‌بارمصرف برای APK (JDK 17 + Android SDK رسمی Google).
+# لازم است چون dl.google.com از ایران بسته است؛ این را روی یک سرور خارج از ایران بساز.
+#
+# پذیرفتن «Android SDK License» (https://developer.android.com/studio/terms) صراحتاً با
+# --build-arg ACCEPT_ANDROID_LICENSES=yes انجام می‌شود؛ بدون آن ساخت متوقف می‌شود.
+FROM eclipse-temurin:17-jdk
+
+ARG CMDLINE_TOOLS=11076708
+ARG ACCEPT_ANDROID_LICENSES=no
+
+RUN apt-get update && apt-get install -y --no-install-recommends unzip curl ca-certificates \
+    && rm -rf /var/lib/apt/lists/*
+
+ENV ANDROID_HOME=/opt/android-sdk ANDROID_SDK_ROOT=/opt/android-sdk
+# جاوا پیش‌فرض IPv4 را ترجیح می‌دهد، ولی روی بعضی سرورها dl.google.com از مسیر IPv4 ۴۰۴ می‌دهد و IPv6 باز است
+ENV JAVA_TOOL_OPTIONS=-Djava.net.preferIPv6Addresses=true
+RUN mkdir -p ${ANDROID_HOME}/cmdline-tools \
+    && curl -fsSL --retry 5 --retry-all-errors -o /tmp/ct.zip \
+       https://dl.google.com/android/repository/commandlinetools-linux-${CMDLINE_TOOLS}_latest.zip \
+    && sha256sum /tmp/ct.zip \
+    && unzip -q /tmp/ct.zip -d ${ANDROID_HOME}/cmdline-tools \
+    && mv ${ANDROID_HOME}/cmdline-tools/cmdline-tools ${ANDROID_HOME}/cmdline-tools/latest \
+    && rm /tmp/ct.zip
+
+RUN test "$ACCEPT_ANDROID_LICENSES" = "yes" \
+    || (echo "متوقف شد: شرایط Android SDK License پذیرفته نشده (ACCEPT_ANDROID_LICENSES=yes)" && exit 1)
+RUN yes | ${ANDROID_HOME}/cmdline-tools/latest/bin/sdkmanager --licenses > /dev/null \
+    && ${ANDROID_HOME}/cmdline-tools/latest/bin/sdkmanager "platforms;android-34" "build-tools;34.0.0" "platform-tools"
+
+WORKDIR /work

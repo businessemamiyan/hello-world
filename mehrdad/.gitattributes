@@ -1,2 +1,4 @@
 *.sh text eol=lf
 Dockerfile text eol=lf
+gradlew text eol=lf
+*.gradle text eol=lf
