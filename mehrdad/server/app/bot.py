@@ -80,21 +80,25 @@ class Bot:
         self._ctx_ids = set()             # شناسهٔ پروفایل/هدف‌هایی که در آخرین چکیده به مغز نشان داده شد
         self._ctx_debt_ids = set()        # شناسهٔ بدهی‌های فعالی که مغز در همین گفتگو دیده است
         self.coach = Coach(self)
+        self.stt = None                   # app.stt.STT؛ main آن را وصل می‌کند (None = ویس خاموش)
 
-    async def chat(self, text, images=None):
+    async def chat(self, text, images=None, voice=False):
         """یک نوبت مکالمه (هم تلگرام هم اپ): تاریخچه و حافظه را می‌خواند، می‌پرسد، و ذخیره می‌کند.
         images: لیست (media_type, bytes)؛ فقط برای همین نوبت به مغز داده می‌شود و ذخیره نمی‌شود."""
         async with self.brain_lock:
             history = await self.mem.recent_messages(20)
             recent_mem = await self.mem.recent_memory(40)
             active_habits = await self.mem.list_habits("active")
-            await self.mem.add_message("user", ("📷 [عکس] " + text) if images else text)
+            await self.mem.add_message("user", ("📷 [عکس] " + text) if images else ("🎤 " + text) if voice else text)
             pending_q = await self.mem.kv_get("onboard_q")
             brain_text = text
             if pending_q:      # جواب یک سؤال مصاحبه است: به مغز بگو تا درست در پروفایل ثبتش کند
                 q = profile.question_by_id(pending_q)
                 if q:
                     brain_text = f"[کاربر دارد به سؤال مصاحبه «{q[2]}» (بخش {q[1]}) جواب می‌دهد؛ جواب را در پروفایل ثبت کن]\n{text}"
+            if voice:
+                brain_text = ("[این پیام را با ویس گفته و متنش خودکار نوشته شده؛ ممکن است عددها یا اسم‌ها اشتباه شنیده شده باشد. "
+                              "اگر مبلغ یا نام مهمی مبهم است، قبل از ثبت بپرس.]\n" + brain_text)
             if images:
                 reply, entries = await self.brain.think(history, recent_mem, brain_text, active_habits, images=images)
             else:
@@ -604,7 +608,7 @@ class Bot:
             return
 
         if msg.get("voice") or msg.get("audio"):
-            await self.tg.send(chat_id, "فعلاً فقط متن می‌فهمم — فهمیدن ویس تو فاز بعدیه. همون رو تایپ کن.")
+            await self.handle_voice(chat_id, msg)
             return
 
         if not text:
@@ -620,6 +624,32 @@ class Bot:
         await self.tg.send(chat_id, reply)
         if onboarding:
             await self._onboard_next(chat_id)
+
+    async def handle_voice(self, chat_id, msg):
+        """ویس تلگرام → متن (روی خود سرور) → همان مسیر چت؛ متنِ فهمیده‌شده هم نشان داده می‌شود تا اشتباه‌شنیدن را اصلاح کنی."""
+        if not self.stt or not self.stt.enabled:
+            await self.tg.send(chat_id, "فعلاً فقط متن می‌فهمم؛ همان را تایپ کن.")
+            return
+        v = msg.get("voice") or msg.get("audio") or {}
+        if (v.get("duration") or 0) > 600 or (v.get("file_size") or 0) > 20 * 1024 * 1024:
+            await self.tg.send(chat_id, "این ویس خیلی بلند است (حداکثر ۱۰ دقیقه / ۲۰ مگابایت)؛ تکه‌تکه بفرست.")
+            return
+        await self.tg.send_chat_action(chat_id, "typing")
+        try:
+            data = await self.tg.download(v["file_id"])
+            suffix = ".ogg" if msg.get("voice") else ("." + str(v.get("file_name") or "audio.mp3").rsplit(".", 1)[-1][:5])
+            text = await self.stt.transcribe(data, suffix=suffix)
+        except Exception:
+            log.exception("پردازش ویس ناموفق")
+            await self.tg.send(chat_id, "نتوانستم ویس را بفهمم؛ دوباره بفرست یا تایپ کن.")
+            return
+        if not text:
+            await self.tg.send(chat_id, "چیزی از ویس نفهمیدم؛ واضح‌تر بگو یا تایپ کن.")
+            return
+        await self.tg.send(chat_id, f"🎤 فهمیدم: «{text}»")
+        await self.tg.send_chat_action(chat_id, "typing")
+        reply = await self.chat(text, voice=True)
+        await self.tg.send(chat_id, reply)
 
     async def handle_photo(self, chat_id, msg):
         """عکس تلگرام (فیش پرداخت، رسید، همسر، …) → مغز آن را می‌بیند و هر چه باید ثبت می‌کند."""

@@ -38,6 +38,9 @@ async def amain():
     brain = Brain(cfg.anthropic_api_key, cfg.anthropic_model, cfg.anthropic_proxy, search=mem.search_memory,
                   provider=cfg.provider(), cli_model=cfg.cli_model, cli_cwd=cfg.data_dir)
     bot = Bot(mem, tg, brain, cfg)
+    if cfg.stt_model:
+        from .stt import STT
+        bot.stt = STT(cfg.stt_model, os.path.join(cfg.data_dir, "models"))
     brain.context_provider = bot.context_prompt
     sched = Scheduler(bot, mem, cfg)
     app = create_app(mem, time.time(), bot)
@@ -49,6 +52,8 @@ async def amain():
             logging.exception("%s متوقف شد", name)
 
     tasks = [server.serve(), bot.poll_forever(), sched.run_forever()]
+    if bot.stt:
+        tasks.append(guarded("گرم‌کردن مدل گفتار", bot.stt.warmup()))
     if cfg.email_imap_user and cfg.email_imap_password:
         mail = MailAgent(bot, mem, cfg)
         bot.mail_agent = mail

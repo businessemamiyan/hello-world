@@ -4,3 +4,4 @@ httpx[socks]==0.28.1
 tzdata==2025.2
 asyncpg==0.30.0
 telethon==1.36.0
+faster-whisper==1.2.1
