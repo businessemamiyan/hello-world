@@ -14,6 +14,7 @@ from .coach import Coach
 from .payroll import Payroll
 from .projects import Projects
 from .phone import Phone
+from .crm import Crm
 from . import payroll as payroll_mod
 from .media import MAX_IMAGE_BYTES, sniff_image
 from .memory import normalize_fa, today_str
@@ -25,6 +26,8 @@ HELP = """سلام، منم مهرداد، مغز دومت 🧠
 
 هر چی بگی یادم می‌مونه و خودم تو جای درستش ثبت می‌کنم: خرج، درآمد، غذا، قلیان، کار، حقوق، حس‌وحال، ایده، هر چی.
 راحت باهام حرف بزن، فرم و دکمه لازم نیست. ویس و عکس فیش هم بفرستی می‌فهمم.
+ویس بفرستی جوابم رو هم ویس می‌فرستم (/voice off برای خاموش‌کردنش).
+مشتری و فروش هم همین‌طوره: بگو «با آقای کریمی برای پنل ۱۲۰ میلیون صحبت کردم، پس‌فردا زنگ بزنم» تا ثبت و یادآوری کنم.
 
 ساخت عادت:
 /habit <عادت خوب> — مثلاً: /habit هر روز صبح ۲۰ دقیقه مطالعه
@@ -36,6 +39,7 @@ HELP = """سلام، منم مهرداد، مغز دومت 🧠
 /finance — موجودی حساب‌ها، بدهی و اقساط و هشدارها
 /salary — حقوق این ماه (از روی فیش نمونه) و ماه بعد
 /projects — وضعیت پروژه‌هات (VQ ERP، VQ Factory، NovaTunnel…)
+/crm — پیگیری‌های امروز و قیف فروشت (مشتری‌ها، معامله‌ها، فروش این ماه)
 /goals — هدف‌هایی که از روی شناختم از تو پیشنهاد می‌دم
 /nova — فروش و درآمد NovaTunnel (فقط می‌خونم)
 /inbox — آخرین پیام‌های ایمیل و تلگرام که ایجنت‌ها دیدن (/mailtest برای تست ایمیل)
@@ -99,8 +103,10 @@ class Bot:
         self.payroll = Payroll(mem)
         self.projects = Projects(mem)
         self.phone = Phone(self)
+        self.crm = Crm(self)
         self.tg_agent = None              # app.agent_tg.TelegramAgent؛ main وصلش می‌کند
         self.stt = None                   # app.stt.STT؛ main آن را وصل می‌کند (None = ویس خاموش)
+        self.tts = None                   # app.tts.TTS؛ جواب صوتی (اپ و ویس تلگرام)
 
     async def chat(self, text, images=None, voice=False):
         """یک نوبت مکالمه (هم تلگرام هم اپ): تاریخچه و حافظه را می‌خواند، می‌پرسد، و ذخیره می‌کند.
@@ -164,6 +170,12 @@ class Bot:
                 parts.append(proj)
         except Exception:
             log.exception("چکیدهٔ پروژه‌ها ساخته نشد")
+        try:
+            crm = await self.crm.prompt()
+            if crm:
+                parts.append(crm)
+        except Exception:
+            log.exception("چکیدهٔ CRM ساخته نشد")
         try:
             pay = await self.payroll.prompt()
             if pay:
@@ -280,7 +292,7 @@ class Bot:
     async def _apply_entries(self, entries, allowed_ids, user_text=""):
         """ورودی‌های مغز: جدید → ثبت؛ update_id/delete_id → فقط روی رکوردهای اخیری که مغز دیده؛ account_op/debt_op/habit_new → به‌روزرسانی اپ.
         خروجی: لیست خط‌های تأیید (حقیقت سمت سرور) برای نمایش زیر پاسخ."""
-        adds, notes, pay_ops, proj_ops, phone_ops = [], [], [], [], []
+        adds, notes, pay_ops, proj_ops, phone_ops, crm_ops = [], [], [], [], [], []
         paying = any("debt_op" in e and e["debt_op"]["op"] == "pay" for e in entries)
         for e in entries:
             if "delete_id" in e:
@@ -307,6 +319,8 @@ class Bot:
                 proj_ops.append(e["project_op"])
             elif "phone_op" in e:
                 phone_ops.append(e["phone_op"])
+            elif "crm_op" in e:
+                crm_ops.append(e["crm_op"])
             elif "payslip" in e:
                 notes.append(await self._apply_payslip(e["payslip"]))
             elif "habit_new" in e:
@@ -323,6 +337,8 @@ class Bot:
             notes.extend(await self.payroll.apply_ops(pay_ops))
         if proj_ops:
             notes.extend(await self.projects.apply_ops(proj_ops))
+        if crm_ops:
+            notes.extend(await self.crm.apply_ops(crm_ops))
         if phone_ops:
             notes.extend(await self.phone.create_many(phone_ops, user_text))
         if adds:
@@ -608,6 +624,18 @@ class Bot:
             await self.tg.send(chat_id, await self.projects.text())
             return
 
+        if text.startswith("/voice"):
+            arg = text[len("/voice"):].strip().lower()
+            if arg in ("on", "off"):
+                await self.mem.kv_set("voice_reply", "1" if arg == "on" else "0")
+            cur = await self.mem.kv_get("voice_reply") != "0"
+            await self.tg.send(chat_id, "جواب صوتی " + ("روشنه 🔊 (وقتی ویس بفرستی، جوابم رو هم ویس می‌فرستم)" if cur else "خاموشه 🔇") + "\nتغییر: /voice on یا /voice off")
+            return
+
+        if text == "/crm":
+            await self.tg.send(chat_id, await self.crm.text())
+            return
+
         if text == "/salary":
             await self.tg.send(chat_id, await self.payroll.text())
             return
@@ -721,6 +749,17 @@ class Bot:
         await self.tg.send_chat_action(chat_id, "typing")
         reply = await self.chat(text, voice=True)
         await self.tg.send(chat_id, reply)
+        await self._voice_reply(chat_id, reply)
+
+    async def _voice_reply(self, chat_id, reply):
+        """وقتی با ویس حرف زده، جواب را هم صوتی می‌فرستیم (برای خاموش‌کردن: /voice off)."""
+        if not self.tts or await self.mem.kv_get("voice_reply") == "0" or not hasattr(self.tg, "send_voice"):
+            return
+        try:
+            await self.tg.send_chat_action(chat_id, "record_voice")
+            await self.tg.send_voice(chat_id, await self.tts.synth(reply))
+        except Exception:
+            log.warning("ساخت یا ارسال جواب صوتی ناموفق (متن فرستاده شده)", exc_info=True)
 
     async def handle_photo(self, chat_id, msg):
         """عکس تلگرام (فیش پرداخت، رسید، همسر، …) → مغز آن را می‌بیند و هر چه باید ثبت می‌کند."""
@@ -749,6 +788,18 @@ class Bot:
         data = cq.get("data", "")
         if not await self._is_owner(chat_id):
             await self.tg.answer(cq["id"])
+            return
+        if data.startswith("cf:"):
+            msg = await self.crm.callback(data)
+            await self.tg.answer(cq["id"], msg[:150])
+            view = await self.crm.morning_view()
+            try:
+                if view:
+                    await self.tg.edit(chat_id, message_id, view[0], kb=view[1])
+                else:
+                    await self.tg.edit(chat_id, message_id, "🎉 همهٔ پیگیری‌های امروز انجام شد.")
+            except TGError:
+                pass
             return
         if data.startswith("pa:"):
             try:

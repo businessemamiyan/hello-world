@@ -51,6 +51,7 @@ class Memory:
     def __init__(self, path):
         os.makedirs(os.path.dirname(path) or ".", exist_ok=True)
         self.db = sqlite3.connect(path, check_same_thread=False)
+        self.extra_searchers = []         # async fn(query) → نتیجه‌های هم‌شکل search_memory (مثلاً CRM)
         self.db.execute("PRAGMA journal_mode=WAL")
         self.db.executescript(
             """
@@ -920,7 +921,13 @@ class Memory:
                     (*params, limit),
                 ).fetchall()
             found = [{"type": r[0], "summary": r[1], "detail": r[2], "amount": r[3], "ts": r[4]} for r in rows]
-        return found + await self.search_project_docs(query, limit=3) + await self.search_inbox(query, limit=3)
+        extra = []
+        for fn in self.extra_searchers:
+            try:
+                extra += await fn(query)
+            except Exception:
+                pass
+        return found + extra + await self.search_project_docs(query, limit=3) + await self.search_inbox(query, limit=3)
 
     async def recent_memory(self, limit=40):
         async with self.lock:

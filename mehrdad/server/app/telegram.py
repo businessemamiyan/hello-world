@@ -64,6 +64,13 @@ class Telegram:
         r.raise_for_status()
         return r.content
 
+    async def send_voice(self, chat_id, mp3):
+        r = await self.client.post(self.base + "sendVoice", data={"chat_id": str(chat_id)}, files={"voice": ("mehrdad.mp3", mp3, "audio/mpeg")})
+        data = r.json()
+        if not data.get("ok"):
+            raise TGError(f"sendVoice: {data.get('description')}")
+        return data["result"]
+
     async def updates(self, offset, timeout=50):
         return await self.call("getUpdates", offset=offset, timeout=timeout, allowed_updates=["message", "callback_query"])
 

@@ -32,6 +32,7 @@ class Scheduler:
         self.backup_date = None
         self.coach_date = None
         self.evening_date = None
+        self.crm_date = None
 
     async def maybe_backup(self, hhmm, today):
         if hhmm == getattr(self.cfg, "backup_time", "03:30") and self.backup_date != today:
@@ -76,6 +77,22 @@ class Scheduler:
         except Exception:
             log.exception("یادآوری شبانهٔ مربی ناموفق")
 
+    async def maybe_crm(self, hhmm, today):
+        """صبح (۰۸:۳۰) پیگیری‌های امروز/عقب‌افتادهٔ فروش با دکمه‌های ✅ / فردا / 📞."""
+        if hhmm != getattr(self.cfg, "crm_time", "08:30") or self.crm_date == today:
+            return
+        self.crm_date = today
+        crm = getattr(self.bot, "crm", None)
+        owner = await self.mem.get_owner()
+        if not crm or not owner:
+            return
+        try:
+            view = await crm.morning_view()
+            if view:
+                await self.bot.tg.send(owner, view[0], kb=view[1] or None)
+        except Exception:
+            log.exception("یادآوری صبحگاهی فروش ناموفق")
+
     async def maybe_digest(self, hhmm, today):
         times = [t.strip() for t in (getattr(self.cfg, "digest_times", "") or "").split(",") if t.strip()]
         key = (today, hhmm)
@@ -91,6 +108,13 @@ class Scheduler:
         await self.maybe_backup(hhmm, today)
         await self.maybe_coach(hhmm, today)
         await self.maybe_evening(hhmm, today)
+        await self.maybe_crm(hhmm, today)
+        phone = getattr(self.bot, "phone", None)
+        if phone:
+            try:
+                await phone.nudge_stale()
+            except Exception:
+                log.exception("یادآوری گوشی ناموفق")
         if hhmm != self.cfg.habit_checkin_time or self.fired_date == today:
             return
         self.fired_date = today

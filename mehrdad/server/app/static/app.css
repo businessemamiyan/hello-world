@@ -91,3 +91,15 @@ html,body{overscroll-behavior-y:contain}
 .m-pj .r2{color:var(--ink3);font-size:.78rem;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .c-body code{background:var(--sunk);border-radius:4px;padding:0 4px;font-size:.85em;direction:ltr;unicode-bidi:embed}
 details>summary{cursor:pointer;padding:6px 0}
+
+.m-spk{border:0;background:transparent;color:var(--ink3);font-size:.95rem;padding:0 4px;margin-inline-start:6px;opacity:.7;vertical-align:middle;min-height:0;min-width:0}
+.m-spk:active{opacity:1}
+.m-chatwrap .m-b.bot{padding-inline-end:10px}
+.pane-title .row{gap:6px}
+.btn.danger{border-color:var(--crit);color:var(--crit)}
+.m-composer textarea{overflow-y:auto}
+
+.link{background:none;border:0;padding:0;color:var(--gold);font-weight:900;font-size:1rem;text-align:start;cursor:pointer;min-height:0}
+.m-fu,.m-deal,.m-cust{gap:8px}
+.m-fu select,.m-deal select{width:auto;min-height:36px}
+.form select{min-height:40px}

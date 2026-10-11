@@ -23,6 +23,7 @@ APP_HINTS = {"whatsapp": ["واتس‌اپ"], "واتساپ": ["واتس‌اپ"
 PHONE_EXEC = ("sms", "call", "instagram", "reply")           # این‌ها را خود گوشی اجرا می‌کند (تلگرام را سرور)
 MAX_TEXT = 600
 HOURLY_LIMIT = 12
+NUDGE_AFTER = 75            # ثانیه: بعد از این مدت، اقدام تأییدشدهٔ برنداشته‌شده یادآوری می‌شود
 _PERSIAN = str.maketrans("۰۱۲۳۴۵۶۷۸۹٠١٢٣٤٥٦٧٨٩", "01234567890123456789")
 _NUMLIKE = re.compile(r"^[+\d\s\-()]{7,20}$")
 DEFAULTS = {"auto_confirm": False, "sms_all": False}
@@ -89,6 +90,12 @@ class Phone:
         except ValueError:
             return False
 
+    async def last_seen(self):
+        try:
+            return float(await self.mem.kv_get("phone:last_seen", "0"))
+        except ValueError:
+            return 0.0
+
     async def status(self):
         await self.mem.expire_phone_actions()
         acts = await self.mem.list_phone_actions(limit=15)
@@ -96,8 +103,22 @@ class Phone:
             last_notif = float(await self.mem.kv_get("phone:last_notif", "0"))
         except ValueError:
             last_notif = 0.0
-        return {"contacts": await self.mem.contacts_count(), "settings": await self.settings(), "online": await self.online(), "last_notif": last_notif,
-                "pending": [a for a in acts if a["status"] == "awaiting"], "recent": acts}
+        return {"contacts": await self.mem.contacts_count(), "settings": await self.settings(), "online": await self.online(), "last_seen": await self.last_seen(),
+                "last_notif": last_notif, "pending": [a for a in acts if a["status"] == "awaiting"], "recent": acts}
+
+    async def nudge_stale(self, now=None):
+        """اقدام تأییدشده‌ای که گوشی بعد از ~۷۵ ثانیه برنداشته: به صاحب خبر بده اپ را باز کند (برای هر اقدام فقط یک بار)."""
+        now = now or time.time()
+        if await self.online(within=90):
+            return 0
+        n = 0
+        for a in await self.mem.list_phone_actions(statuses=("approved",), kinds=PHONE_EXEC, limit=5):
+            if a["detail"] == "nudged" or now - a["updated_ts"] < NUDGE_AFTER:
+                continue
+            if await self.mem.set_phone_action(a["id"], "approved", detail="nudged", only_from=("approved",)):
+                await self.bot.notify_owner(f"📵 گوشی وصل نیست و «{describe(a)}» منتظره. اپ مهرداد رو یه بار باز کن (یا اعلانش رو بزن)؛ خودش وصل می‌شه و انجامش می‌ده. تا ۱۰ دقیقه توی صف می‌مونه.")
+                n += 1
+        return n
 
     async def prompt(self):
         """خط کوتاه برای مغز: چه چیزی در دسترس است (بدون هیچ نام/شماره)."""

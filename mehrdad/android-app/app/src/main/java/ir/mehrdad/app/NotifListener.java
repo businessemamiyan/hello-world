@@ -48,9 +48,16 @@ public class NotifListener extends NotificationListenerService {
     static final Map<String, Reply> REPLIES = new ConcurrentHashMap<>();
 
     @Override
+    public void onListenerConnected() {
+        super.onListenerConnected();
+        PhoneService.ensure(this);                 // سیستم دوباره به شنونده وصل شده؛ اگر سرویس کنترل گوشی مرده بود بالایش بیاور
+    }
+
+    @Override
     public void onNotificationPosted(StatusBarNotification sbn) {
         try {
             if (!Prefs.isPaired(this) || sbn == null) return;
+            if (!PhoneService.isAlive()) PhoneService.ensure(this);
             if (getPackageName().equals(sbn.getPackageName())) return;      // اعلان‌های خود مهرداد
             Notification n = sbn.getNotification();
             if (n == null || sbn.isOngoing()) return;

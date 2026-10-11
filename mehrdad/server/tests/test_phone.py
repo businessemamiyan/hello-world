@@ -392,3 +392,32 @@ def test_telegram_all_mode_flag_and_phone_parse_reply():
     assert not a2.allow_all and a2.allow == [123, "abc"]
     ops = _parse_phone({"phone": [{"kind": "reply", "to": "علی", "text": "باشه", "app": "whatsapp"}, {"kind": "reply", "to": "", "text": "x"}]})
     assert ops == [{"phone_op": {"kind": "reply", "to": "علی", "text": "باشه", "app": "whatsapp"}}]
+
+
+@pytest.mark.asyncio
+async def test_offline_phone_gets_one_nudge_per_stale_action(tmp_path):
+    mem, tg, bot = await make(tmp_path)
+    p = bot.phone
+    await p.create("sms", "علی کریمی", "فردا میام", "به علی پیامک بزن")
+    aid = (await mem.list_phone_actions())[0]["id"]
+    await p.decide(aid, True)
+    assert await p.nudge_stale() == 0                                                  # هنوز ۷۵ ثانیه نشده
+    later = time.time() + ph.NUDGE_AFTER + 5
+    assert await p.nudge_stale(later) == 1 and "گوشی وصل نیست" in tg.sent[-1] and "پیامک به" in tg.sent[-1]
+    n_sent = len(tg.sent)
+    assert await p.nudge_stale(later + 30) == 0 and len(tg.sent) == n_sent             # برای هر اقدام فقط یک بار
+    assert (await mem.get_phone_action(aid))["status"] == "approved"                  # هنوز قابل برداشتن توسط گوشی
+    assert (await p.claim_next())["id"] == aid
+
+
+@pytest.mark.asyncio
+async def test_no_nudge_when_phone_is_online(tmp_path):
+    mem, tg, bot = await make(tmp_path)
+    p = bot.phone
+    await p.create("call", "مامان", "", "به مامان زنگ بزن")
+    aid = (await mem.list_phone_actions())[0]["id"]
+    await p.decide(aid, True)
+    await p.touch()                                                                     # گوشی وصل است و فقط هنوز نرسیده برداشته
+    assert await p.nudge_stale(time.time() + 200) == 0
+    st = await p.status()
+    assert st["online"] is True and st["last_seen"] > 0

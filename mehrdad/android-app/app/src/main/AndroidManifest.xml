@@ -20,6 +20,8 @@
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_SPECIAL_USE" />
     <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED" />
+    <!-- درخواست مستقیم «همیشه در پس‌زمینه کار کنه»؛ بدون این، شیائومی و مشابه سرویس کنترل گوشی را می‌کشند -->
+    <uses-permission android:name="android.permission.REQUEST_IGNORE_BATTERY_OPTIMIZATIONS" />
 
     <queries>
         <intent>
@@ -110,6 +112,10 @@
             android:name=".AssistSessionService"
             android:exported="true"
             android:permission="android.permission.BIND_VOICE_INTERACTION" />
+
+        <receiver
+            android:name=".SmsSentReceiver"
+            android:exported="false" />
 
         <receiver
             android:name=".BootReceiver"

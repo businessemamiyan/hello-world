@@ -68,7 +68,8 @@ public class MainActivity extends AppCompatActivity {
     private ValueCallback<Uri[]> filePathCb;
     private Uri cameraUri;
     private Voice voice;
-    private boolean pendingVoiceCommand;
+    private static final int V_TEXT = 0, V_COMMAND = 1, V_CHAT = 2;      // نوشتن در جعبه | دستور مستقیم | گفتگوی صوتی نوبتی
+    private int pendingVoiceMode;
     private TextToSpeech tts;
     private boolean ttsFa;
 
@@ -91,6 +92,7 @@ public class MainActivity extends AppCompatActivity {
         ws.setAllowContentAccess(false);
         ws.setMixedContentMode(WebSettings.MIXED_CONTENT_NEVER_ALLOW);
         ws.setCacheMode(WebSettings.LOAD_DEFAULT);
+        ws.setMediaPlaybackRequiresUserGesture(false);       // جواب صوتی بعد از دستور صوتی بدون لمس پخش شود
         web.addJavascriptInterface(new Bridge(), "MehrdadNative");
         web.setWebViewClient(new Client());
         web.setWebChromeClient(new Chrome());
@@ -111,7 +113,7 @@ public class MainActivity extends AppCompatActivity {
                         Toast.LENGTH_LONG).show());
 
         micPermission = registerForActivityResult(new ActivityResultContracts.RequestPermission(), granted -> {
-            if (granted) startVoice(pendingVoiceCommand);
+            if (granted) startVoice(pendingVoiceMode);
             else Toast.makeText(this, "بدون مجوز میکروفون نمی‌تونم صداتو بشنوم", Toast.LENGTH_LONG).show();
         });
         phonePermissions = registerForActivityResult(new ActivityResultContracts.RequestMultiplePermissions(), result -> {
@@ -141,7 +143,7 @@ public class MainActivity extends AppCompatActivity {
             }
         });
 
-        pendingVoiceCommand = getIntent().getBooleanExtra("voice", false);
+        pendingVoiceMode = getIntent().getBooleanExtra("voice", false) ? V_COMMAND : V_TEXT;
         tts = new TextToSpeech(this, st -> {
             if (st == TextToSpeech.SUCCESS) ttsFa = tts.setLanguage(new Locale("fa")) >= TextToSpeech.LANG_AVAILABLE;
         });
@@ -154,7 +156,7 @@ public class MainActivity extends AppCompatActivity {
         setIntent(intent);
         if (intent != null && intent.getBooleanExtra("voice", false)) {
             intent.removeExtra("voice");
-            startVoice(true);                      // دکمهٔ اعلان / کاشی / دستیار: مستقیم گوش بده
+            startVoice(V_COMMAND);                 // دکمهٔ اعلان / کاشی / دستیار: مستقیم گوش بده
         }
     }
 
@@ -167,8 +169,9 @@ public class MainActivity extends AppCompatActivity {
 
     /** ویس پیوسته: تشخیص گفتار رو بعد از هر مکث دوباره شروع می‌کنه تا کاربر حرفش رو کامل بزند؛ فقط با «تمام» تمام می‌شه. */
     private class Voice implements RecognitionListener {
-        private final boolean command;
-        Voice(boolean command) { this.command = command; }
+        private final int mode;
+        Voice(int mode) { this.mode = mode; }
+        private boolean chat() { return mode == V_CHAT; }
         private final SpeechRecognizer sr = SpeechRecognizer.createSpeechRecognizer(MainActivity.this);
         private final Handler h = new Handler(Looper.getMainLooper());
         private final StringBuilder done = new StringBuilder();
@@ -186,7 +189,8 @@ public class MainActivity extends AppCompatActivity {
             box.setOrientation(LinearLayout.VERTICAL);
             box.setPadding(48, 32, 48, 8);
             TextView hint = new TextView(MainActivity.this);
-            hint.setText("🎤 هر قدر می‌خوای حرف بزن؛ مکث مهم نیست.\nوقتی تموم شد «تمام» رو بزن.");
+            hint.setText(chat() ? "🗣️ بگو؛ وقتی ساکت بشی جوابت رو می‌گیری.\nبرای قطع گفتگو «قطع» رو بزن."
+                    : "🎤 هر قدر می‌خوای حرف بزن؛ مکث مهم نیست.\nوقتی تموم شد «تمام» رو بزن.");
             hint.setGravity(Gravity.CENTER);
             live = new TextView(MainActivity.this);
             live.setTextSize(17);
@@ -196,7 +200,7 @@ public class MainActivity extends AppCompatActivity {
             box.addView(live);
             dlg = new AlertDialog.Builder(MainActivity.this).setView(box).setCancelable(false)
                     .setPositiveButton("تمام", (d, w) -> finish(true))
-                    .setNegativeButton("لغو", (d, w) -> finish(false)).show();
+                    .setNegativeButton(chat() ? "قطع" : "لغو", (d, w) -> finish(false)).show();
             mute(true);
             listen();
         }
@@ -213,9 +217,10 @@ public class MainActivity extends AppCompatActivity {
             i.putExtra(RecognizerIntent.EXTRA_LANGUAGE_MODEL, RecognizerIntent.LANGUAGE_MODEL_FREE_FORM);
             i.putExtra(RecognizerIntent.EXTRA_LANGUAGE, "fa-IR");
             i.putExtra(RecognizerIntent.EXTRA_PARTIAL_RESULTS, true);
-            i.putExtra(RecognizerIntent.EXTRA_SPEECH_INPUT_COMPLETE_SILENCE_LENGTH_MILLIS, 15000L);
-            i.putExtra(RecognizerIntent.EXTRA_SPEECH_INPUT_POSSIBLY_COMPLETE_SILENCE_LENGTH_MILLIS, 15000L);
-            i.putExtra(RecognizerIntent.EXTRA_SPEECH_INPUT_MINIMUM_LENGTH_MILLIS, 60000L);
+            long silence = chat() ? 2800L : 15000L;                 // گفتگو: بعد از ~۳ ثانیه سکوت نوبت مهرداد می‌شود
+            i.putExtra(RecognizerIntent.EXTRA_SPEECH_INPUT_COMPLETE_SILENCE_LENGTH_MILLIS, silence);
+            i.putExtra(RecognizerIntent.EXTRA_SPEECH_INPUT_POSSIBLY_COMPLETE_SILENCE_LENGTH_MILLIS, silence);
+            i.putExtra(RecognizerIntent.EXTRA_SPEECH_INPUT_MINIMUM_LENGTH_MILLIS, chat() ? 1500L : 60000L);
             i.putExtra(RecognizerIntent.EXTRA_CALLING_PACKAGE, getPackageName());
             try { sr.startListening(i); } catch (Exception e) { finish(true); }
         }
@@ -243,12 +248,18 @@ public class MainActivity extends AppCompatActivity {
             try { if (dlg != null) dlg.dismiss(); } catch (Exception ignored) { }
             voice = null;
             String text = (done + " " + partial).trim();
-            if (deliver && !text.isEmpty()) web.evaluateJavascript((command ? "window.onVoiceCommand && window.onVoiceCommand(" : "window.onVoiceText && window.onVoiceText(") + JSONObject.quote(text) + ")", null);
+            if (chat()) {                                           // گفتگو: همیشه خبر بده (متن خالی = ساکت بود، لغو = قطع گفتگو)
+                web.evaluateJavascript(deliver ? "window.onVoiceChat && window.onVoiceChat(" + JSONObject.quote(text) + ")"
+                        : "window.onVoiceChatCancel && window.onVoiceChatCancel()", null);
+            } else if (deliver && !text.isEmpty()) {
+                web.evaluateJavascript((mode == V_COMMAND ? "window.onVoiceCommand && window.onVoiceCommand(" : "window.onVoiceText && window.onVoiceText(") + JSONObject.quote(text) + ")", null);
+            }
         }
 
         @Override public void onResults(Bundle b) {
             append(b == null ? null : b.getStringArrayList(SpeechRecognizer.RESULTS_RECOGNITION));
             fails = 0;
+            if (chat()) { finish(true); return; }
             h.postDelayed(this::listen, 120);
         }
         @Override public void onPartialResults(Bundle b) {
@@ -258,7 +269,11 @@ public class MainActivity extends AppCompatActivity {
         @Override public void onError(int error) {
             if (!active) return;
             if (!partial.isEmpty()) { done.append(done.length() > 0 ? " " : "").append(partial); partial = ""; show(); }
-            if (error == SpeechRecognizer.ERROR_NO_MATCH || error == SpeechRecognizer.ERROR_SPEECH_TIMEOUT) { h.postDelayed(this::listen, 150); return; }
+            if (error == SpeechRecognizer.ERROR_NO_MATCH || error == SpeechRecognizer.ERROR_SPEECH_TIMEOUT) {
+                if (chat()) { finish(true); return; }                // چیزی نگفت: به صفحه خبر بده (خالی)
+                h.postDelayed(this::listen, 150);
+                return;
+            }
             if (error == SpeechRecognizer.ERROR_RECOGNIZER_BUSY && fails++ < 5) { try { sr.cancel(); } catch (Exception ignored) { } h.postDelayed(this::listen, 500); return; }
             if (error == SpeechRecognizer.ERROR_INSUFFICIENT_PERMISSIONS) { Toast.makeText(MainActivity.this, "مجوز میکروفون لازمه", Toast.LENGTH_LONG).show(); finish(false); return; }
             if (error == SpeechRecognizer.ERROR_NETWORK || error == SpeechRecognizer.ERROR_NETWORK_TIMEOUT || error == SpeechRecognizer.ERROR_SERVER) {
@@ -275,15 +290,16 @@ public class MainActivity extends AppCompatActivity {
         @Override public void onEvent(int t, Bundle b) { }
     }
 
-    private void startVoice() { startVoice(false); }
+    private void startVoice() { startVoice(V_TEXT); }
 
-    private void startVoice(boolean command) {
+    private void startVoice(int mode) {
         if (voice != null) return;
-        pendingVoiceCommand = command;
+        pendingVoiceMode = mode;
         if (ContextCompat.checkSelfPermission(this, Manifest.permission.RECORD_AUDIO) != PackageManager.PERMISSION_GRANTED) {
             micPermission.launch(Manifest.permission.RECORD_AUDIO);
             return;
         }
+        pendingVoiceMode = V_TEXT;
         if (!SpeechRecognizer.isRecognitionAvailable(this)) {          // بدون سرویس Google: همون پنجرهٔ قدیمی سیستم
             Intent i = new Intent(RecognizerIntent.ACTION_RECOGNIZE_SPEECH);
             i.putExtra(RecognizerIntent.EXTRA_LANGUAGE_MODEL, RecognizerIntent.LANGUAGE_MODEL_FREE_FORM);
@@ -293,7 +309,7 @@ public class MainActivity extends AppCompatActivity {
             }
             return;
         }
-        voice = new Voice(command);
+        voice = new Voice(mode);
         voice.begin();
     }
 
@@ -317,6 +333,10 @@ public class MainActivity extends AppCompatActivity {
         super.onResume();
         if (Prefs.isPaired(this)) {
             Outbox.schedule(this);               // صف پیامک/اعلان معوق رو دوباره امتحان کن
+            if (Prefs.phoneService(this)) {      // اپ جلوی چشمه، پس سیستم اجازهٔ بالا آوردن سرویس رو می‌ده
+                PhoneService.ensure(this);
+                PhoneWorker.schedule(this);
+            }
             Updater.check(this, false);          // بی‌صدا، حداکثر هر ۶ ساعت
         }
     }
@@ -329,9 +349,9 @@ public class MainActivity extends AppCompatActivity {
     private class Client extends WebViewClient {
         @Override
         public void onPageFinished(WebView view, String url) {
-            if (pendingVoiceCommand && Prefs.isPaired(MainActivity.this)) {
-                pendingVoiceCommand = false;
-                startVoice(true);                  // اپ از دکمهٔ «بگو» باز شده: به‌محض آماده‌شدن صفحه گوش بده
+            if (pendingVoiceMode == V_COMMAND && Prefs.isPaired(MainActivity.this)) {
+                pendingVoiceMode = V_TEXT;
+                startVoice(V_COMMAND);             // اپ از دکمهٔ «بگو» باز شده: به‌محض آماده‌شدن صفحه گوش بده
             }
         }
 
@@ -459,6 +479,8 @@ public class MainActivity extends AppCompatActivity {
                         .put("service", Prefs.phoneService(MainActivity.this))
                         .put("smsAll", Prefs.smsAll(MainActivity.this))
                         .put("battery", pm != null && pm.isIgnoringBatteryOptimizations(getPackageName()))
+                        .put("serviceAlive", PhoneService.isAlive())
+                        .put("xiaomi", Keepalive.isXiaomi())
                         .put("lastContacts", Prefs.lastContactsSync(MainActivity.this))
                         .put("lastSms", Prefs.lastSmsSync(MainActivity.this))
                         .put("callLog", granted(Manifest.permission.READ_CALL_LOG))
@@ -503,9 +525,32 @@ public class MainActivity extends AppCompatActivity {
                     if (Build.VERSION.SDK_INT >= 33 && !granted(Manifest.permission.POST_NOTIFICATIONS))
                         phonePermissions.launch(new String[]{Manifest.permission.POST_NOTIFICATIONS});
                     PhoneService.start(MainActivity.this);
+                    PhoneWorker.schedule(MainActivity.this);
                 } else {
                     PhoneService.stop(MainActivity.this);
+                    PhoneWorker.cancel(MainActivity.this);
                 }
+            });
+        }
+
+        /** پنجرهٔ مستقیم «همیشه در پس‌زمینه کار کنه؟» (پایداری اتصال). */
+        @JavascriptInterface
+        public void requestBatteryExemption() { runOnUiThread(() -> Keepalive.requestIgnoreBattery(MainActivity.this)); }
+
+        @JavascriptInterface
+        public void openAutostart() { runOnUiThread(() -> Keepalive.openAutostart(MainActivity.this)); }
+
+        @JavascriptInterface
+        public void openMiuiBattery() { runOnUiThread(() -> Keepalive.openMiuiBattery(MainActivity.this)); }
+
+        /** سرویس را از نو بالا بیاور (دکمهٔ «وصلش کن»). */
+        @JavascriptInterface
+        public void restartPhoneService() {
+            runOnUiThread(() -> {
+                if (!Prefs.isPaired(MainActivity.this) || !Prefs.phoneService(MainActivity.this)) return;
+                PhoneService.stop(MainActivity.this);
+                PhoneService.start(MainActivity.this);
+                PhoneWorker.schedule(MainActivity.this);
             });
         }
 
@@ -539,7 +584,11 @@ public class MainActivity extends AppCompatActivity {
 
         /** شروع گوش‌دادن در حالت «دستور» (جواب مستقیم به چت می‌رود، بدون اینکه کاربر روی صفحهٔ چت باشد). */
         @JavascriptInterface
-        public void startVoiceCommand() { runOnUiThread(() -> MainActivity.this.startVoice(true)); }
+        public void startVoiceCommand() { runOnUiThread(() -> MainActivity.this.startVoice(V_COMMAND)); }
+
+        /** گفتگوی صوتی نوبتی: بعد از مکثِ کوتاه خودش تمام می‌شود و متن را به window.onVoiceChat می‌دهد (خالی = ساکت بود). */
+        @JavascriptInterface
+        public void startVoiceChat() { runOnUiThread(() -> MainActivity.this.startVoice(V_CHAT)); }
 
         @JavascriptInterface
         public boolean speakAvailable() { return ttsFa; }

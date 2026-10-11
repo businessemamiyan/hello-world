@@ -19,6 +19,8 @@ from .ingest import is_sensitive, memory_entry, parse_bank_text
 from .memory import normalize_fa
 from .phone import norm_number
 from .media import decode_image_b64
+from .tts import TTSError
+from .crm import parse_due, tm
 
 log = logging.getLogger("api")
 
@@ -33,6 +35,11 @@ class PairIn(BaseModel):
 
 class ChatIn(BaseModel):
     text: str = Field(min_length=1, max_length=4000)
+
+
+class TTSIn(BaseModel):
+    text: str = Field(min_length=1, max_length=6000)
+    voice: str | None = Field(default=None, pattern="^(male|female)$")
 
 
 KIND_PATTERN = "^(" + "|".join(life.KINDS) + ")$"
@@ -172,6 +179,67 @@ class PayrollSettingsIn(BaseModel):
     unit: str | None = Field(default=None, pattern="^(toman|rial)$")
     day_basis: str | None = Field(default=None, pattern="^(auto|month|30|30cap)$")
     insurable: list[str] | None = Field(default=None, max_length=12)
+
+
+class CrmCustomerIn(BaseModel):
+    name: str = Field(min_length=1, max_length=80)
+    company: str | None = Field(default=None, max_length=80)
+    phone: str | None = Field(default=None, max_length=30)
+    email: str | None = Field(default=None, max_length=80)
+    status: str | None = Field(default=None, pattern="^(lead|prospect|customer|lost|inactive)$")
+    source: str | None = Field(default=None, max_length=60)
+    tags: str | None = Field(default=None, max_length=120)
+    notes: str | None = Field(default=None, max_length=1500)
+
+
+class CrmCustomerPatch(BaseModel):
+    name: str | None = Field(default=None, min_length=1, max_length=80)
+    company: str | None = Field(default=None, max_length=80)
+    phone: str | None = Field(default=None, max_length=30)
+    email: str | None = Field(default=None, max_length=80)
+    status: str | None = Field(default=None, pattern="^(lead|prospect|customer|lost|inactive)$")
+    source: str | None = Field(default=None, max_length=60)
+    tags: str | None = Field(default=None, max_length=120)
+    notes: str | None = Field(default=None, max_length=1500)
+
+
+class CrmNoteIn(BaseModel):
+    text: str = Field(min_length=1, max_length=800)
+
+
+class CrmDealIn(BaseModel):
+    customer_id: int
+    title: str = Field(min_length=1, max_length=120)
+    value: float = Field(default=0, ge=0, le=1e12)
+    stage: str = Field(default="lead", pattern="^(lead|contacted|proposal|negotiation|won|lost)$")
+    expected_close: str | None = Field(default=None, max_length=12)
+
+
+class CrmDealPatch(BaseModel):
+    title: str | None = Field(default=None, min_length=1, max_length=120)
+    value: float | None = Field(default=None, ge=0, le=1e12)
+    stage: str | None = Field(default=None, pattern="^(lead|contacted|proposal|negotiation|won|lost)$")
+    expected_close: str | None = Field(default=None, max_length=12)
+    lost_reason: str | None = Field(default=None, max_length=200)
+    paid: bool | None = None
+
+
+class CrmFollowupIn(BaseModel):
+    customer_id: int
+    due: str = Field(max_length=12)
+    note: str | None = Field(default=None, max_length=300)
+    channel: str | None = Field(default=None, pattern="^(call|sms|visit|telegram|whatsapp|email|other)$")
+    deal_id: int | None = None
+
+
+class CrmFollowupPatch(BaseModel):
+    done: bool | None = None
+    due: str | None = Field(default=None, max_length=12)
+
+
+class CrmContactIn(BaseModel):
+    kind: str = Field(pattern="^(call|sms)$")
+    text: str | None = Field(default=None, max_length=600)
 
 
 class ProjectItemIn(BaseModel):
@@ -411,6 +479,18 @@ def create_router(mem, svc):
     async def chat(body: ChatIn, dev=Depends(current_device)):
         reply = await svc.chat(body.text)
         return {"reply": reply, "ts": time.time()}
+
+    @router.post("/tts")
+    async def tts(body: TTSIn, dev=Depends(current_device)):
+        """متن → MP3 فارسی (برای «جواب‌ها رو بلند بخون» و گفتگوی صوتی)."""
+        engine = getattr(svc, "tts", None)
+        if engine is None:
+            raise HTTPException(status_code=503, detail="tts disabled")
+        try:
+            data = await engine.synth(body.text, body.voice or (await mem.kv_get("tts_voice")) or None)
+        except TTSError as e:
+            raise HTTPException(status_code=502, detail=str(e))
+        return Response(content=data, media_type="audio/mpeg", headers={"Cache-Control": "no-store"})
 
     @router.get("/dashboard")
     async def dashboard(range: str = "today", dev=Depends(current_device)):
@@ -974,5 +1054,144 @@ def create_router(mem, svc):
         if lines:
             await svc.notify_owner("ثبت شد:\n" + "\n".join(lines[:5]))
         return {"stored": stored, "duplicate": duplicate, "skipped": skipped, "parsed": parsed_n}
+
+
+    # ---------- فروش و پیگیری (CRM) ----------
+    def _crm():
+        c = getattr(svc, "crm", None)
+        if c is None:
+            raise HTTPException(status_code=503, detail="crm unavailable")
+        return c
+
+    async def _cust(cid):
+        c = await _crm().get_customer(cid)
+        if not c:
+            raise HTTPException(status_code=404, detail="customer not found")
+        return c
+
+    @router.get("/crm")
+    async def crm_dashboard(dev=Depends(current_device)):
+        return await _crm().dashboard()
+
+    @router.get("/crm/customers")
+    async def crm_customers(q: str = "", status: str = "", dev=Depends(current_device)):
+        return {"customers": await _crm().list_customers(q, status or None)}
+
+    @router.post("/crm/customers")
+    async def crm_customer_add(body: CrmCustomerIn, dev=Depends(current_device)):
+        crm = _crm()
+        data = body.model_dump(exclude_none=True)
+        st, found = await crm.find_customer(body.name)
+        if st == "one" and found[0]["norm"] == normalize_fa(body.name).strip():
+            raise HTTPException(status_code=409, detail="این مشتری از قبل هست")
+        if not data.get("phone"):
+            ph = await crm._phone_from_contacts(body.name)
+            if ph:
+                data["phone"] = ph
+        c = await crm.add_customer({**data, "source": data.get("source") or "اپ"})
+        await crm.add_event(c["id"], "note", "مشتری/سرنخ ثبت شد")
+        return c
+
+    @router.get("/crm/customers/{cid}")
+    async def crm_customer_detail(cid: int, dev=Depends(current_device)):
+        crm = _crm()
+        c = await _cust(cid)
+        return {"customer": c, "deals": await crm.list_deals(cid=cid), "followups": await crm.list_followups(cid=cid),
+                "done_followups": await crm.list_followups(done=True, cid=cid, limit=10), "events": await crm.events(cid)}
+
+    @router.patch("/crm/customers/{cid}")
+    async def crm_customer_patch(cid: int, body: CrmCustomerPatch, dev=Depends(current_device)):
+        await _cust(cid)
+        return await _crm().update_customer(cid, body.model_dump(exclude_none=True))
+
+    @router.delete("/crm/customers/{cid}")
+    async def crm_customer_delete(cid: int, dev=Depends(current_device)):
+        if not await _crm().delete_customer(cid):
+            raise HTTPException(status_code=404, detail="customer not found")
+        return {"ok": True}
+
+    @router.post("/crm/customers/{cid}/notes")
+    async def crm_customer_note(cid: int, body: CrmNoteIn, dev=Depends(current_device)):
+        await _cust(cid)
+        await _crm().add_event(cid, "note", body.text)
+        return {"ok": True}
+
+    @router.post("/crm/customers/{cid}/contact")
+    async def crm_customer_contact(cid: int, body: CrmContactIn, dev=Depends(current_device)):
+        """دکمهٔ «زنگ بزن / پیامک» در کارت مشتری: اقدام گوشی می‌سازد و برای تأیید یک‌لمسی می‌گذارد (مستقیم نمی‌فرستد)."""
+        c = await _cust(cid)
+        to = c["phone"] or c["name"]
+        notes = await _phone().create(body.kind, to, "" if body.kind == "call" else (body.text or ""), ("زنگ بزن" if body.kind == "call" else "پیامک بزن") + " به " + c["name"])
+        await _crm().add_event(cid, body.kind, ("تماس" if body.kind == "call" else "پیامک") + " (درخواست از اپ)" + (": " + body.text if body.text and body.kind == "sms" else ""))
+        return {"message": "\n".join(notes)}
+
+    @router.get("/crm/deals")
+    async def crm_deals(open: bool = False, dev=Depends(current_device)):
+        return {"deals": await _crm().list_deals(open_only=open)}
+
+    @router.post("/crm/deals")
+    async def crm_deal_add(body: CrmDealIn, dev=Depends(current_device)):
+        crm = _crm()
+        c = await _cust(body.customer_id)
+        d = await crm.add_deal(c["id"], body.title, body.value, body.stage, body.expected_close or "")
+        await crm.add_event(c["id"], "deal", "معامله «" + d["title"] + "» ساخته شد", d["id"])
+        return d
+
+    @router.patch("/crm/deals/{did}")
+    async def crm_deal_patch(did: int, body: CrmDealPatch, dev=Depends(current_device)):
+        crm = _crm()
+        old = await crm.get_deal(did)
+        if not old:
+            raise HTTPException(status_code=404, detail="deal not found")
+        d = await crm.update_deal(did, body.model_dump(exclude_none=True, exclude={"paid"}))
+        if body.stage == "won" and old["stage"] != "won" and body.paid and d["value"]:
+            c = await crm.get_customer(d["customer_id"])
+            await mem.add_memory([{"type": "income", "summary": "فروش به " + c["name"] + ": " + d["title"], "detail": None, "amount": d["value"],
+                                   "category": "فروش", "when_ts": time.time(), "fields": None}])
+            await crm.add_event(d["customer_id"], "payment", "دریافت " + tm(d["value"]))
+        return d
+
+    @router.delete("/crm/deals/{did}")
+    async def crm_deal_delete(did: int, dev=Depends(current_device)):
+        if not await _crm().delete_deal(did):
+            raise HTTPException(status_code=404, detail="deal not found")
+        return {"ok": True}
+
+    @router.get("/crm/followups")
+    async def crm_followups(done: bool = False, dev=Depends(current_device)):
+        return {"followups": await _crm().list_followups(done=done, limit=100 if done else 200)}
+
+    @router.post("/crm/followups")
+    async def crm_followup_add(body: CrmFollowupIn, dev=Depends(current_device)):
+        crm = _crm()
+        await _cust(body.customer_id)
+        due = parse_due(body.due)
+        if not due:
+            raise HTTPException(status_code=422, detail="تاریخ نامعتبر")
+        f = await crm.add_followup(body.customer_id, due, body.note or "", body.channel or "", body.deal_id)
+        if not f:
+            raise HTTPException(status_code=409, detail="این پیگیری از قبل هست")
+        return f
+
+    @router.patch("/crm/followups/{fid}")
+    async def crm_followup_patch(fid: int, body: CrmFollowupPatch, dev=Depends(current_device)):
+        crm = _crm()
+        f = await crm.get_followup(fid)
+        if not f:
+            raise HTTPException(status_code=404, detail="followup not found")
+        if body.due:
+            due = parse_due(body.due)
+            if not due:
+                raise HTTPException(status_code=422, detail="تاریخ نامعتبر")
+            await crm.move_followup(fid, due)
+        if body.done is not None:
+            await crm.finish_followup(fid, body.done)
+        return await crm.get_followup(fid)
+
+    @router.delete("/crm/followups/{fid}")
+    async def crm_followup_delete(fid: int, dev=Depends(current_device)):
+        if not await _crm().delete_followup(fid):
+            raise HTTPException(status_code=404, detail="followup not found")
+        return {"ok": True}
 
     return router

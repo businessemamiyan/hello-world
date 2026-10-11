@@ -41,6 +41,8 @@ async def amain():
     if cfg.stt_model:
         from .stt import STT
         bot.stt = STT(cfg.stt_model, os.path.join(cfg.data_dir, "models"))
+    from .tts import TTS
+    bot.tts = TTS()
     brain.context_provider = bot.context_prompt
     sched = Scheduler(bot, mem, cfg)
     app = create_app(mem, time.time(), bot)

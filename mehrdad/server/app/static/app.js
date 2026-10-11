@@ -24,7 +24,8 @@ const hash = new URLSearchParams(location.hash.slice(1));
 if (hash.get('t')) { token = hash.get('t'); store.set('mehrdad_token', token); history.replaceState(null, '', location.pathname); }
 if (!token && window.MehrdadNative && MehrdadNative.getToken) token = MehrdadNative.getToken() || '';
 const S = { tab: store.get('mehrdad_tab') || 'today', mview: 'tx', pmonth: '', pid: '', gview: 'goals', mrange: 'month', lrange: 'week', priv: store.get('mehrdad_priv') === '1',
-            cache: {}, busy: false };
+            cache: {}, busy: false, talk: false, talkSilent: 0, voiceIn: false,
+            sview: store.get('mehrdad_sview') || 'today', cq: '', cst: '', cid: null };
 applyTheme(store.get('mehrdad_theme') || 'night');
 
 function applyTheme(t) {
@@ -165,6 +166,83 @@ function taskRow(t) {
   return `<div class="m-task ${done ? 'done' : ''}"><button class="m-check" data-act="toggle" data-id="${t.id}" aria-label="انجام شد">✓</button>
     <div><div class="m-t">${esc(t.summary)}</div>${due ? `<div class="muted small">موعد: ${esc(jdate(due))}</div>` : ''}</div>
     <button class="x" data-act="edit" data-id="${t.id}" aria-label="ویرایش">✎</button><button class="x" data-act="del" data-id="${t.id}" aria-label="حذف">✕</button></div>`;
+}
+
+// ------------------------------------------------------------- صدا: خواندن جواب‌ها و گفتگوی صوتی
+const bubble = (cls, text) => `<div class="m-b ${cls}"><span class="m-txt">${esc(text)}</span>${cls === 'bot' ? '<button class="m-spk" data-act="speak" aria-label="بخون">🔊</button>' : ''}</div>`;
+function fillBot(el, text) {
+  if (!el) return;
+  el.classList.remove('typing'); el.removeAttribute('id');
+  el.innerHTML = `<span class="m-txt">${esc(text)}</span><button class="m-spk" data-act="speak" aria-label="بخون">🔊</button>`;
+}
+let curAudio = null;
+function stopSpeaking() {
+  if (curAudio) { const a = curAudio; curAudio = null; try { a.pause(); a.onended && a.onended(); } catch (e) { /* ignore */ } }
+}
+// جواب را با صدای سرور می‌خواند (فارسی طبیعی، مستقل از صداهای گوشی)؛ وقتی پخش تمام شد resolve می‌شود
+async function speakText(text) {
+  stopSpeaking();
+  const clean = String(text || '').trim(); if (!clean) return;
+  try {
+    const r = await fetch('/api/tts', { method: 'POST', headers: { 'Authorization': 'Bearer ' + token, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ text: clean, voice: store.get('mehrdad_voice') || undefined }) });
+    if (r.status === 401) { logout(true); return; }
+    if (!r.ok) throw new Error('tts ' + r.status);
+    const url = URL.createObjectURL(await r.blob());
+    await new Promise((ok, bad) => {
+      const a = new Audio(url); curAudio = a;
+      a.onended = () => { URL.revokeObjectURL(url); ok(); };
+      a.onerror = () => { URL.revokeObjectURL(url); bad(new Error('play')); };
+      a.play().catch(bad);
+    });
+  } catch (e) {
+    if (window.MehrdadNative && MehrdadNative.speakAvailable && MehrdadNative.speakAvailable()) MehrdadNative.speak(clean.slice(0, 600));
+    else toast('صدا پخش نشد؛ اینترنت یا فیلترشکن رو چک کن');
+  } finally { curAudio = null; }
+}
+const ttsAlways = () => store.get('mehrdad_tts') === '1';
+const ttsBtnLabel = () => ttsAlways() ? '🔊 جواب‌ها صوتی' : '🔇 جواب‌ها متنی';
+const talkBtnLabel = () => S.talk ? '⏹ قطع گفتگو' : '🗣️ گفتگوی صوتی';
+function talkUi() { const b = $('#talkBtn'); if (b) { b.textContent = talkBtnLabel(); b.classList.toggle('danger', !!S.talk); } }
+const TALK_STOP = /^(?:(?:ممنون|مرسی|باشه|ok)[\s،]*)?(?:تمام|تمومه|تمام شد|بس|بسه|بس کن|قطع|قطع کن|خداحافظ|خدافظ|خداحافظی|خدانگهدار|فعلا|فعلاً)[\s.!،؟]*$/i;
+function talkListen() {
+  if (!S.talk) return;
+  try { MehrdadNative.startVoiceChat(); } catch (e) { talkStop('گفتگوی صوتی فقط داخل اپ اندروید کار می‌کنه'); }
+}
+function talkStart() {
+  if (!(window.MehrdadNative && MehrdadNative.startVoiceChat)) return toast('گفتگوی صوتی با اپ اندروید کار می‌کنه؛ اینجا 🎤 رو بزن');
+  if (S.tab !== 'chat') go('chat');
+  S.talk = true; S.talkSilent = 0; talkUi(); talkListen();
+}
+function talkStop(msg) { S.talk = false; stopSpeaking(); talkUi(); if (msg) toast(msg); }
+window.onVoiceChatCancel = () => { if (S.talk) talkStop('گفتگو قطع شد'); };
+window.onVoiceChat = async text => {
+  if (!S.talk) return;
+  text = String(text || '').trim();
+  if (!text) { if (++S.talkSilent >= 2) return talkStop('صدایی نشنیدم؛ گفتگو تموم شد. دوباره 🗣️ رو بزن.'); return talkListen(); }
+  S.talkSilent = 0;
+  if (TALK_STOP.test(text)) { talkStop('خداحافظ 👋'); return; }
+  const reply = await chatTurn(text, true);
+  if (S.talk) talkListen();
+  return reply;
+};
+// یک نوبت چت با نمایش حباب‌ها (اگه روی صفحهٔ گفتگو باشیم) و اختیاری خواندن جواب
+async function chatTurn(text, speak) {
+  const list = $('#chatList');
+  if (list) {
+    const empt = $('.m-empty', list); if (empt) empt.remove();
+    list.insertAdjacentHTML('beforeend', `${bubble('me', text)}<div class="m-b bot typing" id="typing"><span class="m-spin"></span></div>`);
+    window.scrollTo(0, document.body.scrollHeight);
+  }
+  try {
+    const r = await api('/api/chat', { method: 'POST', body: { text } });
+    fillBot($('#typing'), r.reply); window.scrollTo(0, document.body.scrollHeight);
+    if (speak) await speakText(r.reply);
+    return r.reply;
+  } catch (e) {
+    if (e.message !== 'unauthorized') { toast('نشد: ' + e.message); const t = $('#typing'); if (t) { t.classList.remove('typing'); t.textContent = 'نتونستم به مغز برسم؛ دوباره امتحان کن.'; t.removeAttribute('id'); } if (S.talk) talkStop(); }
+    return null;
+  }
 }
 
 function composer(id, ph) {
@@ -512,8 +590,9 @@ async function viewGoals() {
 
 async function viewChat() {
   const r = await api('/api/history?limit=80');
-  const msgs = r.messages.map(m => `<div class="m-b ${m.role === 'user' ? 'me' : 'bot'}">${esc(m.text)}</div>`).join('');
-  return `<section class="pane"><div class="pane-title"><h1>گفتگو با مهرداد</h1></div>
+  const msgs = r.messages.map(m => bubble(m.role === 'user' ? 'me' : 'bot', m.text)).join('');
+  return `<section class="pane"><div class="pane-title"><h1>گفتگو با مهرداد</h1>
+      <div class="row"><button class="btn sm" id="ttsBtn" data-act="tts-toggle">${ttsBtnLabel()}</button><button class="btn sm primary${S.talk ? ' danger' : ''}" id="talkBtn" data-act="talk-toggle">${talkBtnLabel()}</button></div></div>
     <div class="m-chatwrap"><div class="m-chat" id="chatList">${msgs || empty('هنوز چیزی نگفتی.')}</div></div>
     <div class="m-composer-fixed">${composer('sayChat', 'بنویس یا با 🎤 بگو…')}</div></section>`;
 }
@@ -583,7 +662,190 @@ async function viewCoach() {
   </section>`;
 }
 
-const VIEWS = { today: viewToday, money: viewMoney, life: viewLife, coach: viewCoach, goals: viewGoals, chat: viewChat };
+// ------------------------------------------------------------- فروش و پیگیری (CRM)
+const CRM_ST = { lead: 'سرنخ', prospect: 'در حال مذاکره', customer: 'مشتری', lost: 'از دست رفته', inactive: 'غیرفعال' };
+const CRM_STAGE = { lead: 'سرنخ', contacted: 'تماس گرفته شد', proposal: 'قیمت دادم', negotiation: 'مذاکره', won: 'فروش شد ✅', lost: 'از دست رفت' };
+const CRM_OPEN = ['lead', 'contacted', 'proposal', 'negotiation'];
+const CRM_CH = { call: '📞 تماس', sms: '✉️ پیامک', visit: '🤝 دیدار', telegram: 'تلگرام', whatsapp: 'واتس‌اپ', email: 'ایمیل', other: 'سایر' };
+const CRM_EV = { note: '📝', stage: '📈', deal: '💼', sale: '💰', payment: '💵', call: '📞', sms: '✉️', followup: '✅' };
+const crmMoney = n => { n = Number(n) || 0; return n >= 1e9 ? fa((n / 1e9).toFixed(2).replace(/\.?0+$/, '')) + ' میلیارد' : n >= 1e6 ? fa((n / 1e6).toFixed(1).replace(/\.0$/, '')) + ' میلیون' : money(n); };
+const opts = (obj, cur) => Object.entries(obj).map(([k, v]) => `<option value="${k}"${k === cur ? ' selected' : ''}>${v}</option>`).join('');
+const crmSeg = () => `<div class="seg" role="group" style="justify-self:start">${[['today', 'پیگیری‌ها'], ['customers', 'مشتری‌ها'], ['pipeline', 'معامله‌ها']].map(([k, v]) =>
+  `<button data-act="crm-view" data-val="${k}" aria-pressed="${S.sview === k}">${v}</button>`).join('')}</div>`;
+
+async function viewCrm() {
+  const d = await api('/api/crm'); S.cache.crm = d;
+  $('#subtitle').textContent = d.today_jalali;
+  if (S.sview === 'customers') return viewCrmCustomers(d);
+  if (S.sview === 'pipeline') return viewCrmPipeline(d);
+  return viewCrmToday(d);
+}
+
+function crmFuRow(f, late) {
+  return `<div class="card m-fu"><div class="row spread"><button class="link" data-act="crm-open" data-id="${f.customer_id}">${esc(f.customer)}</button>
+      ${late ? `<span class="pill crit">${fa(f.days_late)} روز عقبه</span>` : `<span class="pill">${esc(jdate(f.due))}</span>`}</div>
+    ${f.note ? `<div class="small">${esc(f.note)}</div>` : ''}${f.channel ? `<div class="muted small">${CRM_CH[f.channel]}</div>` : ''}
+    <div class="row"><button class="btn sm primary" data-act="crm-fu-done" data-id="${f.id}">✅ انجام شد</button><button class="btn sm" data-act="crm-fu-tom" data-id="${f.id}">⏭ فردا</button>
+      ${f.phone ? `<button class="btn sm" data-act="crm-call" data-id="${f.customer_id}">📞 زنگ بزن</button><button class="btn sm" data-act="crm-sms" data-id="${f.customer_id}">✉️ پیامک</button>` : ''}</div></div>`;
+}
+
+function viewCrmToday(d) {
+  const f = d.followups, now = f.overdue.length + f.today.length;
+  return `<section class="pane">${crmSeg()}
+    <div class="north"><span class="eyebrow">فروش · ${esc(d.today_jalali)}</span>
+      <div class="fig"><strong class="num">${fa(now)}</strong><span>پیگیری برای امروز${f.overdue.length ? ` (${fa(f.overdue.length)} تا عقب‌افتاده)` : ''}</span></div>
+      <div class="meta"><span>معامله باز <b class="num">${fa(d.open_deals)}</b> · ${crmMoney(d.open_value)} تومان</span><span>فروش این ماه <b class="num m-pos">${crmMoney(d.won_month.value)}</b></span></div></div>
+    <div class="card ai"><h2>🗣️ بگو، خودش ثبت می‌کنه</h2><p class="muted small">مثلاً «با آقای کریمی برای پنل ۱۲۰ میلیون صحبت کردم، سه‌شنبه بهش زنگ بزنم» یا «فروش به رضا ۵ میلیون شد، پولشم گرفتم».</p>
+      ${composer('sayCrm', 'بنویس یا با 🎤 بگو…')}</div>
+    ${f.overdue.length ? `<h2>⏰ عقب‌افتاده</h2><div class="stack">${f.overdue.map(x => crmFuRow(x, true)).join('')}</div>` : ''}
+    <h2>📞 امروز</h2><div class="stack">${f.today.length ? f.today.map(x => crmFuRow(x, false)).join('') : `<div class="card">${empty('برای امروز پیگیری نداری 🎉')}</div>`}</div>
+    ${f.upcoming.length ? `<h2>📅 ۷ روز آینده</h2><div class="stack">${f.upcoming.map(x => crmFuRow(x, false)).join('')}</div>` : ''}
+    ${d.stale.length ? `<div class="card"><h2>⚠️ معامله‌هایی که پیگیری ندارن</h2><p class="muted small">بیشتر از ${fa(7)} روز دست بهشون نخورده و هیچ پیگیری هم نذاشتی:</p>
+      ${d.stale.slice(0, 6).map(x => `<div class="row spread small"><button class="link" data-act="crm-open" data-id="${x.customer_id}">${esc(x.customer)}</button><span>${esc(x.title)} · ${crmMoney(x.value)}</span></div>`).join('')}</div>` : ''}
+  </section>`;
+}
+
+const crmCustCard = c => `<div class="card m-cust"><div class="row spread"><button class="link" data-act="crm-open" data-id="${c.id}">${esc(c.name)}</button><span class="pill ${c.status === 'customer' ? 'good' : c.status === 'lost' ? 'crit' : c.status === 'prospect' ? 'gold' : ''}">${CRM_ST[c.status]}</span></div>
+  ${c.company ? `<div class="muted small">${esc(c.company)}</div>` : ''}
+  <div class="row small muted">${c.phone ? `<span class="num" dir="ltr">${esc(c.phone)}</span>` : ''}${c.open_deals ? `<span>💼 ${fa(c.open_deals)} معامله · ${crmMoney(c.open_value)}</span>` : ''}${c.next_due ? `<span>⏰ ${esc(jdate(c.next_due))}</span>` : ''}</div></div>`;
+
+async function viewCrmCustomers(d) {
+  const r = await api('/api/crm/customers?q=' + encodeURIComponent(S.cq || '') + (S.cst ? '&status=' + S.cst : ''));
+  return `<section class="pane">${crmSeg()}
+    <div class="pane-title"><h1>مشتری‌ها و سرنخ‌ها</h1><span class="muted small">${fa(d.customers)} نفر</span></div>
+    <div class="row" style="flex-wrap:nowrap"><input type="text" id="crmQ" data-act="crm-q" placeholder="جست‌وجو (اسم، شرکت، شماره)" value="${esc(S.cq || '')}">
+      <select data-act="crm-st-filter" style="max-width:130px"><option value="">همه</option>${opts(CRM_ST, S.cst || '')}</select></div>
+    <div id="crmList" class="stack">${r.customers.length ? r.customers.map(crmCustCard).join('') : `<div class="card">${empty('هنوز مشتری یا سرنخی نیست؛ پایین اضافه کن یا توی چت بگو.')}</div>`}</div>
+    <div class="card"><h2>➕ مشتری یا سرنخ تازه</h2><form class="form" data-form="crm-cust">
+      <label class="f full"><span>اسم</span><input type="text" name="name" required maxlength="80" placeholder="مثلاً آقای کریمی"></label>
+      <label class="f"><span>شرکت</span><input type="text" name="company" maxlength="80"></label>
+      <label class="f"><span>شماره</span><input type="text" name="phone" maxlength="30" dir="ltr" placeholder="خالی بذاری از مخاطبین گوشی برمی‌دارم"></label>
+      <label class="f"><span>وضعیت</span><select name="status">${opts(CRM_ST, 'lead')}</select></label>
+      <button class="btn primary" type="submit">افزودن</button></form></div></section>`;
+}
+
+const crmDealRow = (x, withCust) => `<div class="card m-deal"><div class="row spread"><b>${esc(x.title)}</b><span class="num">${crmMoney(x.value)}</span></div>
+  ${withCust ? `<button class="link small" data-act="crm-open" data-id="${x.customer_id}">${esc(x.customer)}</button>` : ''}
+  <div class="row"><select data-act="crm-deal-stage" data-id="${x.id}">${opts(CRM_STAGE, x.stage)}</select>
+    ${CRM_OPEN.includes(x.stage) ? `<button class="btn sm primary" data-act="crm-deal-won" data-id="${x.id}">🎉 فروش شد</button>` : ''}
+    <button class="x" data-act="crm-deal-del" data-id="${x.id}" aria-label="حذف">✕</button></div></div>`;
+
+async function viewCrmPipeline(d) {
+  const [dl, cs] = await Promise.all([api('/api/crm/deals'), api('/api/crm/customers')]);
+  const deals = dl.deals, by = st => deals.filter(x => x.stage === st);
+  const monthStart = new Date(); monthStart.setDate(1); monthStart.setHours(0, 0, 0, 0);
+  const won = by('won').sort((a, b) => (b.closed_ts || 0) - (a.closed_ts || 0)).slice(0, 8), lost = by('lost').slice(0, 5);
+  return `<section class="pane">${crmSeg()}
+    <div class="pane-title"><h1>قیف فروش</h1><span class="muted small">${fa(d.open_deals)} باز · ${crmMoney(d.open_value)} تومان${d.win_rate != null ? ` · موفقیت ${fa(d.win_rate)}٪` : ''}</span></div>
+    ${CRM_OPEN.map(st => { const ds = by(st); const sum = ds.reduce((s, x) => s + x.value, 0);
+      return `<div class="row spread"><h2>${CRM_STAGE[st]} <span class="muted small">${fa(ds.length)}</span></h2><span class="num small muted">${crmMoney(sum)}</span></div>
+        <div class="stack">${ds.length ? ds.map(x => crmDealRow(x, true)).join('') : `<div class="muted small">—</div>`}</div>`; }).join('')}
+    ${won.length ? `<h2>✅ فروش‌های اخیر</h2><div class="stack">${won.map(x => crmDealRow(x, true)).join('')}</div>` : ''}
+    ${lost.length ? `<details class="card"><summary>از دست رفته‌ها (${fa(by('lost').length)})</summary>${lost.map(x => `<div class="row spread small"><span>${esc(x.customer)} — ${esc(x.title)}</span><span class="muted">${esc(x.lost_reason || '')}</span></div>`).join('')}</details>` : ''}
+    <div class="card"><h2>➕ معامله تازه</h2>${cs.customers.length ? `<form class="form" data-form="crm-deal">
+      <label class="f full"><span>مشتری</span><select name="customer_id" required>${cs.customers.map(c => `<option value="${c.id}">${esc(c.name)}</option>`).join('')}</select></label>
+      <label class="f full"><span>عنوان</span><input type="text" name="title" required maxlength="120" placeholder="مثلاً پنل خورشیدی ۵ کیلووات"></label>
+      <label class="f"><span>مبلغ (تومان)</span><input type="text" name="value" inputmode="numeric" placeholder="۱۲۰۰۰۰۰۰۰"></label>
+      <label class="f"><span>مرحله</span><select name="stage">${opts(Object.fromEntries(CRM_OPEN.map(k => [k, CRM_STAGE[k]])), 'lead')}</select></label>
+      <button class="btn primary" type="submit">ساختن</button></form>` : empty('اول یه مشتری اضافه کن (تب مشتری‌ها).')}</div></section>`;
+}
+
+async function openCustomer(id) {
+  const r = await api('/api/crm/customers/' + id), c = r.customer;
+  const fuRow = f => `<div class="row spread"><span class="small"><span class="pill">${esc(jdate(f.due))}</span> ${esc(f.note || '')} ${f.channel ? `<span class="muted">${CRM_CH[f.channel]}</span>` : ''}</span>
+    <span class="row" style="gap:4px"><button class="btn sm primary" data-act="crm-fu-done" data-id="${f.id}" data-cid="${c.id}">✅</button><button class="btn sm" data-act="crm-fu-tom" data-id="${f.id}" data-cid="${c.id}">⏭ فردا</button>
+    <button class="x" data-act="crm-fu-del" data-id="${f.id}" data-cid="${c.id}" aria-label="حذف">✕</button></span></div>`;
+  sheet(`<div class="row spread"><h2>${esc(c.name)}</h2><button class="x" data-act="close">✕</button></div>
+    ${c.company ? `<div class="muted small">${esc(c.company)}</div>` : ''}
+    <div class="row"><select data-act="crm-cust-status" data-id="${c.id}">${opts(CRM_ST, c.status)}</select>${c.phone ? `<span class="num" dir="ltr">${esc(c.phone)}</span>` : '<span class="muted small">شماره ندارم</span>'}</div>
+    <div class="row"><button class="btn sm primary" data-act="crm-call" data-id="${c.id}">📞 زنگ بزن</button><button class="btn sm" data-act="crm-sms" data-id="${c.id}">✉️ پیامک</button></div>
+    <div id="crmPh"></div>
+    <span class="eyebrow">⏰ پیگیری‌ها</span>
+    <div class="stack6">${r.followups.length ? r.followups.map(fuRow).join('') : '<div class="muted small">پیگیری بازی نداره</div>'}</div>
+    <form class="form" data-form="crm-fu" data-id="${c.id}">
+      <label class="f"><span>کِی؟</span><select name="when"><option value="+1">فردا</option><option value="+3">۳ روز دیگه</option><option value="+7">هفتهٔ بعد</option><option value="+14">دو هفتهٔ بعد</option><option value="+30">یک ماه دیگه</option><option value="date">تاریخ دلخواه…</option></select></label>
+      <label class="f"><span>تاریخ دلخواه</span><input type="date" name="date"></label>
+      <label class="f full"><span>برای چی؟</span><input type="text" name="note" maxlength="300" placeholder="مثلاً زنگ بزنم جواب قیمت رو بگیرم"></label>
+      <label class="f"><span>از چه راهی؟</span><select name="channel"><option value="">—</option>${opts(CRM_CH, '')}</select></label>
+      <button class="btn primary" type="submit">+ پیگیری</button></form>
+    <span class="eyebrow">💼 معامله‌ها</span>
+    <div class="stack6">${r.deals.length ? r.deals.map(x => crmDealRow({ ...x, customer: c.name }, false)).join('') : '<div class="muted small">معامله‌ای نیست</div>'}</div>
+    <form class="form" data-form="crm-deal" data-id="${c.id}"><input type="hidden" name="customer_id" value="${c.id}">
+      <label class="f full"><span>معامله تازه</span><input type="text" name="title" required maxlength="120" placeholder="عنوان"></label>
+      <label class="f"><span>مبلغ (تومان)</span><input type="text" name="value" inputmode="numeric"></label>
+      <label class="f"><span>مرحله</span><select name="stage">${opts(Object.fromEntries(CRM_OPEN.map(k => [k, CRM_STAGE[k]])), 'lead')}</select></label>
+      <button class="btn primary" type="submit">+ معامله</button></form>
+    <span class="eyebrow">📝 تاریخچه</span>
+    <form class="row" data-form="crm-note" data-id="${c.id}" style="flex-wrap:nowrap"><input type="text" name="text" required maxlength="800" placeholder="یادداشت: تلفنی چی گفتن؟"><button class="btn primary" type="submit">ثبت</button></form>
+    <div class="stack6 small">${r.events.length ? r.events.map(e => `<div>${CRM_EV[e.kind] || '•'} <span class="muted">${esc(jdate(isoDay(e.ts)))}</span> ${esc(e.text || '')}</div>`).join('') : '<div class="muted">هنوز چیزی ثبت نشده</div>'}</div>
+    <details><summary class="muted small">ویرایش مشخصات</summary><form class="form" data-form="crm-cust-edit" data-id="${c.id}">
+      <label class="f"><span>اسم</span><input type="text" name="name" value="${esc(c.name)}" maxlength="80" required></label>
+      <label class="f"><span>شرکت</span><input type="text" name="company" value="${esc(c.company)}" maxlength="80"></label>
+      <label class="f"><span>شماره</span><input type="text" name="phone" value="${esc(c.phone)}" maxlength="30" dir="ltr"></label>
+      <label class="f full"><span>یادداشت کلی</span><textarea name="notes" rows="3" maxlength="1500">${esc(c.notes)}</textarea></label>
+      <button class="btn primary" type="submit">ذخیره</button></form>
+      <div class="row"><button class="btn danger sm" data-act="crm-cust-del" data-id="${c.id}">🗑 حذف مشتری</button></div></details>`);
+  S.cid = id;
+}
+async function crmReload() { if (!$('#modal').hidden && S.cid) { try { await openCustomer(S.cid); } catch (e) { /* مشتری حذف شده */ } } await renderKeep(); }
+async function crmFilter() {
+  const box = $('#crmList'); if (!box) return;
+  try { const r = await api('/api/crm/customers?q=' + encodeURIComponent(S.cq || '') + (S.cst ? '&status=' + S.cst : '')); box.innerHTML = r.customers.length ? r.customers.map(crmCustCard).join('') : `<div class="card">${empty('چیزی پیدا نشد.')}</div>`; } catch (e) { toast(e.message); }
+}
+let crmTimer;
+async function crmContact(id, kind) {
+  let text = '';
+  if (kind === 'sms') { text = (prompt('متن پیامک؟') || '').trim(); if (!text) return; }
+  const r = await api(`/api/crm/customers/${id}/contact`, { method: 'POST', body: { kind, text } });
+  toast('کارت تأیید ساخته شد');
+  const box = $('#crmPh'); if (box) { try { box.innerHTML = phoneCard(await api('/api/phone/status')); } catch (e) { box.textContent = r.message; } }
+  else { try { sheet(`<div class="row spread"><h2>📲 تأیید کن</h2><button class="x" data-act="close">✕</button></div><div id="crmPh2">${phoneCard(await api('/api/phone/status'))}</div>`); } catch (e) { toast(r.message); } }
+}
+async function crmAct(act, b) {
+  const id = b.dataset.id;
+  if (act === 'crm-view') { S.sview = b.dataset.val; store.set('mehrdad_sview', S.sview); return render(); }
+  if (act === 'crm-open') return openCustomer(id);
+  if (act === 'crm-fu-done') { await api('/api/crm/followups/' + id, { method: 'PATCH', body: { done: true } }); toast('✅ انجام شد'); return crmReload(); }
+  if (act === 'crm-fu-tom') { const t = new Date(Date.now() + 86400000).toISOString().slice(0, 10); await api('/api/crm/followups/' + id, { method: 'PATCH', body: { due: t } }); toast('⏭ شد فردا'); return crmReload(); }
+  if (act === 'crm-fu-del') { await api('/api/crm/followups/' + id, { method: 'DELETE' }); return crmReload(); }
+  if (act === 'crm-call') return crmContact(id, 'call');
+  if (act === 'crm-sms') return crmContact(id, 'sms');
+  if (act === 'crm-deal-won') {
+    const paid = confirm('پولش رو هم گرفتی؟ (تأیید = تو درآمدها هم ثبت بشه)');
+    await api('/api/crm/deals/' + id, { method: 'PATCH', body: { stage: 'won', paid } }); toast('🎉 فروش ثبت شد'); return crmReload();
+  }
+  if (act === 'crm-deal-del') { if (confirm('این معامله حذف بشه؟')) { await api('/api/crm/deals/' + id, { method: 'DELETE' }); return crmReload(); } return; }
+  if (act === 'crm-cust-del') { if (confirm('مشتری با همهٔ پیگیری‌ها و معامله‌هاش حذف بشه؟')) { await api('/api/crm/customers/' + id, { method: 'DELETE' }); S.cid = null; closeSheet(); toast('حذف شد'); return renderKeep(); } }
+}
+async function crmSubmit(kind, f, v) {
+  const id = f.dataset.id, val = x => { const n = Number(en(x || '')); return n >= 0 ? n : 0; };
+  if (kind === 'crm-cust') { await api('/api/crm/customers', { method: 'POST', body: { name: v.name.trim(), company: (v.company || '').trim() || undefined, phone: (v.phone || '').trim() || undefined, status: v.status } }); toast('ثبت شد ✓'); return renderKeep(); }
+  if (kind === 'crm-deal') { await api('/api/crm/deals', { method: 'POST', body: { customer_id: Number(v.customer_id), title: v.title.trim(), value: val(v.value), stage: v.stage } }); toast('معامله ساخته شد ✓'); return crmReload(); }
+  if (kind === 'crm-fu') {
+    const due = v.when === 'date' ? v.date : v.when; if (!due) return toast('تاریخ رو انتخاب کن');
+    await api('/api/crm/followups', { method: 'POST', body: { customer_id: Number(id), due, note: (v.note || '').trim() || undefined, channel: v.channel || undefined } }); toast('⏰ پیگیری ثبت شد'); return crmReload();
+  }
+  if (kind === 'crm-note') { await api(`/api/crm/customers/${id}/notes`, { method: 'POST', body: { text: v.text.trim() } }); toast('ثبت شد ✓'); return crmReload(); }
+  if (kind === 'crm-cust-edit') { await api('/api/crm/customers/' + id, { method: 'PATCH', body: { name: v.name.trim(), company: v.company.trim(), phone: v.phone.trim(), notes: v.notes.trim() } }); toast('ذخیره شد ✓'); return crmReload(); }
+}
+
+async function crmChange(t) {
+  try {
+    const a = t.dataset.act;
+    if (a === 'crm-cust-status') { await api('/api/crm/customers/' + t.dataset.id, { method: 'PATCH', body: { status: t.value } }); toast('ثبت شد ✓'); crmReload(); }
+    else if (a === 'crm-deal-stage') {
+      const body = { stage: t.value }; if (t.value === 'won') body.paid = confirm('پولش رو هم گرفتی؟ (تأیید = تو درآمدها هم ثبت بشه)');
+      await api('/api/crm/deals/' + t.dataset.id, { method: 'PATCH', body }); toast('رفت به «' + CRM_STAGE[t.value] + '»'); crmReload();
+    }
+    else if (a === 'crm-st-filter') { S.cst = t.value; crmFilter(); }
+  } catch (e) { if (e.message !== 'unauthorized') toast(e.message); }
+}
+document.addEventListener('input', ev => {
+  const t = ev.target; if (!t.dataset || t.dataset.act !== 'crm-q') return;
+  S.cq = t.value; clearTimeout(crmTimer); crmTimer = setTimeout(crmFilter, 250);
+});
+
+const VIEWS = { crm: viewCrm, today: viewToday, money: viewMoney, life: viewLife, coach: viewCoach, goals: viewGoals, chat: viewChat };
 async function renderKeep() { const y = window.scrollY; await render(); window.scrollTo(0, y); }
 
 async function render() {
@@ -711,7 +973,12 @@ async function renderPhoneSection() {
       <div class="muted">آخرین پیام پیام‌رسان که رسید: ${sv.last_notif ? agoFa(sv.last_notif) : 'هنوز چیزی نرسیده (دسترسی اعلان‌ها و تیک بالا باید روشن باشه)'}</div>
       <label class="row"><input type="checkbox" data-act="ph-service" ${nat.service ? 'checked' : ''}> کنترل گوشی (پیامک، تماس و جواب‌دادنی که تأیید می‌کنی از همین گوشی انجام بشه) ${sv.online ? '<span class="pill good">وصله</span>' : '<span class="pill warn">وصل نیست</span>'}</label>
       <label class="row"><input type="checkbox" data-act="ph-smsall" ${nat.smsAll ? 'checked' : ''}> همهٔ پیامک‌های تازه هم برای مهرداد ذخیره بشه (نه فقط بانکی؛ رمز یک‌بارمصرف هرگز)</label>
-      <div class="row"><button class="btn sm" data-act="ph-battery">جلوگیری از بسته‌شدن توسط باتری ${nat.battery ? '✓' : ''}</button></div>
+      <span class="eyebrow">🔌 پایداری اتصال</span>
+      <div class="row spread"><span>الان: ${sv.online ? '<b class="m-pos">وصله ✓</b>' : '<b class="m-neg">وصل نیست ✗</b>'} <span class="muted">${sv.last_seen ? '(آخرین ارتباط ' + agoFa(sv.last_seen) + ')' : ''}</span></span><button class="btn sm primary" data-act="ph-reconnect">🔄 وصلش کن</button></div>
+      <div class="muted">اگه هی قطع می‌شه، خودِ گوشی (به‌خصوص شیائومی) برنامه رو توی پس‌زمینه می‌کُشه. این موارد رو فقط یک بار انجام بده تا دیگه قطع نشه:</div>
+      <div class="row spread"><span>۱) بدون محدودیت باتری ${ok(nat.battery)}</span>${nat.battery ? '' : '<button class="btn sm" data-act="ph-battery-req">فعال کن</button>'}</div>
+      <div class="row spread"><span>۲) شروع خودکار (Autostart) برای MEHRDAD</span><button class="btn sm" data-act="ph-autostart">باز کن</button></div>
+      ${nat.xiaomi ? '<div class="row spread"><span>۳) شیائومی: «ذخیرهٔ باتری» ← بدون محدودیت</span><button class="btn sm" data-act="ph-miui-batt">باز کن</button></div><div class="muted">۴) صفحهٔ «برنامه‌های اخیر» رو باز کن، کارت MEHRDAD رو نگه دار و 🔒 قفل رو بزن (وگرنه با کشیدن، بسته می‌شه).</div>' : ''}
       <span class="eyebrow">🎤 بیدارکردن مهرداد با صدا</span>
       <div class="muted">«همیشه منتظر اسمش باشه» یعنی میکروفون دائم باز بمونه (باتری، حریم خصوصی و محدودیت اندروید)؛ به‌جاش این راه‌های سریع هست:</div>
       <div class="stack6">
@@ -721,7 +988,7 @@ async function renderPhoneSection() {
         <div>• بگو «هی گوگل، مهرداد رو باز کن»</div>
       </div>
       <div class="row"><button class="btn sm primary" data-act="ph-talk">🎤 همین الان تست کن</button></div>
-      <label class="row"><input type="checkbox" data-act="ph-tts" ${store.get('mehrdad_tts') === '1' ? 'checked' : ''}> جواب‌ها رو بلند بخون ${nat.ttsFa ? '✓' : '<span class="muted">(این گوشی صدای فارسی نداره)</span>'}</label>`
+      <div class="row"><button class="btn sm" data-act="ph-talk-chat">🗣️ گفتگوی صوتی (نوبتی)</button></div>`
         : '<div class="muted">ارسال پیامک و تماس و خواندن پیام‌رسان‌ها فقط داخل اپ اندروید ممکنه.</div>'}
       <label class="row"><input type="checkbox" data-act="ph-auto" ${sv.settings.auto_confirm ? 'checked' : ''}> ارسال بدون تأیید (فقط وقتی خودم اسم یا شمارهٔ گیرنده رو توی دستورم می‌گم)</label>
       ${hist ? `<span class="eyebrow">آخرین اقدام‌ها</span>${hist}` : ''}
@@ -732,11 +999,12 @@ window.onPhoneChanged = () => { if ($('#phoneBox')) renderPhoneSection(); };
 window.onVoiceCommand = async text => {
   if (!token) return;
   sheet(`<div class="row spread"><h2>🎤 مهرداد</h2><button class="x" data-act="close">✕</button></div>
-    <div class="m-b me" style="max-width:100%">${esc(text)}</div><div id="vcOut" class="m-b bot typing" style="max-width:100%"><span class="m-spin"></span></div><div id="vcPh"></div>`);
+    <div class="m-b me" style="max-width:100%">${esc(text)}</div><div id="vcOut" class="m-b bot typing" style="max-width:100%"><span class="m-spin"></span></div><div id="vcPh"></div>
+    <div class="row"><button class="btn sm primary" data-act="talk-from-sheet">🗣️ ادامهٔ گفتگوی صوتی</button></div>`);
   try {
     const r = await api('/api/chat', { method: 'POST', body: { text } });
     const o = $('#vcOut'); if (o) { o.classList.remove('typing'); o.textContent = r.reply; }
-    if (store.get('mehrdad_tts') === '1' && window.MehrdadNative && MehrdadNative.speakAvailable && MehrdadNative.speakAvailable()) MehrdadNative.speak(String(r.reply).split('\n\n')[0]);
+    speakText(r.reply);                                                       // با صدا صدا زدی → جواب هم صوتی
     try { const ps = await api('/api/phone/status'); const box = $('#vcPh'); if (box) box.innerHTML = phoneCard(ps); } catch (e) { /* فقط کارت تأیید نیامد */ }
   } catch (e) { const o = $('#vcOut'); if (o) { o.classList.remove('typing'); o.textContent = 'نشد: ' + e.message; } }
 };
@@ -752,6 +1020,10 @@ function openSettings() {
     <div class="stack"><span class="eyebrow">تم</span><div class="seg">${Object.entries(THEMES).map(([k, v]) =>
       `<button data-act="theme" data-val="${k}" aria-pressed="${(document.documentElement.dataset.theme || 'night') === k}">${v}</button>`).join('')}</div>
     ${natHtml}
+    <span class="eyebrow">🔊 صدای مهرداد</span>
+    <label class="row"><input type="checkbox" data-act="ph-tts" ${ttsAlways() ? 'checked' : ''}> همهٔ جواب‌ها رو با صدا بخون <span class="muted">(وقتی خودت با 🎤 یا صدا زدن حرف بزنی، جواب صوتی همیشه هست)</span></label>
+    <div class="row spread"><span>صدا</span><select data-act="ph-voice"><option value="male"${store.get('mehrdad_voice') !== 'female' ? ' selected' : ''}>مرد (فرید)</option><option value="female"${store.get('mehrdad_voice') === 'female' ? ' selected' : ''}>زن (دلارا)</option></select></div>
+    <div class="row"><button class="btn sm" data-act="ph-voice-test">▶ امتحان صدا</button></div>
     <span class="eyebrow">📲 دسترسی مهرداد به گوشی</span><div id="phoneBox"><span class="m-spin"></span></div>
     <label class="row"><input type="checkbox" id="privChk" ${S.priv ? 'checked' : ''}> نمایش بخش‌های خصوصی (🔒)</label>
     <p class="muted small">پیامک بانکی و اعلان‌های مالی رو اپ اندروید می‌فرسته. برای قطع این دستگاه در تلگرام /devices و /unpair.</p>
@@ -771,19 +1043,21 @@ function pairScreen() {
 // ------------------------------------------------------------- گفتن (چت / ضبط سریع)
 async function say(forId) {
   const ta = $('#' + forId); const text = ta.value.trim(); if (!text || S.busy) return;
-  S.busy = true; ta.value = '';
+  S.busy = true; ta.value = ''; ta.style.height = '';
+  const speak = S.voiceIn || ttsAlways(); S.voiceIn = false;            // با صدا گفت یا «جواب صوتی» روشنه → جواب هم خوانده می‌شود
   const send = $(`[data-act=say][data-for=${forId}]`); if (send) send.disabled = true;
   if (forId === 'sayChat') {
     const list = $('#chatList'); const empt = $('.m-empty', list); if (empt) empt.remove();
-    list.insertAdjacentHTML('beforeend', `<div class="m-b me">${esc(text)}</div><div class="m-b bot typing" id="typing"><span class="m-spin"></span></div>`);
+    list.insertAdjacentHTML('beforeend', `${bubble('me', text)}<div class="m-b bot typing" id="typing"><span class="m-spin"></span></div>`);
     window.scrollTo(0, document.body.scrollHeight);
   } else toast('در حال ثبت…');
   try {
     const r = await api('/api/chat', { method: 'POST', body: { text } });
-    if (forId === 'sayChat') { const t = $('#typing'); if (t) { t.classList.remove('typing'); t.removeAttribute('id'); t.textContent = r.reply; } window.scrollTo(0, document.body.scrollHeight); }
+    if (forId === 'sayChat') { fillBot($('#typing'), r.reply); window.scrollTo(0, document.body.scrollHeight); }
     else { toast(r.reply.length > 110 ? r.reply.slice(0, 110) + '…' : r.reply); await render(); }
+    if (speak) speakText(r.reply);
   } catch (e) {
-    if (e.message !== 'unauthorized') { toast('نشد: ' + e.message); const t = $('#typing'); if (t) t.textContent = 'نتونستم به مغز برسم؛ دوباره امتحان کن.'; ta.value = text; }
+    if (e.message !== 'unauthorized') { toast('نشد: ' + e.message); const t = $('#typing'); if (t) { t.classList.remove('typing'); t.removeAttribute('id'); t.textContent = 'نتونستم به مغز برسم؛ دوباره امتحان کن.'; } ta.value = text; }
   } finally { S.busy = false; const s2 = $(`[data-act=say][data-for=${forId}]`); if (s2) s2.disabled = false; }
 }
 async function downscale(file, max = 1600) {
@@ -803,16 +1077,17 @@ async function sendPhoto(file, forId) {
   const inChat = forId === 'sayChat' && $('#chatList');
   if (inChat) {
     const list = $('#chatList'); const empt = $('.m-empty', list); if (empt) empt.remove();
-    list.insertAdjacentHTML('beforeend', `<div class="m-b me">📷 ${esc(caption || 'عکس')}</div><div class="m-b bot typing" id="typing"><span class="m-spin"></span></div>`);
+    list.insertAdjacentHTML('beforeend', `${bubble('me', '📷 ' + (caption || 'عکس'))}<div class="m-b bot typing" id="typing"><span class="m-spin"></span></div>`);
     window.scrollTo(0, document.body.scrollHeight);
   } else toast('مهرداد داره عکس رو می‌خونه…');
   try {
     const image = await downscale(file);
     const r = await api('/api/chat/image', { method: 'POST', body: { image, text: caption } });
-    if (inChat) { const t = $('#typing'); if (t) { t.classList.remove('typing'); t.removeAttribute('id'); t.textContent = r.reply; } window.scrollTo(0, document.body.scrollHeight); }
+    if (inChat) { fillBot($('#typing'), r.reply); window.scrollTo(0, document.body.scrollHeight); }
     else { toast(r.reply.length > 110 ? r.reply.slice(0, 110) + '…' : r.reply); await render(); }
+    if (ttsAlways()) speakText(r.reply);
   } catch (e) {
-    if (e.message !== 'unauthorized') { toast('نشد: ' + e.message); const t = $('#typing'); if (t) t.textContent = 'عکس رو نتونستم بخونم؛ دوباره امتحان کن.'; if (ta) ta.value = caption; }
+    if (e.message !== 'unauthorized') { toast('نشد: ' + e.message); const t = $('#typing'); if (t) { t.classList.remove('typing'); t.textContent = 'عکس رو نتونستم بخونم؛ دوباره امتحان کن.'; } if (ta) ta.value = caption; }
   } finally { S.busy = false; }
 }
 document.addEventListener('change', ev => {
@@ -823,11 +1098,12 @@ document.addEventListener('change', ev => {
 
 function mic(forId) {
   const ta = $('#' + forId);
-  if (window.MehrdadNative && MehrdadNative.startVoice) { window.onVoiceText = t => { ta.value = (ta.value.trim() ? ta.value.trim() + ' ' : '') + t; ta.focus(); }; MehrdadNative.startVoice(); return; }
+  stopSpeaking();
+  if (window.MehrdadNative && MehrdadNative.startVoice) { window.onVoiceText = t => { ta.value = (ta.value.trim() ? ta.value.trim() + ' ' : '') + t; S.voiceIn = true; ta.focus(); }; MehrdadNative.startVoice(); return; }
   const SR = window.SpeechRecognition || window.webkitSpeechRecognition; if (!SR) return toast('گفتار در این مرورگر نیست');
   const rec = new SR(); rec.lang = 'fa-IR'; rec.interimResults = false;
   const btn = $(`[data-act=mic][data-for=${forId}]`); btn.classList.add('on');
-  rec.onresult = e => { ta.value = e.results[0][0].transcript; ta.focus(); };
+  rec.onresult = e => { ta.value = e.results[0][0].transcript; S.voiceIn = true; ta.focus(); };
   rec.onend = () => btn.classList.remove('on'); rec.onerror = () => { btn.classList.remove('on'); toast('گفتار نشد'); };
   rec.start();
 }
@@ -842,23 +1118,34 @@ document.addEventListener('click', async ev => {
   const b = ev.target.closest('[data-act]'); if (!b) return;
   const act = b.dataset.act, id = b.dataset.id;
   try {
-    if (act === 'close') closeSheet();
+    if (act.startsWith('crm-')) await crmAct(act, b);
+    else if (act === 'close') closeSheet();
     else if (act === 'reload') render();
     else if (act === 'seg') { S[b.dataset.scope] = b.dataset.val; render(); }
     else if (act === 'edit') openEdit(id);
     else if (act === 'phone-ok' || act === 'phone-no') {
       const r = await api(`/api/phone/actions/${id}/${act === 'phone-ok' ? 'approve' : 'cancel'}`, { method: 'POST' });
       toast(r.message || 'انجام شد'); render();
-      if ($('#vcPh')) { try { $('#vcPh').innerHTML = phoneCard(await api('/api/phone/status')); } catch (e) { /* ignore */ } }
+      const phBox = $('#vcPh') || $('#crmPh') || $('#crmPh2');
+      if (phBox) { try { phBox.innerHTML = phoneCard(await api('/api/phone/status')); } catch (e) { /* ignore */ } }
     }
     else if (act === 'ph-perm') MehrdadNative.requestPhonePermissions(b.dataset.p);
     else if (act === 'ph-sync-contacts') { toast('دارم مخاطبین رو همگام می‌کنم…'); MehrdadNative.syncContacts(); }
     else if (act === 'ph-sync-sms') { toast('دارم پیامک‌ها رو می‌خونم…'); MehrdadNative.syncSms(30); }
     else if (act === 'ph-battery') MehrdadNative.openBatterySettings();
+    else if (act === 'ph-battery-req') MehrdadNative.requestBatteryExemption();
+    else if (act === 'ph-autostart') MehrdadNative.openAutostart();
+    else if (act === 'ph-miui-batt') MehrdadNative.openMiuiBattery();
+    else if (act === 'ph-reconnect') { MehrdadNative.restartPhoneService(); toast('دارم وصلش می‌کنم…'); setTimeout(renderPhoneSection, 4000); setTimeout(renderPhoneSection, 12000); }
     else if (act === 'ph-sync-calls') { toast('دارم تماس‌ها رو می‌خونم…'); MehrdadNative.syncCalls(); }
     else if (act === 'ph-sync-cal') { toast('دارم تقویم رو همگام می‌کنم…'); MehrdadNative.syncCalendar(); }
     else if (act === 'ph-assistant') MehrdadNative.openAssistantSettings();
     else if (act === 'ph-talk') { closeSheet(); MehrdadNative.startVoiceCommand(); }
+    else if (act === 'ph-talk-chat' || act === 'talk-from-sheet') { closeSheet(); talkStart(); }
+    else if (act === 'ph-voice-test') speakText('سلام، من مهرداد هستم. اگه صدامو می‌شنوی، همه‌چی درسته.');
+    else if (act === 'speak') { const m = b.closest('.m-b'), tx = m && $('.m-txt', m); if (tx) { stopSpeaking(); speakText(tx.textContent); } }
+    else if (act === 'tts-toggle') { if (ttsAlways()) store.del('mehrdad_tts'); else store.set('mehrdad_tts', '1'); b.textContent = ttsBtnLabel(); toast(ttsAlways() ? 'از این به بعد جواب‌ها صوتی هم می‌شه' : 'جواب‌ها فقط متنی (با 🔊 کنار هر پیام می‌تونی بشنوی)'); }
+    else if (act === 'talk-toggle') { if (S.talk) talkStop(); else talkStart(); }
     else if (act === 'n-sms') MehrdadNative.requestSmsPermission();
     else if (act === 'n-notif') MehrdadNative.openNotificationAccess();
     else if (act === 'n-update') { closeSheet(); MehrdadNative.checkUpdate(); }
@@ -968,7 +1255,9 @@ document.addEventListener('change', async ev => {
   else if (t.dataset.act === 'ph-msgr') {
     try { MehrdadNative.setMessengerCapture(t.checked); toast(t.checked ? 'از این به بعد پیام‌های پیام‌رسان‌ها رو هم می‌بینم' : 'دیگه پیام‌رسان‌ها رو نمی‌خونم'); setTimeout(renderPhoneSection, 800); } catch (e) { toast(e.message); }
   }
-  else if (t.dataset.act === 'ph-tts') { store.set('mehrdad_tts', t.checked ? '1' : '0'); toast(t.checked ? 'جواب‌های صوتی روشن شد' : 'جواب‌های صوتی خاموش شد'); }
+  else if ((t.dataset.act || '').startsWith('crm-')) crmChange(t);
+  else if (t.dataset.act === 'ph-tts') { if (t.checked) store.set('mehrdad_tts', '1'); else store.del('mehrdad_tts'); toast(t.checked ? 'از این به بعد همهٔ جواب‌ها صوتی هم هست' : 'فقط وقتی با صدا حرف بزنی جواب صوتی می‌گیری'); }
+  else if (t.dataset.act === 'ph-voice') { store.set('mehrdad_voice', t.value); toast(t.value === 'female' ? 'صدا: دلارا' : 'صدا: فرید'); speakText('سلام، من مهرداد هستم. این صدای منه.'); }
   else if (t.dataset.act === 'ph-smsall') {
     try { MehrdadNative.setSmsAll(t.checked); await api('/api/phone/settings', { method: 'PUT', body: { sms_all: t.checked } }); toast('ذخیره شد'); } catch (e) { toast(e.message); }
   }
@@ -1000,8 +1289,15 @@ document.addEventListener('toggle', async ev => {
   catch (e) { d.dataset.loaded = ''; if (box) box.textContent = 'باز نشد: ' + e.message; }
 }, true);
 
+// روی گوشی/تبلت (صفحه‌کلید لمسی) اینتر = سطر بعد؛ ارسال فقط با دکمه. روی کامپیوتر اینتر = ارسال، Shift+Enter = سطر بعد.
+const isTouch = () => (window.matchMedia && matchMedia('(pointer: coarse)').matches) || navigator.maxTouchPoints > 0 || /Android|iPhone|iPad/i.test(navigator.userAgent);
 document.addEventListener('keydown', ev => {
-  if (ev.target.matches && ev.target.matches('textarea[id^=say]') && ev.key === 'Enter' && !ev.shiftKey && !ev.isComposing) { ev.preventDefault(); say(ev.target.id); }
+  if (ev.target.matches && ev.target.matches('textarea[id^=say]') && ev.key === 'Enter' && !ev.shiftKey && !ev.isComposing && !isTouch()) { ev.preventDefault(); say(ev.target.id); }
+});
+// باکس نوشتن با متن بلندتر می‌شود (تا سقف مشخص)
+document.addEventListener('input', ev => {
+  const ta = ev.target; if (!ta.matches || !ta.matches('textarea[id^=say]')) return;
+  ta.style.height = 'auto'; ta.style.height = Math.min(ta.scrollHeight + 2, 180) + 'px';
 });
 
 document.addEventListener('submit', async ev => {
@@ -1016,6 +1312,7 @@ document.addEventListener('submit', async ev => {
       if (window.MehrdadNative && MehrdadNative.savePairing) MehrdadNative.savePairing(location.origin, token);
       toast('وصل شد ✓'); return boot();
     }
+    if (kind.startsWith('crm-')) { await crmSubmit(kind, f, v); return; }
     if (kind === 'proj-item') { await api('/api/projects/' + encodeURIComponent(S.pid) + '/items', { method: 'POST', body: { kind: v.kind, text: v.text.trim() } }); toast('ثبت شد ✓'); return renderKeep(); }
     if (kind === 'proj-new') { const r = await api('/api/projects', { method: 'POST', body: { name: v.name.trim() } }); S.pid = r.id; toast('پروژه ساخته شد'); return render(); }
     if (kind === 'payvar') {
