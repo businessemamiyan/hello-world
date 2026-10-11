@@ -21,6 +21,7 @@ from .phone import norm_number
 from .media import decode_image_b64
 from .tts import TTSError
 from .crm import parse_due, tm
+from .coaches import CoachRoomError
 
 log = logging.getLogger("api")
 
@@ -303,6 +304,22 @@ class CoachAnswerIn(BaseModel):
     idx: int = Field(ge=0, le=5)
     kind: str = Field(default="q", pattern="^[qe]$")
     text: str = Field(min_length=1, max_length=2000)
+
+
+class CoachRoomAskIn(BaseModel):
+    text: str = Field(min_length=1, max_length=2000)
+
+
+class CoachRoomLessonIn(BaseModel):
+    topic: str = Field(default="", max_length=300)
+
+
+class CoachRoomPathIn(BaseModel):
+    goal: str = Field(default="", max_length=300)
+
+
+class CoachRoomDoneIn(BaseModel):
+    on: bool = True
 
 
 class CoachTeachIn(BaseModel):
@@ -784,6 +801,75 @@ def create_router(mem, svc):
         if c is None:
             raise HTTPException(status_code=503, detail="coach unavailable")
         return c
+
+    # ---------- مربی‌های تخصصی (کلاس‌ها) ----------
+    def _rooms():
+        c = getattr(svc, "coaches", None)
+        if c is None:
+            raise HTTPException(status_code=503, detail="coaches unavailable")
+        return c
+
+    @router.get("/coaches")
+    async def coaches_list(dev=Depends(current_device)):
+        return {"coaches": await _rooms().listing()}
+
+    @router.get("/coaches/{cid}")
+    async def coaches_room(cid: str, dev=Depends(current_device)):
+        d = await _rooms().detail(cid)
+        if d is None:
+            raise HTTPException(status_code=404, detail="coach not found")
+        return d
+
+    @router.post("/coaches/{cid}/path")
+    async def coaches_path(cid: str, body: CoachRoomPathIn, dev=Depends(current_device)):
+        try:
+            r = await _rooms().make_path(cid, body.goal)
+        except CoachRoomError as e:
+            raise HTTPException(status_code=502, detail=str(e))
+        except Exception:
+            log.exception("coach path failed")
+            raise HTTPException(status_code=502, detail="مربی الان جواب نداد؛ کمی بعد دوباره امتحان کن")
+        if r is None:
+            raise HTTPException(status_code=404, detail="coach not found")
+        return {"curriculum": r["curriculum"]}
+
+    @router.post("/coaches/{cid}/lesson")
+    async def coaches_lesson(cid: str, body: CoachRoomLessonIn, dev=Depends(current_device)):
+        try:
+            r = await _rooms().next_lesson(cid, body.topic)
+        except CoachRoomError as e:
+            raise HTTPException(status_code=502, detail=str(e))
+        except Exception:
+            log.exception("coach lesson failed")
+            raise HTTPException(status_code=502, detail="مربی الان جواب نداد؛ کمی بعد دوباره امتحان کن")
+        if r is None:
+            raise HTTPException(status_code=404, detail="coach not found")
+        return r["lesson"]
+
+    @router.post("/coaches/{cid}/ask")
+    async def coaches_ask(cid: str, body: CoachRoomAskIn, dev=Depends(current_device)):
+        try:
+            reply = await _rooms().ask(cid, body.text)
+        except CoachRoomError as e:
+            raise HTTPException(status_code=502, detail=str(e))
+        except Exception:
+            log.exception("coach ask failed")
+            raise HTTPException(status_code=502, detail="مربی الان جواب نداد؛ کمی بعد دوباره امتحان کن")
+        if reply is None:
+            raise HTTPException(status_code=404, detail="coach not found")
+        return {"reply": reply, "ts": time.time()}
+
+    @router.post("/coaches/{cid}/lessons/{n}/done")
+    async def coaches_done(cid: str, n: int, body: CoachRoomDoneIn, dev=Depends(current_device)):
+        if not await _rooms().set_done(cid, n, body.on):
+            raise HTTPException(status_code=404, detail="lesson not found")
+        return {"ok": True}
+
+    @router.delete("/coaches/{cid}")
+    async def coaches_reset(cid: str, dev=Depends(current_device)):
+        if not await _rooms().reset(cid):
+            raise HTTPException(status_code=404, detail="coach not found")
+        return {"ok": True}
 
     @router.get("/coach")
     async def coach_state(dev=Depends(current_device)):

@@ -15,6 +15,7 @@ from .payroll import Payroll
 from .projects import Projects
 from .phone import Phone
 from .crm import Crm
+from .coaches import Coaches
 from . import payroll as payroll_mod
 from .media import MAX_IMAGE_BYTES, sniff_image
 from .memory import normalize_fa, today_str
@@ -104,6 +105,7 @@ class Bot:
         self.projects = Projects(mem)
         self.phone = Phone(self)
         self.crm = Crm(self)
+        self.coaches = Coaches(self)
         self.tg_agent = None              # app.agent_tg.TelegramAgent؛ main وصلش می‌کند
         self.stt = None                   # app.stt.STT؛ main آن را وصل می‌کند (None = ویس خاموش)
         self.tts = None                   # app.tts.TTS؛ جواب صوتی (اپ و ویس تلگرام)
@@ -170,6 +172,12 @@ class Bot:
                 parts.append(proj)
         except Exception:
             log.exception("چکیدهٔ پروژه‌ها ساخته نشد")
+        try:
+            cl = await self.coaches.prompt()
+            if cl:
+                parts.append(cl)
+        except Exception:
+            log.exception("چکیدهٔ کلاس‌های مربی ساخته نشد")
         try:
             crm = await self.crm.prompt()
             if crm:

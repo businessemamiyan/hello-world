@@ -594,6 +594,11 @@ public class MainActivity extends AppCompatActivity {
         public boolean speakAvailable() { return ttsFa; }
 
         @JavascriptInterface
+        public void stopSpeak() {
+            runOnUiThread(() -> { if (tts != null) { try { tts.stop(); } catch (Exception ignored) { } } });
+        }
+
+        @JavascriptInterface
         public void speak(String text) {
             runOnUiThread(() -> { if (tts != null && ttsFa && text != null) tts.speak(text, TextToSpeech.QUEUE_FLUSH, null, "mehrdad"); });
         }

@@ -11,8 +11,8 @@ android {
         minSdk 26
         targetSdk 34
         // هر انتشار باید versionCode بزرگ‌تری داشته باشد، وگرنه اندروید به‌روزرسانی را رد می‌کند
-        versionCode 8
-        versionName "1.7"
+        versionCode 9
+        versionName "1.8"
     }
 
     signingConfigs {

@@ -103,3 +103,12 @@ details>summary{cursor:pointer;padding:6px 0}
 .m-fu,.m-deal,.m-cust{gap:8px}
 .m-fu select,.m-deal select{width:auto;min-height:36px}
 .form select{min-height:40px}
+
+.stop-spk{position:fixed;top:64px;left:50%;transform:translateX(-50%);z-index:60;border:0;border-radius:999px;padding:9px 20px;background:var(--crit,#d94a4a);color:#fff;font-weight:900;font-size:1rem;box-shadow:0 6px 18px rgba(0,0,0,.35)}
+.stop-spk[hidden]{display:none}
+
+.m-coaches{display:grid;grid-template-columns:repeat(2,1fr);gap:10px}
+.m-coach{display:grid;gap:6px;justify-items:start;text-align:start;padding:14px;cursor:pointer;color:inherit;font:inherit;min-height:0}
+.m-coach .m-ce{font-size:1.8rem;line-height:1}
+.m-lesson summary{cursor:pointer}
+.m-coach .pill{white-space:normal}

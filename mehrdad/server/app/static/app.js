@@ -25,7 +25,8 @@ if (hash.get('t')) { token = hash.get('t'); store.set('mehrdad_token', token); h
 if (!token && window.MehrdadNative && MehrdadNative.getToken) token = MehrdadNative.getToken() || '';
 const S = { tab: store.get('mehrdad_tab') || 'today', mview: 'tx', pmonth: '', pid: '', gview: 'goals', mrange: 'month', lrange: 'week', priv: store.get('mehrdad_priv') === '1',
             cache: {}, busy: false, talk: false, talkSilent: 0, voiceIn: false,
-            sview: store.get('mehrdad_sview') || 'today', cq: '', cst: '', cid: null };
+            sview: store.get('mehrdad_sview') || 'today', cq: '', cst: '', cid: null,
+            cview: store.get('mehrdad_cview') || 'today', coachId: null };
 applyTheme(store.get('mehrdad_theme') || 'night');
 
 function applyTheme(t) {
@@ -175,20 +176,31 @@ function fillBot(el, text) {
   el.classList.remove('typing'); el.removeAttribute('id');
   el.innerHTML = `<span class="m-txt">${esc(text)}</span><button class="m-spk" data-act="speak" aria-label="بخون">🔊</button>`;
 }
-let curAudio = null;
+let curAudio = null, speakSeq = 0, speakAbort = null;
+function setSpeaking(on) { const b = $('#stopSpk'); if (b) b.hidden = !on; }
+// قطع هر صحبتی که در جریان است (دکمهٔ «ساکت»، رفتن به صفحهٔ دیگر، فرستادن پیام تازه، رفتن اپ به پس‌زمینه)
 function stopSpeaking() {
+  speakSeq++;
+  if (speakAbort) { try { speakAbort.abort(); } catch (e) { /* ignore */ } speakAbort = null; }
   if (curAudio) { const a = curAudio; curAudio = null; try { a.pause(); a.onended && a.onended(); } catch (e) { /* ignore */ } }
+  try { if (window.MehrdadNative && MehrdadNative.stopSpeak) MehrdadNative.stopSpeak(); } catch (e) { /* ignore */ }
+  setSpeaking(false);
 }
-// جواب را با صدای سرور می‌خواند (فارسی طبیعی، مستقل از صداهای گوشی)؛ وقتی پخش تمام شد resolve می‌شود
+// جواب را با صدای سرور می‌خواند (فارسی طبیعی، مستقل از صداهای گوشی)؛ وقتی پخش تمام (یا قطع) شد resolve می‌شود
 async function speakText(text) {
   stopSpeaking();
   const clean = String(text || '').trim(); if (!clean) return;
+  const my = speakSeq, ac = new AbortController(); speakAbort = ac;
+  setSpeaking(true);
   try {
-    const r = await fetch('/api/tts', { method: 'POST', headers: { 'Authorization': 'Bearer ' + token, 'Content-Type': 'application/json' },
+    const r = await fetch('/api/tts', { method: 'POST', headers: { 'Authorization': 'Bearer ' + token, 'Content-Type': 'application/json' }, signal: ac.signal,
       body: JSON.stringify({ text: clean, voice: store.get('mehrdad_voice') || undefined }) });
+    if (my !== speakSeq) return;
     if (r.status === 401) { logout(true); return; }
     if (!r.ok) throw new Error('tts ' + r.status);
-    const url = URL.createObjectURL(await r.blob());
+    const blob = await r.blob();
+    if (my !== speakSeq) return;
+    const url = URL.createObjectURL(blob);
     await new Promise((ok, bad) => {
       const a = new Audio(url); curAudio = a;
       a.onended = () => { URL.revokeObjectURL(url); ok(); };
@@ -196,9 +208,10 @@ async function speakText(text) {
       a.play().catch(bad);
     });
   } catch (e) {
+    if (my !== speakSeq || e.name === 'AbortError') return;                    // خودت قطعش کردی
     if (window.MehrdadNative && MehrdadNative.speakAvailable && MehrdadNative.speakAvailable()) MehrdadNative.speak(clean.slice(0, 600));
     else toast('صدا پخش نشد؛ اینترنت یا فیلترشکن رو چک کن');
-  } finally { curAudio = null; }
+  } finally { if (my === speakSeq) { curAudio = null; speakAbort = null; setSpeaking(false); } }
 }
 const ttsAlways = () => store.get('mehrdad_tts') === '1';
 const ttsBtnLabel = () => ttsAlways() ? '🔊 جواب‌ها صوتی' : '🔇 جواب‌ها متنی';
@@ -211,7 +224,7 @@ function talkListen() {
 }
 function talkStart() {
   if (!(window.MehrdadNative && MehrdadNative.startVoiceChat)) return toast('گفتگوی صوتی با اپ اندروید کار می‌کنه؛ اینجا 🎤 رو بزن');
-  if (S.tab !== 'chat') go('chat');
+  if (S.tab !== 'chat' && !(S.tab === 'coach' && S.coachId)) go('chat');
   S.talk = true; S.talkSilent = 0; talkUi(); talkListen();
 }
 function talkStop(msg) { S.talk = false; stopSpeaking(); talkUi(); if (msg) toast(msg); }
@@ -228,14 +241,15 @@ window.onVoiceChat = async text => {
 };
 // یک نوبت چت با نمایش حباب‌ها (اگه روی صفحهٔ گفتگو باشیم) و اختیاری خواندن جواب
 async function chatTurn(text, speak) {
-  const list = $('#chatList');
+  const room = (S.tab === 'coach' && S.cview === 'coaches' && S.coachId) ? S.coachId : null;
+  const list = room ? $('#roomChat') : $('#chatList');
   if (list) {
     const empt = $('.m-empty', list); if (empt) empt.remove();
     list.insertAdjacentHTML('beforeend', `${bubble('me', text)}<div class="m-b bot typing" id="typing"><span class="m-spin"></span></div>`);
     window.scrollTo(0, document.body.scrollHeight);
   }
   try {
-    const r = await api('/api/chat', { method: 'POST', body: { text } });
+    const r = await api(room ? `/api/coaches/${room}/ask` : '/api/chat', { method: 'POST', body: { text } });
     fillBot($('#typing'), r.reply); window.scrollTo(0, document.body.scrollHeight);
     if (speak) await speakText(r.reply);
     return r.reply;
@@ -245,11 +259,11 @@ async function chatTurn(text, speak) {
   }
 }
 
-function composer(id, ph) {
+function composer(id, ph, photo = true) {
   const mic = (window.MehrdadNative && MehrdadNative.startVoice) || window.SpeechRecognition || window.webkitSpeechRecognition;
   return `<div class="m-composer"><textarea id="${id}" rows="2" placeholder="${ph}" aria-label="پیام"></textarea>
     ${mic ? `<button class="m-mic" data-act="mic" data-for="${id}" aria-label="گفتن">🎤</button>` : ''}
-    <button class="m-mic" data-act="photo" data-for="${id}" aria-label="عکس" title="عکس فیش/رسید">📷</button>
+    ${photo ? `<button class="m-mic" data-act="photo" data-for="${id}" aria-label="عکس" title="عکس فیش/رسید">📷</button>` : ''}
     <button class="m-send" data-act="say" data-for="${id}" aria-label="ارسال">↑</button></div>`;
 }
 
@@ -604,7 +618,7 @@ function eveCard(c) {
       : `<textarea id="ce${i}" rows="2" placeholder="جوابت…"></textarea><div class="row"><button class="btn sm primary" data-act="coach-answer" data-kind="e" data-i="${i}">ثبت</button></div>`}</div>`; }).join('')}</div>`;
 }
 const BOOK_ST = { suggested: 'پیشنهادی', reading: 'در حال مطالعه', done: 'تمام شد' };
-async function viewCoach() {
+async function viewCoachToday() {
   const c = await api('/api/coach'); S.cache.coach = c;
   const st = c.stats, p = c.plan, done = c.done || {};
   const head = `<div class="pane-title"><h1>مربی</h1><span class="row" style="gap:6px"><span class="pill gold num">🔥 ${fa(st.streak)} روز</span><span class="pill num">سطح ${fa(st.level)}</span></span></div>`;
@@ -660,6 +674,103 @@ async function viewCoach() {
     ${library}
     <div class="row"><button class="btn sm" data-act="coach-gen" data-force="1">ساخت دوبارهٔ برنامهٔ امروز</button></div>
   </section>`;
+}
+
+// ------------------------------------------------------------- مربی‌های تخصصی (کلاس‌ها)
+const coachSeg = () => `<div class="seg" role="group" style="justify-self:start">
+  <button data-act="coach-view" data-val="today" aria-pressed="${S.cview !== 'coaches'}">برنامهٔ امروز</button>
+  <button data-act="coach-view" data-val="coaches" aria-pressed="${S.cview === 'coaches'}">مربی‌های من</button></div>`;
+
+async function viewCoach() {
+  if (S.cview === 'coaches') return viewCoaches();
+  const html = await viewCoachToday();
+  return html.replace('<section class="pane">', '<section class="pane">' + coachSeg());
+}
+
+async function viewCoaches() {
+  if (S.coachId) return viewCoachRoom(S.coachId);
+  const r = await api('/api/coaches');
+  const card = c => `<button class="card m-coach" data-act="room-open" data-id="${c.id}"><span class="m-ce">${c.emoji}</span><b>${esc(c.name)}</b>
+    <span class="muted small">${esc(c.tagline)}</span>${c.lessons ? `<span class="pill gold">${fa(c.lessons)} درس · ${fa(c.done)} تمرین</span>` : '<span class="pill">شروع نشده</span>'}</button>`;
+  return `<section class="pane">${coachSeg()}
+    <div class="pane-title"><h1>مربی‌های من</h1><span class="muted small">${fa(r.coaches.length)} مربی</span></div>
+    <p class="muted small">هر مربی یه کلاس شخصی داره: مسیر یادگیری مخصوص خودت، درس + تمرین، و گفتگوی آزاد (حتی نقش‌بازی). همه‌شون از روی چیزی که از تو می‌دونم درس می‌دن، نه عمومی.</p>
+    <div class="m-coaches">${r.coaches.map(card).join('')}</div></section>`;
+}
+
+async function viewCoachRoom(id) {
+  const d = await api('/api/coaches/' + id); S.cache.room = d;
+  const have = new Set(d.lessons.map(l => l.title));
+  const nextIdx = d.curriculum.findIndex(x => !have.has(x.title));
+  const lessons = d.lessons.slice().reverse().map((l, i) => `<details class="card m-lesson" ${i === 0 ? 'open' : ''}><summary><b>درس ${fa(l.n)}: ${esc(l.title)}</b> ${l.done ? '<span class="pill good">تمرین انجام شد</span>' : ''}</summary>
+      <div id="lsn${l.n}" class="c-body" style="margin-top:8px">${esc(l.body)}</div>
+      ${l.takeaway ? `<div class="c-id" style="margin-top:6px">💡 ${esc(l.takeaway)}</div>` : ''}
+      ${l.exercise ? `<div class="card gold" style="margin-top:8px"><b>⚡ تمرین</b><div class="small">${esc(l.exercise)}</div></div>` : ''}
+      ${(l.quiz || []).length ? `<div class="small" style="margin-top:8px"><b>❓ از خودت بپرس</b><ul style="margin:4px 0;padding-inline-start:20px">${l.quiz.map(q => `<li>${esc(q)}</li>`).join('')}</ul></div>` : ''}
+      <div class="row"><button class="btn sm" data-act="speak-el" data-for="lsn${l.n}">🔊 بخون برام</button>
+        <button class="btn sm ${l.done ? '' : 'primary'}" data-act="room-done" data-n="${l.n}" data-on="${l.done ? 0 : 1}">${l.done ? 'برگردوندن' : '✅ تمرین رو انجام دادم'}</button></div></details>`).join('');
+  const msgs = d.chat.map(m => bubble(m.role === 'user' ? 'me' : 'bot', m.text)).join('');
+  return `<section class="pane">
+    <div class="row spread"><button class="btn sm" data-act="room-back">‹ همهٔ مربی‌ها</button><span class="row" style="gap:6px"><button class="btn sm" id="ttsBtn" data-act="tts-toggle">${ttsBtnLabel()}</button><button class="btn sm primary${S.talk ? ' danger' : ''}" id="talkBtn" data-act="talk-toggle">${talkBtnLabel()}</button></span></div>
+    <div class="north"><span class="eyebrow">${d.emoji} کلاس شخصی</span><div class="fig"><strong style="font-size:1.3rem">${esc(d.name)}</strong></div>
+      <div class="c-id" style="color:var(--hero-sub)">${esc(d.tagline)}</div>
+      <div class="meta"><span>درس‌ها <b class="num">${fa(d.lessons.length)}</b></span><span>تمرین‌های انجام‌شده <b class="num">${fa(d.lessons.filter(l => l.done).length)}</b></span></div></div>
+    <div class="card ai"><div class="row spread"><h2>📖 درس</h2><span class="pill ai">مخصوص تو</span></div>
+      <div class="row"><button class="btn primary" data-act="room-next">▶ ${d.lessons.length ? 'درس بعدی' : 'شروع اولین درس'}</button></div>
+      <div class="row" style="flex-wrap:nowrap"><input type="text" id="roomTopic" placeholder="یا موضوع دلخواه خودت…" maxlength="300"><button class="btn" data-act="room-custom">درس بده</button></div>
+      <div class="row">${(d.topics || []).map(t => `<button class="btn sm" data-act="room-topic" data-t="${esc(t)}">${esc(t)}</button>`).join('')}</div>
+      <div id="roomOut"></div></div>
+    <div class="card"><div class="row spread"><h2>🗺️ مسیر یادگیری</h2>${d.curriculum.length ? '<button class="btn sm" data-act="room-path">ساخت دوبارهٔ مسیر</button>' : ''}</div>
+      ${d.curriculum.length ? `<div class="stack6">${d.curriculum.map((x, i) => `<div class="row small" style="flex-wrap:nowrap"><b>${have.has(x.title) ? '✅' : i === nextIdx ? '👉' : '○'}</b><span>${esc(x.title)}${x.goal ? `<span class="muted"> — ${esc(x.goal)}</span>` : ''}</span></div>`).join('')}</div>`
+        : `<p class="muted small">یه مسیر ۱۰ درسی از ساده به پیشرفته، مخصوص وضعیت و هدف‌های خودت.</p>
+      <div class="row" style="flex-wrap:nowrap"><input type="text" id="roomGoal" placeholder="می‌خوای دقیقاً چی یاد بگیری؟ (اختیاری)" maxlength="300"><button class="btn primary" data-act="room-path">بساز</button></div>`}</div>
+    ${lessons ? `<h2>📚 درس‌ها</h2><div class="stack">${lessons}</div>` : ''}
+    <h2>💬 از مربی بپرس یا نقش‌بازی کن</h2>
+    <div class="m-chatwrap"><div class="m-chat" id="roomChat">${msgs || empty('هر سؤالی داری بپرس؛ یا بگو «تو مشتری باش، من بفروشم».')}</div></div>
+    <div class="m-composer-fixed">${composer('sayCoach', 'از ' + d.name + ' بپرس…', false)}</div>
+    <div class="row"><button class="btn sm" data-act="room-reset">پاک کردن این کلاس</button></div>
+  </section>`;
+}
+
+async function roomAct(act, b) {
+  if (act === 'room-open') { S.coachId = b.dataset.id; await render(); window.scrollTo(0, 0); return; }
+  if (act === 'room-back') { S.coachId = null; stopSpeaking(); await render(); window.scrollTo(0, 0); return; }
+  const id = S.coachId; if (!id) return;
+  if (act === 'room-topic') { const t = $('#roomTopic'); if (t) { t.value = b.dataset.t; t.focus(); } return; }
+  const out = $('#roomOut');
+  const busy = msg => { if (out) out.innerHTML = `<div class="m-b bot typing" style="max-width:100%"><span class="m-spin"></span> ${esc(msg)}</div>`; $$('[data-act^=room-]').forEach(x => { x.disabled = true; }); };
+  try {
+    if (act === 'room-path') { busy('دارم مسیر یادگیری‌ات رو می‌چینم…'); await api(`/api/coaches/${id}/path`, { method: 'POST', body: { goal: (($('#roomGoal') || {}).value || '').trim() } }); toast('مسیر ساخته شد ✓'); return renderKeep(); }
+    if (act === 'room-next' || act === 'room-custom') {
+      const topic = act === 'room-custom' ? (($('#roomTopic') || {}).value || '').trim() : '';
+      if (act === 'room-custom' && !topic) return toast('اول موضوع رو بنویس');
+      busy('مربی داره درس رو آماده می‌کنه (۳۰ تا ۶۰ ثانیه)…');
+      await api(`/api/coaches/${id}/lesson`, { method: 'POST', body: { topic } }); toast('درس آماده‌ست 📖'); return render();
+    }
+    if (act === 'room-done') { await api(`/api/coaches/${id}/lessons/${b.dataset.n}/done`, { method: 'POST', body: { on: b.dataset.on === '1' } }); toast(b.dataset.on === '1' ? 'آفرین 👏' : 'برگشت'); return renderKeep(); }
+    if (act === 'room-reset') { if (confirm('همهٔ درس‌ها و گفتگوهای این کلاس پاک بشه؟')) { await api('/api/coaches/' + id, { method: 'DELETE' }); toast('پاک شد'); return render(); } }
+  } catch (e) {
+    $$('[data-act^=room-]').forEach(x => { x.disabled = false; });
+    if (out) out.innerHTML = '';
+    if (e.message !== 'unauthorized') toast(e.message);
+  }
+}
+
+async function coachAsk() {
+  const ta = $('#sayCoach'); const text = ta ? ta.value.trim() : ''; if (!text || S.busy || !S.coachId) return;
+  stopSpeaking(); S.busy = true; ta.value = ''; ta.style.height = '';
+  const speak = S.voiceIn || ttsAlways(); S.voiceIn = false;
+  const send = $('[data-act=say][data-for=sayCoach]'); if (send) send.disabled = true;
+  const list = $('#roomChat'); const empt = $('.m-empty', list); if (empt) empt.remove();
+  list.insertAdjacentHTML('beforeend', `${bubble('me', text)}<div class="m-b bot typing" id="typing"><span class="m-spin"></span></div>`);
+  window.scrollTo(0, document.body.scrollHeight);
+  try {
+    const r = await api(`/api/coaches/${S.coachId}/ask`, { method: 'POST', body: { text } });
+    fillBot($('#typing'), r.reply); window.scrollTo(0, document.body.scrollHeight);
+    if (speak) speakText(r.reply);
+  } catch (e) {
+    if (e.message !== 'unauthorized') { toast(e.message); const t = $('#typing'); if (t) { t.classList.remove('typing'); t.removeAttribute('id'); t.textContent = 'مربی جواب نداد؛ دوباره بپرس.'; } ta.value = text; }
+  } finally { S.busy = false; const s2 = $('[data-act=say][data-for=sayCoach]'); if (s2) s2.disabled = false; }
 }
 
 // ------------------------------------------------------------- فروش و پیگیری (CRM)
@@ -898,7 +1009,7 @@ async function refreshNow() {
   });
 })();
 
-function go(tab) { S.tab = tab; store.set('mehrdad_tab', tab); render(); window.scrollTo(0, 0); }
+function go(tab) { stopSpeaking(); S.tab = tab; store.set('mehrdad_tab', tab); render(); window.scrollTo(0, 0); }
 
 // ------------------------------------------------------------- ویرایش / تنظیمات
 function sheet(html) { const m = $('#modal'); m.innerHTML = `<div class="m-sheet" role="dialog">${html}</div>`; m.hidden = false; }
@@ -1042,7 +1153,9 @@ function pairScreen() {
 
 // ------------------------------------------------------------- گفتن (چت / ضبط سریع)
 async function say(forId) {
+  if (forId === 'sayCoach') return coachAsk();
   const ta = $('#' + forId); const text = ta.value.trim(); if (!text || S.busy) return;
+  stopSpeaking();
   S.busy = true; ta.value = ''; ta.style.height = '';
   const speak = S.voiceIn || ttsAlways(); S.voiceIn = false;            // با صدا گفت یا «جواب صوتی» روشنه → جواب هم خوانده می‌شود
   const send = $(`[data-act=say][data-for=${forId}]`); if (send) send.disabled = true;
@@ -1111,6 +1224,7 @@ function mic(forId) {
 // ------------------------------------------------------------- رویدادهای کلیک/فرم
 document.addEventListener('click', async ev => {
   const nav = ev.target.closest('#nav button'); if (nav) return go(nav.dataset.tab);
+  if (ev.target.id === 'stopSpk') { stopSpeaking(); return; }
   if (ev.target.id === 'setBtn') return openSettings();
   if (ev.target.id === 'refBtn') return refreshNow();
   if (ev.target.id === 'privBtn') { S.priv = !S.priv; store.set('mehrdad_priv', S.priv ? '1' : '0'); syncPriv(); return render(); }
@@ -1119,6 +1233,9 @@ document.addEventListener('click', async ev => {
   const act = b.dataset.act, id = b.dataset.id;
   try {
     if (act.startsWith('crm-')) await crmAct(act, b);
+    else if (act.startsWith('room-')) await roomAct(act, b);
+    else if (act === 'coach-view') { S.cview = b.dataset.val; S.coachId = null; store.set('mehrdad_cview', S.cview); render(); }
+    else if (act === 'speak-el') { const el = $('#' + b.dataset.for); if (el) speakText(el.textContent); }
     else if (act === 'close') closeSheet();
     else if (act === 'reload') render();
     else if (act === 'seg') { S[b.dataset.scope] = b.dataset.val; render(); }
@@ -1371,3 +1488,5 @@ function boot() {
 }
 boot();
 })();
+
+document.addEventListener('visibilitychange', () => { if (document.hidden) stopSpeaking(); });
