@@ -21,6 +21,7 @@ _FA_DIGITS = str.maketrans("۰۱۲۳۴۵۶۷۸۹٠١٢٣٤٥٦٧٨٩", "01234567
 _NORMALIZE = str.maketrans({"ي": "ی", "ك": "ک", "ۀ": "ه", "ة": "ه", "أ": "ا", "إ": "ا", "ؤ": "و", "‌": " ", "ـ": ""})
 _DIACRITICS = re.compile("[ً-ٰٟ]")
 _TOKEN = re.compile(r"\w+", re.UNICODE)
+_MSG_WORDS = {"پیام", "پیامک", "پیامها", "پیامهای", "اعلان", "اعلانها", "تلگرام", "واتس", "واتساپ", "اینستا", "اینستاگرام", "ایمیل", "دایرکت", "مسیج", "تماس", "تماسها"}
 
 
 def normalize_fa(text):
@@ -149,6 +150,8 @@ class Memory:
                 id INTEGER PRIMARY KEY AUTOINCREMENT, kind TEXT NOT NULL, to_name TEXT, to_number TEXT, text TEXT, status TEXT NOT NULL,
                 detail TEXT, origin TEXT, created_ts REAL NOT NULL, updated_ts REAL NOT NULL);
             CREATE INDEX IF NOT EXISTS ix_pactions ON phone_actions(status, created_ts);
+            CREATE TABLE IF NOT EXISTS convs(
+                key TEXT PRIMARY KEY, app TEXT, title TEXT NOT NULL, norm TEXT NOT NULL, last_ts REAL NOT NULL);
             CREATE TABLE IF NOT EXISTS projects(
                 id TEXT PRIMARY KEY, name TEXT NOT NULL, subtitle TEXT, status TEXT NOT NULL DEFAULT 'فعال', color TEXT, icon TEXT,
                 summary TEXT, meta TEXT, pos INTEGER NOT NULL DEFAULT 0, created_ts REAL NOT NULL, updated_ts REAL NOT NULL);
@@ -555,6 +558,39 @@ class Memory:
             self.db.execute("UPDATE phone_actions SET status='failed', detail='گوشی تأیید نکرد', updated_ts=? WHERE status='sending' AND updated_ts<?", (now, now - 3 * 60))
             self.db.commit()
 
+    async def touch_conv(self, key, app, title, ts):
+        """گفتگوهای پیام‌رسان که اخیراً اعلان داشته‌اند (برای «به علی توی واتس‌اپ جواب بده»)."""
+        async with self.lock:
+            self.db.execute(
+                "INSERT INTO convs(key, app, title, norm, last_ts) VALUES(?,?,?,?,?) "
+                "ON CONFLICT(key) DO UPDATE SET app=excluded.app, title=excluded.title, norm=excluded.norm, last_ts=MAX(convs.last_ts, excluded.last_ts)",
+                (key[:200], (app or "")[:40], title[:120], normalize_fa(title), ts))
+            self.db.commit()
+
+    async def find_convs(self, query, app_labels=None, within_hours=3, limit=6):
+        """گفتگوهای اخیر هم‌نام با query (کلمهٔ کامل، سپس بخشی از نام)؛ app_labels: فقط این اپ‌ها."""
+        nq = normalize_fa(query or "").strip()
+        toks = nq.split()
+        if not toks:
+            return []
+        since = time.time() - within_hours * 3600
+        async with self.lock:
+            rows = self.db.execute("SELECT key, app, title, norm, last_ts FROM convs WHERE last_ts>=? ORDER BY last_ts DESC", (since,)).fetchall()
+        rows = [r for r in rows if not app_labels or r[1] in app_labels]
+        exact = [r for r in rows if r[3] == nq]
+        strong = exact or [r for r in rows if all(t in r[3].split() for t in toks)]
+        cands = strong or [r for r in rows if all(t in r[3] for t in toks)]
+        return [{"key": r[0], "app": r[1], "title": r[2], "last_ts": r[4]} for r in cands[:limit]]
+
+    async def prune_inbox(self, days=90, kinds=("sms", "notification", "call")):
+        """پیامک/اعلان/تماس‌های قدیمی‌تر از days روز پاک می‌شوند (دیتابیس باد نکند)."""
+        async with self.lock:
+            marks = ",".join("?" for _ in kinds)
+            cur = self.db.execute(f"DELETE FROM inbox WHERE kind IN ({marks}) AND ts<?", (*kinds, time.time() - days * 86400))
+            self.db.execute("DELETE FROM convs WHERE last_ts<?", (time.time() - 7 * 86400,))
+            self.db.commit()
+            return cur.rowcount
+
     async def search_inbox(self, query, limit=3):
         """پیامک/ایمیل/اعلان‌های ذخیره‌شده (داده‌ی خام؛ نه دستور) برای پاسخ به «آخرین پیام فلانی چی بود؟»."""
         tokens = [t for t in _TOKEN.findall(normalize_fa(query)) if len(t) > 1][:6]
@@ -564,7 +600,15 @@ class Memory:
         params = [p for t in tokens for p in (f"%{t}%", f"%{t}%")]
         async with self.lock:
             rows = self.db.execute(f"SELECT kind, source, text, ts FROM inbox WHERE {like} ORDER BY ts DESC LIMIT ?", (*params, limit)).fetchall()
-        return [{"type": r[0], "summary": f"[{r[0]} از {r[1]}] {r[2][:140]}", "detail": r[2][:500], "amount": None, "ts": r[3]} for r in rows]
+            if set(tokens) & _MSG_WORDS:          # «کی پیام داده؟» «پیام‌های تازه» → آخرین‌ها، حتی بدون کلمهٔ مشترک
+                rows += self.db.execute("SELECT kind, source, text, ts FROM inbox WHERE kind IN ('sms','notification','telegram','email','call') ORDER BY ts DESC LIMIT 8").fetchall()
+        seen, out = set(), []
+        for r in rows:
+            if (r[1], r[2]) in seen:
+                continue
+            seen.add((r[1], r[2]))
+            out.append({"type": r[0], "summary": f"[{r[0]} از {r[1]}] {r[2][:140]}", "detail": r[2][:500], "amount": None, "ts": r[3]})
+        return out[:limit + 8]
 
     # ---------- پروژه‌ها ----------
     @staticmethod

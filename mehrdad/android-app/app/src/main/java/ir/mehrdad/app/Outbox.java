@@ -28,11 +28,21 @@ public class Outbox {
     private static final Object LOCK = new Object();
 
     public static void add(Context ctx, String kind, String source, String text) {
+        add(ctx, kind, source, text, null, null, null);
+    }
+
+    /** app/conv/title فقط برای اعلان پیام‌رسان‌ها: نام اپ، کلید گفتگو (برای جواب‌دادن) و نام فرستنده. */
+    public static void add(Context ctx, String kind, String source, String text, String app, String conv, String title) {
         try {
             JSONObject item = new JSONObject();
             item.put("kind", kind);
             item.put("source", source == null ? "" : source);
             item.put("text", text);
+            if (app != null && !app.isEmpty()) {
+                item.put("app", app);
+                item.put("conv", conv == null ? "" : conv);
+                item.put("title", title == null ? "" : title);
+            }
             item.put("ts", System.currentTimeMillis() / 1000.0);
             synchronized (LOCK) {
                 JSONArray all = load(ctx);

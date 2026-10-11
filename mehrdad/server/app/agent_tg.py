@@ -46,7 +46,8 @@ def should_process(sender_id, is_secret, text):
 class TelegramAgent:
     def __init__(self, bot, cfg, client_factory=None):
         self.bot, self.cfg = bot, cfg
-        self.allow = parse_allow(cfg.tg_allow)
+        self.allow_all = (cfg.tg_allow or "").strip().lower() in ("all", "*")
+        self.allow = [] if self.allow_all else parse_allow(cfg.tg_allow)
         self._factory = client_factory
         self.client = None
         self.ready = False
@@ -108,15 +109,21 @@ class TelegramAgent:
         except OSError:
             pass
 
-        if not self.allow:
+        if not self.allow and not self.allow_all:
             log.warning("TG_ALLOW خالیه؛ خواندن چت‌ها خاموشه (فقط ارسال با تأیید فعاله)")
             await client.run_until_disconnected()
             return
         from telethon import events
 
-        @client.on(events.NewMessage(incoming=True, chats=self.allow))
+        @client.on(events.NewMessage(incoming=True, chats=None if self.allow_all else self.allow))
         async def on_message(event):
             try:
+                if self.allow_all:                         # حالت «همهٔ چت‌ها»: کانال‌های پخش و ربات‌ها را رد کن
+                    if getattr(event, "is_channel", False) and not getattr(event, "is_group", False):
+                        return
+                    sender = await event.get_sender()
+                    if getattr(sender, "bot", False):
+                        return
                 chat = await event.get_chat()
                 title = getattr(chat, "title", None) or " ".join(filter(None, [getattr(chat, "first_name", None), getattr(chat, "last_name", None)]))
                 await self.handle_message(event.chat_id, title, event.sender_id, event.raw_text, event.date.timestamp(), event.id,
@@ -124,7 +131,7 @@ class TelegramAgent:
             except Exception as e:                        # خطای یک پیام نباید ایجنت را بکشد
                 log.warning("tg message failed: %s", type(e).__name__)
 
-        log.info("ایجنت تلگرام فعال شد (فقط‌خواندنی، %d چت در allowlist)", len(self.allow))
+        log.info("ایجنت تلگرام فعال شد (%s)", "همهٔ چت‌ها" if self.allow_all else f"{len(self.allow)} چت در allowlist")
         await client.run_until_disconnected()
 
 

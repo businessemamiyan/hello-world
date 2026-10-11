@@ -677,10 +677,11 @@ function openDebtEdit(id) {
 function nativeStatus() {
   try { return window.MehrdadNative && MehrdadNative.status ? JSON.parse(MehrdadNative.status() || '{}') : null; } catch { return null; }
 }
-const PA_KIND = { sms: 'پیامک', call: 'تماس', telegram: 'پیام تلگرام', instagram: 'پیام اینستاگرام' };
+const PA_KIND = { sms: 'پیامک', call: 'تماس', telegram: 'پیام تلگرام', instagram: 'پیام اینستاگرام', reply: 'پاسخ' };
+const agoFa = t => { const m = Math.round((Date.now() / 1000 - t) / 60); return m < 1 ? 'همین الان' : m < 90 ? fa(m) + ' دقیقه پیش' : fa(Math.round(m / 60)) + ' ساعت پیش'; };
 const PA_ST = { awaiting: ['⏳', 'منتظر تأیید'], approved: ['📥', 'در صف گوشی'], sending: ['📤', 'در حال انجام'], sent: ['✓', 'انجام شد'], failed: ['⚠️', 'نشد'],
   cancelled: ['✕', 'لغو شد'], expired: ['⌛', 'منقضی شد'], needs_tap: ['👆', 'لمس لازم'] };
-const maskN = n => (n && !String(n).startsWith('tg:') && n.length > 8) ? n.slice(0, 4) + '…' + n.slice(-3) : (String(n || '').startsWith('tg:') ? '' : (n || ''));
+const maskN = n => { n = String(n || ''); if (n.startsWith('tg:') || n.includes('|')) return ''; return n.length > 8 ? n.slice(0, 4) + '…' + n.slice(-3) : n; };
 const paWho = a => `«${esc(a.to_name || maskN(a.to_number))}»${a.to_name && a.to_number && maskN(a.to_number) ? ` <span class="muted small num">${esc(maskN(a.to_number))}</span>` : ''}`;
 function phoneCard(ps) {
   if (!ps || !ps.pending || !ps.pending.length) return '';
@@ -702,17 +703,43 @@ async function renderPhoneSection() {
   box.innerHTML = `<p class="muted small">مخاطبین و پیامک‌هات فقط روی سرور خودت می‌مونه. هیچ پیامک، تماس یا پیامی بدون تأیید یک‌لمسی خودت انجام نمی‌شه، و متنی که از بیرون می‌رسه (پیامک، ایمیل، اعلان) هرگز دستور حساب نمی‌شه.</p>
     <div class="stack6 small">
       <div class="row spread"><span>مخاطبین روی سرور: <b class="num">${fa(sv.contacts)}</b></span>${nat ? `<span class="muted">آخرین همگام‌سازی: ${when(nat.lastContacts)}</span>` : ''}</div>
-      ${nat ? `${perm('contacts', 'دسترسی به مخاطبین', 'contacts')}${perm('smsRead', 'خواندن پیامک‌ها', 'sms_read')}${perm('smsSend', 'فرستادن پیامک', 'sms_send')}${perm('call', 'تماس گرفتن', 'call')}${perm('notif', 'اعلان‌ها', 'notif')}
-      <div class="row"><button class="btn sm" data-act="ph-sync-contacts">همگام‌سازی مخاطبین</button><button class="btn sm" data-act="ph-sync-sms">خواندن پیامک‌های ۳۰ روز اخیر</button></div>
-      <label class="row"><input type="checkbox" data-act="ph-service" ${nat.service ? 'checked' : ''}> کنترل گوشی (پیامک و تماسی که تأیید می‌کنی از همین گوشی انجام بشه) ${sv.online ? '<span class="pill good">وصله</span>' : '<span class="pill warn">وصل نیست</span>'}</label>
+      ${nat ? `${perm('contacts', 'دسترسی به مخاطبین', 'contacts')}${perm('smsRead', 'خواندن پیامک‌ها', 'sms_read')}${perm('smsSend', 'فرستادن پیامک', 'sms_send')}${perm('call', 'تماس گرفتن', 'call')}${perm('callLog', 'تاریخچهٔ تماس‌ها', 'calls')}${perm('calendar', 'تقویم', 'calendar')}${perm('notif', 'اعلان‌ها', 'notif')}
+      <div class="row spread"><span>خواندن اعلان‌ها (برای پیام‌رسان‌ها) ${ok(nat.notifAccess)}</span>${nat.notifAccess ? '' : '<button class="btn sm" data-act="n-notif">فعال کن</button>'}</div>
+      <div class="row"><button class="btn sm" data-act="ph-sync-contacts">همگام‌سازی مخاطبین</button><button class="btn sm" data-act="ph-sync-sms">پیامک‌های ۳۰ روز اخیر</button>
+        <button class="btn sm" data-act="ph-sync-calls">تماس‌های ۳۰ روز اخیر</button><button class="btn sm" data-act="ph-sync-cal">تقویم</button></div>
+      <label class="row"><input type="checkbox" data-act="ph-msgr" ${nat.msgr ? 'checked' : ''}> پیام‌های تلگرام / واتس‌اپ / اینستاگرام / بله (از اعلان‌ها) برای مهرداد ثبت بشه و بتونه جواب بده</label>
+      <div class="muted">آخرین پیام پیام‌رسان که رسید: ${sv.last_notif ? agoFa(sv.last_notif) : 'هنوز چیزی نرسیده (دسترسی اعلان‌ها و تیک بالا باید روشن باشه)'}</div>
+      <label class="row"><input type="checkbox" data-act="ph-service" ${nat.service ? 'checked' : ''}> کنترل گوشی (پیامک، تماس و جواب‌دادنی که تأیید می‌کنی از همین گوشی انجام بشه) ${sv.online ? '<span class="pill good">وصله</span>' : '<span class="pill warn">وصل نیست</span>'}</label>
       <label class="row"><input type="checkbox" data-act="ph-smsall" ${nat.smsAll ? 'checked' : ''}> همهٔ پیامک‌های تازه هم برای مهرداد ذخیره بشه (نه فقط بانکی؛ رمز یک‌بارمصرف هرگز)</label>
-      <div class="row"><button class="btn sm" data-act="ph-battery">جلوگیری از بسته‌شدن توسط باتری ${nat.battery ? '✓' : ''}</button></div>`
-        : '<div class="muted">ارسال پیامک و تماس فقط داخل اپ اندروید ممکنه.</div>'}
+      <div class="row"><button class="btn sm" data-act="ph-battery">جلوگیری از بسته‌شدن توسط باتری ${nat.battery ? '✓' : ''}</button></div>
+      <span class="eyebrow">🎤 بیدارکردن مهرداد با صدا</span>
+      <div class="muted">«همیشه منتظر اسمش باشه» یعنی میکروفون دائم باز بمونه (باتری، حریم خصوصی و محدودیت اندروید)؛ به‌جاش این راه‌های سریع هست:</div>
+      <div class="stack6">
+        <div>• دکمهٔ «🎤 بگو به مهرداد» توی اعلان دائمی (وقتی «کنترل گوشی» روشنه)</div>
+        <div>• کاشی «مهرداد 🎤» توی تنظیمات سریع (از بالا بکش ← ویرایش ← کاشی رو اضافه کن)</div>
+        <div>• نگه‌داشتن دکمهٔ پاور/هوم <span class="muted">(آزمایشی؛ اول مهرداد رو دستیار پیش‌فرض کن)</span> <button class="btn sm" data-act="ph-assistant">انتخاب دستیار</button></div>
+        <div>• بگو «هی گوگل، مهرداد رو باز کن»</div>
+      </div>
+      <div class="row"><button class="btn sm primary" data-act="ph-talk">🎤 همین الان تست کن</button></div>
+      <label class="row"><input type="checkbox" data-act="ph-tts" ${store.get('mehrdad_tts') === '1' ? 'checked' : ''}> جواب‌ها رو بلند بخون ${nat.ttsFa ? '✓' : '<span class="muted">(این گوشی صدای فارسی نداره)</span>'}</label>`
+        : '<div class="muted">ارسال پیامک و تماس و خواندن پیام‌رسان‌ها فقط داخل اپ اندروید ممکنه.</div>'}
       <label class="row"><input type="checkbox" data-act="ph-auto" ${sv.settings.auto_confirm ? 'checked' : ''}> ارسال بدون تأیید (فقط وقتی خودم اسم یا شمارهٔ گیرنده رو توی دستورم می‌گم)</label>
       ${hist ? `<span class="eyebrow">آخرین اقدام‌ها</span>${hist}` : ''}
     </div>`;
 }
 window.onPhoneChanged = () => { if ($('#phoneBox')) renderPhoneSection(); };
+// صدا زدن مهرداد (دکمهٔ اعلان / کاشی / دستیار): جواب مستقیم نشان داده می‌شود، همان‌جا هم می‌شود پیامک/تماس را تأیید کرد
+window.onVoiceCommand = async text => {
+  if (!token) return;
+  sheet(`<div class="row spread"><h2>🎤 مهرداد</h2><button class="x" data-act="close">✕</button></div>
+    <div class="m-b me" style="max-width:100%">${esc(text)}</div><div id="vcOut" class="m-b bot typing" style="max-width:100%"><span class="m-spin"></span></div><div id="vcPh"></div>`);
+  try {
+    const r = await api('/api/chat', { method: 'POST', body: { text } });
+    const o = $('#vcOut'); if (o) { o.classList.remove('typing'); o.textContent = r.reply; }
+    if (store.get('mehrdad_tts') === '1' && window.MehrdadNative && MehrdadNative.speakAvailable && MehrdadNative.speakAvailable()) MehrdadNative.speak(String(r.reply).split('\n\n')[0]);
+    try { const ps = await api('/api/phone/status'); const box = $('#vcPh'); if (box) box.innerHTML = phoneCard(ps); } catch (e) { /* فقط کارت تأیید نیامد */ }
+  } catch (e) { const o = $('#vcOut'); if (o) { o.classList.remove('typing'); o.textContent = 'نشد: ' + e.message; } }
+};
 
 function openSettings() {
   const nat = nativeStatus();
@@ -822,11 +849,16 @@ document.addEventListener('click', async ev => {
     else if (act === 'phone-ok' || act === 'phone-no') {
       const r = await api(`/api/phone/actions/${id}/${act === 'phone-ok' ? 'approve' : 'cancel'}`, { method: 'POST' });
       toast(r.message || 'انجام شد'); render();
+      if ($('#vcPh')) { try { $('#vcPh').innerHTML = phoneCard(await api('/api/phone/status')); } catch (e) { /* ignore */ } }
     }
     else if (act === 'ph-perm') MehrdadNative.requestPhonePermissions(b.dataset.p);
     else if (act === 'ph-sync-contacts') { toast('دارم مخاطبین رو همگام می‌کنم…'); MehrdadNative.syncContacts(); }
     else if (act === 'ph-sync-sms') { toast('دارم پیامک‌ها رو می‌خونم…'); MehrdadNative.syncSms(30); }
     else if (act === 'ph-battery') MehrdadNative.openBatterySettings();
+    else if (act === 'ph-sync-calls') { toast('دارم تماس‌ها رو می‌خونم…'); MehrdadNative.syncCalls(); }
+    else if (act === 'ph-sync-cal') { toast('دارم تقویم رو همگام می‌کنم…'); MehrdadNative.syncCalendar(); }
+    else if (act === 'ph-assistant') MehrdadNative.openAssistantSettings();
+    else if (act === 'ph-talk') { closeSheet(); MehrdadNative.startVoiceCommand(); }
     else if (act === 'n-sms') MehrdadNative.requestSmsPermission();
     else if (act === 'n-notif') MehrdadNative.openNotificationAccess();
     else if (act === 'n-update') { closeSheet(); MehrdadNative.checkUpdate(); }
@@ -933,6 +965,10 @@ document.addEventListener('change', async ev => {
   else if (t.dataset.act === 'ph-service') {
     try { MehrdadNative.setPhoneService(t.checked); toast(t.checked ? 'کنترل گوشی روشن شد' : 'کنترل گوشی خاموش شد'); setTimeout(renderPhoneSection, 1200); } catch (e) { toast(e.message); }
   }
+  else if (t.dataset.act === 'ph-msgr') {
+    try { MehrdadNative.setMessengerCapture(t.checked); toast(t.checked ? 'از این به بعد پیام‌های پیام‌رسان‌ها رو هم می‌بینم' : 'دیگه پیام‌رسان‌ها رو نمی‌خونم'); setTimeout(renderPhoneSection, 800); } catch (e) { toast(e.message); }
+  }
+  else if (t.dataset.act === 'ph-tts') { store.set('mehrdad_tts', t.checked ? '1' : '0'); toast(t.checked ? 'جواب‌های صوتی روشن شد' : 'جواب‌های صوتی خاموش شد'); }
   else if (t.dataset.act === 'ph-smsall') {
     try { MehrdadNative.setSmsAll(t.checked); await api('/api/phone/settings', { method: 'PUT', body: { sms_all: t.checked } }); toast('ذخیره شد'); } catch (e) { toast(e.message); }
   }

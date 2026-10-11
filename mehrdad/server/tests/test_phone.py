@@ -321,3 +321,74 @@ def test_phone_api_contacts_actions_and_sms_sync(api):
     assert s == {"stored": 2, "duplicate": 1, "skipped": 1}
     rows = loop.run_until_complete(mem.recent_inbox(["sms"], 10))
     assert {r["source"] for r in rows} == {"علی کریمی"} and any(r["text"].startswith("[ارسالی]") for r in rows)
+
+
+# ---------------------------------------------------------------- اعلان پیام‌رسان‌ها، پاسخ، تماس/تقویم
+def test_ingest_messenger_notifications_conv_reply_and_search(api):
+    c, h, bot, mem, loop, tg = api
+    ts = time.time()
+    body = {"items": [
+        {"kind": "notification", "source": "واتس‌اپ", "app": "واتس‌اپ", "title": "علی کریمی", "conv": "com.whatsapp|علی کریمی", "text": "۵۰۰ هزار تومن واریز کردم", "ts": ts},
+        {"kind": "notification", "source": "واتس‌اپ", "app": "واتس‌اپ", "title": "علی کریمی", "conv": "com.whatsapp|علی کریمی", "text": "۵۰۰ هزار تومن واریز کردم", "ts": ts + 30},
+        {"kind": "notification", "source": "تلگرام", "app": "تلگرام", "title": "رضا", "conv": "org.telegram.messenger|رضا", "text": "کد ورود شما 12345 رمز یکبار مصرف", "ts": ts},
+        {"kind": "notification", "source": "اینستاگرام", "app": "اینستاگرام", "title": "sara", "conv": "com.instagram.android|sara", "text": "سلام چطوری؟", "ts": ts + 5}]}
+    r = c.post("/api/ingest", json=body, headers=h).json()
+    assert r["stored"] == 2 and r["duplicate"] == 1 and r["skipped"] == 1 and r["parsed"] == 0                      # پیام چت هرگز تراکنش بانکی نمی‌شود
+    assert loop.run_until_complete(mem.recent_memory(5)) == []
+    rows = loop.run_until_complete(mem.recent_inbox(["notification"], 5))
+    assert {x["source"] for x in rows} == {"واتس‌اپ — علی کریمی", "اینستاگرام — sara"}
+    assert c.get("/api/phone/status", headers=h).json()["last_notif"] > 0
+    hits = loop.run_until_complete(mem.search_memory("کی بهم پیام داده؟"))
+    assert {h_["type"] for h_ in hits} >= {"notification"} and any("sara" in x["summary"] for x in hits)
+    # پاسخ
+    p = bot.phone
+    loop.run_until_complete(mem.replace_contacts([]))
+    assert "ندیدم" in loop.run_until_complete(p.create("reply", "نیست", "باشه"))[0]
+    note = loop.run_until_complete(p.create("reply", "علی", "باشه، ممنون", user_text="به علی توی واتساپ بگو باشه", app="whatsapp"))[0]
+    assert "پاسخ به «علی کریمی — واتس‌اپ»" in note and "com.whatsapp" not in note
+    a = loop.run_until_complete(mem.list_phone_actions())[0]
+    assert a["kind"] == "reply" and a["status"] == "awaiting" and a["to_number"] == "com.whatsapp|علی کریمی"
+    assert "ندیدم" in loop.run_until_complete(p.create("reply", "علی", "x", app="instagram"))[0]                  # اپ دیگر: همان گفتگو نیست
+    loop.run_until_complete(p.save_settings({"auto_confirm": True}))
+    loop.run_until_complete(p.create("reply", "علی", "باشه", user_text="به علی جواب بده باشه"))
+    assert loop.run_until_complete(mem.list_phone_actions())[0]["status"] == "awaiting"                              # پاسخ هرگز خودکار نیست
+    loop.run_until_complete(p.decide(a["id"], True))
+    assert loop.run_until_complete(p.claim_next()) == {"id": a["id"], "kind": "reply", "to_name": "علی کریمی — واتس‌اپ", "to_number": "com.whatsapp|علی کریمی", "text": "باشه، ممنون"}
+
+
+def test_old_conversations_cannot_be_replied(api):
+    c, h, bot, mem, loop, tg = api
+    loop.run_until_complete(mem.touch_conv("com.whatsapp|قدیمی", "واتس‌اپ", "قدیمی", time.time() - 5 * 3600))
+    assert "ندیدم" in loop.run_until_complete(bot.phone.create("reply", "قدیمی", "سلام"))[0]
+
+
+def test_calls_and_calendar_sync_and_prune(api):
+    c, h, bot, mem, loop, tg = api
+    c.put("/api/contacts", json={"replace": True, "contacts": [{"key": "1", "name": "مامان", "numbers": ["09125556677"]}]}, headers=h)
+    now = time.time()
+    r = c.post("/api/calls/sync", json={"calls": [{"id": "1", "number": "+989125556677", "type": "missed", "ts": now - 600, "duration": 0},
+                                                  {"id": "2", "number": "09120000000", "type": "outgoing", "ts": now - 300, "duration": 125},
+                                                  {"id": "1", "number": "+989125556677", "type": "missed", "ts": now - 600}]}, headers=h).json()
+    assert r == {"stored": 2, "duplicate": 1}
+    rows = {x["source"]: x["text"] for x in loop.run_until_complete(mem.recent_inbox(["call"], 5))}
+    assert rows["مامان"] == "تماس از دست رفته" and rows["09120000000"] == "تماس خروجی (2:05)"
+    assert c.post("/api/calls/sync", json={"calls": [{"id": "3", "number": "1", "type": "weird", "ts": now}]}, headers=h).status_code == 422
+    ev = [{"id": "e1", "title": "جلسه با تأمین‌کننده", "start": now + 3600, "end": now + 7200, "location": "دفتر"}, {"id": "e2", "title": "خیلی دور", "start": now + 30 * 86400},
+          {"id": "e3", "title": "گذشته", "start": now - 86400, "end": now - 80000}]
+    assert c.post("/api/calendar/sync", json={"events": ev}, headers=h).json() == {"stored": 3}
+    prompt = loop.run_until_complete(bot.phone.prompt())
+    assert "جلسه با تأمین‌کننده" in prompt and "خیلی دور" not in prompt and "گذشته" not in prompt
+    mem.db.execute("UPDATE inbox SET ts=ts-100*86400 WHERE kind='call'")
+    assert loop.run_until_complete(mem.prune_inbox(90)) == 2
+
+
+def test_telegram_all_mode_flag_and_phone_parse_reply():
+    from app.agent_tg import TelegramAgent
+    from app.config import Config as C
+    cfg = C(bot_token="x", setup_code="S", anthropic_api_key="k", tg_allow="all")
+    assert TelegramAgent(None, cfg).allow_all and TelegramAgent(None, cfg).allow == []
+    cfg2 = C(bot_token="x", setup_code="S", anthropic_api_key="k", tg_allow="123,@abc")
+    a2 = TelegramAgent(None, cfg2)
+    assert not a2.allow_all and a2.allow == [123, "abc"]
+    ops = _parse_phone({"phone": [{"kind": "reply", "to": "علی", "text": "باشه", "app": "whatsapp"}, {"kind": "reply", "to": "", "text": "x"}]})
+    assert ops == [{"phone_op": {"kind": "reply", "to": "علی", "text": "باشه", "app": "whatsapp"}}]

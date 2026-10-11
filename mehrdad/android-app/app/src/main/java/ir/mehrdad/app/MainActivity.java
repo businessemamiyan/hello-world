@@ -18,6 +18,8 @@ import android.widget.TextView;
 import android.graphics.Color;
 import android.net.Uri;
 import android.os.Build;
+import android.speech.tts.TextToSpeech;
+import java.util.Locale;
 import android.os.Bundle;
 import android.os.PowerManager;
 import android.provider.Settings;
@@ -66,6 +68,9 @@ public class MainActivity extends AppCompatActivity {
     private ValueCallback<Uri[]> filePathCb;
     private Uri cameraUri;
     private Voice voice;
+    private boolean pendingVoiceCommand;
+    private TextToSpeech tts;
+    private boolean ttsFa;
 
     @SuppressLint({"SetJavaScriptEnabled", "AddJavascriptInterface"})
     @Override
@@ -106,7 +111,7 @@ public class MainActivity extends AppCompatActivity {
                         Toast.LENGTH_LONG).show());
 
         micPermission = registerForActivityResult(new ActivityResultContracts.RequestPermission(), granted -> {
-            if (granted) startVoice();
+            if (granted) startVoice(pendingVoiceCommand);
             else Toast.makeText(this, "بدون مجوز میکروفون نمی‌تونم صداتو بشنوم", Toast.LENGTH_LONG).show();
         });
         phonePermissions = registerForActivityResult(new ActivityResultContracts.RequestMultiplePermissions(), result -> {
@@ -136,17 +141,34 @@ public class MainActivity extends AppCompatActivity {
             }
         });
 
+        pendingVoiceCommand = getIntent().getBooleanExtra("voice", false);
+        tts = new TextToSpeech(this, st -> {
+            if (st == TextToSpeech.SUCCESS) ttsFa = tts.setLanguage(new Locale("fa")) >= TextToSpeech.LANG_AVAILABLE;
+        });
         web.loadUrl(Prefs.serverUrl(this) + "/app/");
     }
 
     @Override
+    protected void onNewIntent(Intent intent) {
+        super.onNewIntent(intent);
+        setIntent(intent);
+        if (intent != null && intent.getBooleanExtra("voice", false)) {
+            intent.removeExtra("voice");
+            startVoice(true);                      // دکمهٔ اعلان / کاشی / دستیار: مستقیم گوش بده
+        }
+    }
+
+    @Override
     protected void onDestroy() {
+        if (tts != null) { try { tts.shutdown(); } catch (Exception ignored) { } }
         if (voice != null) voice.finish(false);
         super.onDestroy();
     }
 
     /** ویس پیوسته: تشخیص گفتار رو بعد از هر مکث دوباره شروع می‌کنه تا کاربر حرفش رو کامل بزند؛ فقط با «تمام» تمام می‌شه. */
     private class Voice implements RecognitionListener {
+        private final boolean command;
+        Voice(boolean command) { this.command = command; }
         private final SpeechRecognizer sr = SpeechRecognizer.createSpeechRecognizer(MainActivity.this);
         private final Handler h = new Handler(Looper.getMainLooper());
         private final StringBuilder done = new StringBuilder();
@@ -221,7 +243,7 @@ public class MainActivity extends AppCompatActivity {
             try { if (dlg != null) dlg.dismiss(); } catch (Exception ignored) { }
             voice = null;
             String text = (done + " " + partial).trim();
-            if (deliver && !text.isEmpty()) web.evaluateJavascript("window.onVoiceText && window.onVoiceText(" + JSONObject.quote(text) + ")", null);
+            if (deliver && !text.isEmpty()) web.evaluateJavascript((command ? "window.onVoiceCommand && window.onVoiceCommand(" : "window.onVoiceText && window.onVoiceText(") + JSONObject.quote(text) + ")", null);
         }
 
         @Override public void onResults(Bundle b) {
@@ -253,8 +275,11 @@ public class MainActivity extends AppCompatActivity {
         @Override public void onEvent(int t, Bundle b) { }
     }
 
-    private void startVoice() {
+    private void startVoice() { startVoice(false); }
+
+    private void startVoice(boolean command) {
         if (voice != null) return;
+        pendingVoiceCommand = command;
         if (ContextCompat.checkSelfPermission(this, Manifest.permission.RECORD_AUDIO) != PackageManager.PERMISSION_GRANTED) {
             micPermission.launch(Manifest.permission.RECORD_AUDIO);
             return;
@@ -268,7 +293,7 @@ public class MainActivity extends AppCompatActivity {
             }
             return;
         }
-        voice = new Voice();
+        voice = new Voice(command);
         voice.begin();
     }
 
@@ -302,6 +327,14 @@ public class MainActivity extends AppCompatActivity {
     }
 
     private class Client extends WebViewClient {
+        @Override
+        public void onPageFinished(WebView view, String url) {
+            if (pendingVoiceCommand && Prefs.isPaired(MainActivity.this)) {
+                pendingVoiceCommand = false;
+                startVoice(true);                  // اپ از دکمهٔ «بگو» باز شده: به‌محض آماده‌شدن صفحه گوش بده
+            }
+        }
+
         @Override
         public boolean shouldOverrideUrlLoading(WebView view, WebResourceRequest request) {
             Uri u = request.getUrl();
@@ -427,7 +460,15 @@ public class MainActivity extends AppCompatActivity {
                         .put("smsAll", Prefs.smsAll(MainActivity.this))
                         .put("battery", pm != null && pm.isIgnoringBatteryOptimizations(getPackageName()))
                         .put("lastContacts", Prefs.lastContactsSync(MainActivity.this))
-                        .put("lastSms", Prefs.lastSmsSync(MainActivity.this)).toString();
+                        .put("lastSms", Prefs.lastSmsSync(MainActivity.this))
+                        .put("callLog", granted(Manifest.permission.READ_CALL_LOG))
+                        .put("calendar", granted(Manifest.permission.READ_CALENDAR))
+                        .put("msgr", Prefs.msgrCapture(MainActivity.this))
+                        .put("notifAccess", NotificationManagerCompat.getEnabledListenerPackages(MainActivity.this).contains(getPackageName()))
+                        .put("lastNotif", Prefs.lastNotif(MainActivity.this))
+                        .put("lastCalls", Prefs.lastCallsSync(MainActivity.this))
+                        .put("lastCalendar", Prefs.lastCalendarSync(MainActivity.this))
+                        .put("ttsFa", ttsFa).toString();
             } catch (Exception e) {
                 return "{}";
             }
@@ -444,6 +485,8 @@ public class MainActivity extends AppCompatActivity {
                         case "sms_read": perms.add(Manifest.permission.READ_SMS); perms.add(Manifest.permission.RECEIVE_SMS); break;
                         case "sms_send": perms.add(Manifest.permission.SEND_SMS); break;
                         case "call": perms.add(Manifest.permission.CALL_PHONE); break;
+                        case "calls": perms.add(Manifest.permission.READ_CALL_LOG); break;
+                        case "calendar": perms.add(Manifest.permission.READ_CALENDAR); break;
                         case "notif": if (Build.VERSION.SDK_INT >= 33) perms.add(Manifest.permission.POST_NOTIFICATIONS); break;
                         default: break;
                     }
@@ -468,6 +511,55 @@ public class MainActivity extends AppCompatActivity {
 
         @JavascriptInterface
         public void setSmsAll(boolean on) { Prefs.setSmsAll(MainActivity.this, on); }
+
+        @JavascriptInterface
+        public void setMessengerCapture(boolean on) { Prefs.setMsgrCapture(MainActivity.this, on); }
+
+        @JavascriptInterface
+        public void syncCalls() {
+            new Thread(() -> {
+                int n = CallLogSync.run(MainActivity.this, 30);
+                runOnUiThread(() -> {
+                    Toast.makeText(MainActivity.this, n >= 0 ? n + " تماس تازه برای مهرداد ذخیره شد" : "همگام‌سازی تماس‌ها نشد (مجوز یا اینترنت)", Toast.LENGTH_LONG).show();
+                    web.evaluateJavascript("window.onPhoneChanged && window.onPhoneChanged()", null);
+                });
+            }).start();
+        }
+
+        @JavascriptInterface
+        public void syncCalendar() {
+            new Thread(() -> {
+                int n = CalendarSync.run(MainActivity.this);
+                runOnUiThread(() -> {
+                    Toast.makeText(MainActivity.this, n >= 0 ? n + " رویداد تقویم برای مهرداد همگام شد" : "همگام‌سازی تقویم نشد (مجوز یا اینترنت)", Toast.LENGTH_LONG).show();
+                    web.evaluateJavascript("window.onPhoneChanged && window.onPhoneChanged()", null);
+                });
+            }).start();
+        }
+
+        /** شروع گوش‌دادن در حالت «دستور» (جواب مستقیم به چت می‌رود، بدون اینکه کاربر روی صفحهٔ چت باشد). */
+        @JavascriptInterface
+        public void startVoiceCommand() { runOnUiThread(() -> MainActivity.this.startVoice(true)); }
+
+        @JavascriptInterface
+        public boolean speakAvailable() { return ttsFa; }
+
+        @JavascriptInterface
+        public void speak(String text) {
+            runOnUiThread(() -> { if (tts != null && ttsFa && text != null) tts.speak(text, TextToSpeech.QUEUE_FLUSH, null, "mehrdad"); });
+        }
+
+        /** تنظیمات اندروید ← برنامه‌های پیش‌فرض ← دستیار دیجیتال (برای انتخاب مهرداد). */
+        @JavascriptInterface
+        public void openAssistantSettings() {
+            runOnUiThread(() -> {
+                try {
+                    startActivity(new Intent(Settings.ACTION_VOICE_INPUT_SETTINGS));
+                } catch (Exception e) {
+                    startActivity(new Intent(Settings.ACTION_SETTINGS));
+                }
+            });
+        }
 
         @JavascriptInterface
         public void syncContacts() {

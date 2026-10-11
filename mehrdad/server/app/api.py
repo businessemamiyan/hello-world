@@ -4,6 +4,7 @@
 هیچ رمز ثابتی در .env یا داخل اپ نیست. /api/pair با محدودیت تعداد تلاش ناموفق محافظت می‌شود.
 """
 import asyncio
+import hashlib
 import json
 import logging
 import os
@@ -270,6 +271,34 @@ class IngestItem(BaseModel):
     source: str = Field(default="", max_length=120)
     text: str = Field(min_length=1, max_length=2000)
     ts: float
+    app: str = Field(default="", max_length=40)            # فقط اعلان پیام‌رسان‌ها (واتس‌اپ/تلگرام/اینستاگرام/…)
+    conv: str = Field(default="", max_length=160)          # کلید گفتگو روی گوشی (برای جواب‌دادن)
+    title: str = Field(default="", max_length=120)         # نام فرستنده/گروه
+
+
+class CallItem(BaseModel):
+    id: str = Field(min_length=1, max_length=40)
+    number: str = Field(default="", max_length=40)
+    name: str = Field(default="", max_length=100)
+    type: str = Field(pattern="^(incoming|outgoing|missed|rejected)$")
+    ts: float
+    duration: int = Field(default=0, ge=0, le=86400)
+
+
+class CallsSyncIn(BaseModel):
+    calls: list[CallItem] = Field(max_length=300)
+
+
+class CalendarItem(BaseModel):
+    id: str = Field(min_length=1, max_length=40)
+    title: str = Field(default="", max_length=140)
+    start: float
+    end: float = 0
+    location: str = Field(default="", max_length=140)
+
+
+class CalendarSyncIn(BaseModel):
+    events: list[CalendarItem] = Field(max_length=300)
 
 
 class IngestIn(BaseModel):
@@ -512,6 +541,27 @@ def create_router(mem, svc):
         if a is None:
             raise HTTPException(status_code=404, detail="not found")
         return {"message": msg, "action": await mem.get_phone_action(aid)}
+
+    @router.post("/calls/sync")
+    async def calls_sync(body: CallsSyncIn, dev=Depends(current_device)):
+        names = {}
+        for c in await mem.all_contacts():
+            for n in c["numbers"]:
+                names[n] = c["name"]
+        label = {"incoming": "تماس ورودی", "outgoing": "تماس خروجی", "missed": "تماس از دست رفته", "rejected": "تماس ردشده"}
+        stored = dup = 0
+        for c in body.calls:
+            who = c.name or names.get(norm_number(c.number)) or c.number or "نامشخص"
+            text = label[c.type] + (f" ({c.duration // 60}:{c.duration % 60:02d})" if c.duration else "")
+            rid = await mem.add_inbox("call", who, text, c.ts, dedup_key=f"call:{c.id}", notified=1)
+            stored, dup = (stored + 1, dup) if rid else (stored, dup + 1)
+        return {"stored": stored, "duplicate": dup}
+
+    @router.post("/calendar/sync")
+    async def calendar_sync(body: CalendarSyncIn, dev=Depends(current_device)):
+        events = [{"id": e.id, "title": e.title, "start": e.start, "end": e.end or e.start, "location": e.location} for e in body.events]
+        await mem.kv_set("phone:calendar", json.dumps(events, ensure_ascii=False))
+        return {"stored": len(events)}
 
     @router.post("/sms/sync")
     async def sms_sync(body: SmsSyncIn, dev=Depends(current_device)):
@@ -897,6 +947,17 @@ def create_router(mem, svc):
         for it in body.items:
             if is_sensitive(it.text):       # دفاع در عمق: اپ هم فیلتر می‌کند
                 skipped += 1
+                continue
+            if it.app:                      # اعلان پیام‌رسان: ذخیره برای جست‌وجو/پاسخ؛ هرگز تراکنش بانکی حدس زده نمی‌شود
+                key = f"n:{it.conv}:{hashlib.sha256(it.text.encode()).hexdigest()[:12]}:{int(it.ts // 600)}"
+                inbox_id = await mem.add_inbox(it.kind, f"{it.app} — {it.title or it.source}".strip(" —"), it.text, it.ts, dedup_key=key, notified=1)
+                if inbox_id is None:
+                    duplicate += 1
+                    continue
+                stored += 1
+                await mem.kv_set("phone:last_notif", str(time.time()))
+                if it.conv:
+                    await mem.touch_conv(it.conv, it.app, it.title or it.source or it.conv, it.ts)
                 continue
             inbox_id = await mem.add_inbox(it.kind, it.source, it.text, it.ts)
             if inbox_id is None:

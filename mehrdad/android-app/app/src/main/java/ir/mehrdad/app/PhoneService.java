@@ -85,11 +85,15 @@ public class PhoneService extends Service {
 
     @Override
     public int onStartCommand(Intent intent, int flags, int startId) {
+        PendingIntent talk = PendingIntent.getActivity(this, 1, new Intent(this, MainActivity.class).putExtra("voice", true)
+                .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK | Intent.FLAG_ACTIVITY_SINGLE_TOP), PendingIntent.FLAG_IMMUTABLE | PendingIntent.FLAG_UPDATE_CURRENT);
         Notification n = new NotificationCompat.Builder(this, CH_SERVICE)
                 .setSmallIcon(android.R.drawable.stat_sys_data_bluetooth)
                 .setContentTitle("مهرداد آمادهٔ دستورهای توست")
-                .setContentText("پیامک و تماسی که تأیید کنی از همین گوشی انجام می‌شود")
-                .setOngoing(true).setPriority(NotificationCompat.PRIORITY_MIN).build();
+                .setContentText("بزن و بگو؛ پیامک و تماسی که تأیید کنی از همین گوشی انجام می‌شود")
+                .setContentIntent(talk)
+                .addAction(android.R.drawable.ic_btn_speak_now, "🎤 بگو به مهرداد", talk)
+                .setOngoing(true).setPriority(NotificationCompat.PRIORITY_LOW).build();
         if (Build.VERSION.SDK_INT >= 34) startForeground(NOTIF_ID, n, ServiceInfo.FOREGROUND_SERVICE_TYPE_SPECIAL_USE);
         else startForeground(NOTIF_ID, n);
         running = true;
@@ -142,9 +146,10 @@ public class PhoneService extends Service {
     }
 
     private void maybeSyncContacts() {
-        if (!ContactsSync.hasPermission(this)) return;
-        if (System.currentTimeMillis() - Prefs.lastContactsSync(this) < CONTACTS_EVERY_MS) return;
-        ContactsSync.run(this);
+        long now = System.currentTimeMillis();
+        if (ContactsSync.hasPermission(this) && now - Prefs.lastContactsSync(this) >= CONTACTS_EVERY_MS) ContactsSync.run(this);
+        if (CallLogSync.hasPermission(this) && now - Prefs.lastCallsSync(this) >= 6L * 3600 * 1000) CallLogSync.run(this, 2);
+        if (CalendarSync.hasPermission(this) && now - Prefs.lastCalendarSync(this) >= 6L * 3600 * 1000) CalendarSync.run(this);
     }
 
     // ------------------------------------------------------------------ اجرای اقدام
@@ -159,6 +164,10 @@ public class PhoneService extends Service {
             if ("sms".equals(kind)) sendSms(id, number, text);
             else if ("call".equals(kind)) placeCall(id, number, name);
             else if ("instagram".equals(kind)) openInstagram(id, name, text);
+            else if ("reply".equals(kind)) {
+                String err = NotifListener.sendReply(this, number, text);           // number = کلید گفتگو (بسته|نام)
+                ackAsync(id, err == null ? "sent" : "failed", err == null ? "از دکمهٔ پاسخ اعلان فرستاده شد" : err);
+            }
             else ackAsync(id, "failed", "نوع اقدام ناشناخته");
         } catch (Exception e) {
             ackAsync(id, "failed", e.getClass().getSimpleName());

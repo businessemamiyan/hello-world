@@ -16,6 +16,10 @@ public class Prefs {
     private static final String SMS_ALL = "sms_all";
     private static final String LAST_CONTACTS = "last_contacts_sync";
     private static final String LAST_SMS = "last_sms_sync";
+    private static final String MSGR = "msgr_capture";
+    private static final String LAST_NOTIF = "last_notif";
+    private static final String LAST_CALLS = "last_calls_sync";
+    private static final String LAST_CAL = "last_calendar_sync";
 
     private static SharedPreferences get(Context ctx) {
         return ctx.getApplicationContext().getSharedPreferences(FILE, Context.MODE_PRIVATE);
@@ -63,6 +67,23 @@ public class Prefs {
     public static long lastSmsSync(Context ctx) { return get(ctx).getLong(LAST_SMS, 0L); }
 
     public static void markSmsSynced(Context ctx) { get(ctx).edit().putLong(LAST_SMS, System.currentTimeMillis()).apply(); }
+
+    /** اعلان تلگرام/واتس‌اپ/اینستاگرام/بله هم برای مهرداد ثبت بشه؟ (فرستنده + متن؛ رمز یک‌بارمصرف هرگز) */
+    public static boolean msgrCapture(Context ctx) { return get(ctx).getBoolean(MSGR, false); }
+
+    public static void setMsgrCapture(Context ctx, boolean on) { get(ctx).edit().putBoolean(MSGR, on).apply(); }
+
+    public static long lastNotif(Context ctx) { return get(ctx).getLong(LAST_NOTIF, 0L); }
+
+    public static void markNotif(Context ctx) { get(ctx).edit().putLong(LAST_NOTIF, System.currentTimeMillis()).apply(); }
+
+    public static long lastCallsSync(Context ctx) { return get(ctx).getLong(LAST_CALLS, 0L); }
+
+    public static void markCallsSynced(Context ctx) { get(ctx).edit().putLong(LAST_CALLS, System.currentTimeMillis()).apply(); }
+
+    public static long lastCalendarSync(Context ctx) { return get(ctx).getLong(LAST_CAL, 0L); }
+
+    public static void markCalendarSynced(Context ctx) { get(ctx).edit().putLong(LAST_CAL, System.currentTimeMillis()).apply(); }
 
     public static long lastUpdateCheck(Context ctx) {
         return get(ctx).getLong(LAST_UPDATE_CHECK, 0L);

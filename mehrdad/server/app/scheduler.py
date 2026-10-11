@@ -40,6 +40,12 @@ class Scheduler:
                 await self.bot.do_backup()
             except Exception:
                 log.exception("پشتیبان‌گیری ناموفق")
+            try:
+                n = await self.mem.prune_inbox(90)
+                if n:
+                    log.info("پیامک/اعلان/تماس قدیمی پاک شد: %d", n)
+            except Exception:
+                log.exception("پاک‌سازی صندوق ناموفق")
 
     async def maybe_coach(self, hhmm, today):
         """هر روز صبح برنامهٔ مربی ساخته و خلاصه‌اش در تلگرام فرستاده می‌شود."""
