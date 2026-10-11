@@ -143,6 +143,16 @@ class Memory:
                 revoked INTEGER NOT NULL DEFAULT 0
             );
             CREATE TABLE IF NOT EXISTS kv(key TEXT PRIMARY KEY, value TEXT);
+            CREATE TABLE IF NOT EXISTS projects(
+                id TEXT PRIMARY KEY, name TEXT NOT NULL, subtitle TEXT, status TEXT NOT NULL DEFAULT 'فعال', color TEXT, icon TEXT,
+                summary TEXT, meta TEXT, pos INTEGER NOT NULL DEFAULT 0, created_ts REAL NOT NULL, updated_ts REAL NOT NULL);
+            CREATE TABLE IF NOT EXISTS project_items(
+                id INTEGER PRIMARY KEY AUTOINCREMENT, project_id TEXT NOT NULL, kind TEXT NOT NULL, text TEXT NOT NULL,
+                done INTEGER NOT NULL DEFAULT 0, source TEXT, ts REAL NOT NULL);
+            CREATE INDEX IF NOT EXISTS ix_pitems ON project_items(project_id, kind, done);
+            CREATE TABLE IF NOT EXISTS project_docs(
+                id INTEGER PRIMARY KEY AUTOINCREMENT, project_id TEXT NOT NULL, section TEXT NOT NULL, body TEXT NOT NULL, pos INTEGER NOT NULL DEFAULT 0);
+            CREATE INDEX IF NOT EXISTS ix_pdocs ON project_docs(project_id, pos);
             CREATE TABLE IF NOT EXISTS habit_log(
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
                 habit_id INTEGER NOT NULL,
@@ -183,6 +193,10 @@ class Memory:
             self.db.executemany(
                 "INSERT INTO memory_fts(summary, detail, memory_id) VALUES(?,?,?)",
                 [(normalize_fa(s), normalize_fa(d), i) for i, s, d in missing],
+            )
+            self.db.execute(
+                "CREATE VIRTUAL TABLE IF NOT EXISTS project_docs_fts USING fts5("
+                "section, body, doc_id UNINDEXED, tokenize='unicode61 remove_diacritics 2')"
             )
             return True
         except sqlite3.OperationalError:
@@ -448,6 +462,130 @@ class Memory:
             rows = self.db.execute("SELECT key, value FROM kv WHERE key LIKE ? ESCAPE '\\'", (esc + "%",)).fetchall()
         return {k: v for k, v in rows}
 
+    # ---------- پروژه‌ها ----------
+    @staticmethod
+    def _project(r):
+        try:
+            meta = json.loads(r[7]) if r[7] else {}
+        except ValueError:
+            meta = {}
+        return {"id": r[0], "name": r[1], "subtitle": r[2] or "", "status": r[3], "color": r[4] or "#E3B35C", "icon": r[5] or "🗂",
+                "summary": r[6] or "", "meta": meta, "kpis": meta.get("kpis") or [], "pos": r[8], "updated_ts": r[10]}
+
+    _PROJ_COLS = "id, name, subtitle, status, color, icon, summary, meta, pos, created_ts, updated_ts"
+
+    async def upsert_project(self, p):
+        now = time.time()
+        async with self.lock:
+            cur = self.db.execute("SELECT created_ts FROM projects WHERE id=?", (p["id"],)).fetchone()
+            self.db.execute(
+                "INSERT INTO projects(id, name, subtitle, status, color, icon, summary, meta, pos, created_ts, updated_ts) VALUES(?,?,?,?,?,?,?,?,?,?,?) "
+                "ON CONFLICT(id) DO UPDATE SET name=excluded.name, subtitle=excluded.subtitle, color=excluded.color, icon=excluded.icon, "
+                "summary=excluded.summary, meta=excluded.meta, pos=excluded.pos, updated_ts=excluded.updated_ts"
+                + ("" if cur else ""),
+                (p["id"], p["name"], p.get("subtitle"), p.get("status") or "فعال", p.get("color"), p.get("icon"), p.get("summary"),
+                 json.dumps(p.get("meta") or {}, ensure_ascii=False), int(p.get("pos") or 0), cur[0] if cur else now, now))
+            self.db.commit()
+
+    async def get_project(self, pid):
+        async with self.lock:
+            r = self.db.execute(f"SELECT {self._PROJ_COLS} FROM projects WHERE id=?", (pid,)).fetchone()
+        return self._project(r) if r else None
+
+    async def update_project(self, pid, patch):
+        cols = {"name": "name", "subtitle": "subtitle", "status": "status", "summary": "summary", "color": "color", "icon": "icon"}
+        sets = [(cols[k], v) for k, v in patch.items() if k in cols and v is not None]
+        if not sets:
+            return await self.get_project(pid)
+        async with self.lock:
+            self.db.execute("UPDATE projects SET " + ", ".join(f"{c}=?" for c, _ in sets) + ", updated_ts=? WHERE id=?",
+                            (*[v for _, v in sets], time.time(), pid))
+            self.db.commit()
+        return await self.get_project(pid)
+
+    async def list_projects(self):
+        async with self.lock:
+            rows = self.db.execute(f"SELECT {self._PROJ_COLS} FROM projects ORDER BY pos, created_ts").fetchall()
+            out = []
+            for r in rows:
+                p = self._project(r)
+                tasks = self.db.execute("SELECT id, text FROM project_items WHERE project_id=? AND kind='task' AND done=0 ORDER BY id", (p["id"],)).fetchall()
+                last = self.db.execute("SELECT text, ts FROM project_items WHERE project_id=? AND kind='note' ORDER BY id DESC LIMIT 1", (p["id"],)).fetchone()
+                p["open_count"] = len(tasks)
+                p["open_tasks"] = [{"id": t[0], "text": t[1]} for t in tasks[:5]]
+                p["last_note"] = {"text": last[0], "ts": last[1]} if last else None
+                p["docs_count"] = self.db.execute("SELECT COUNT(*) FROM project_docs WHERE project_id=?", (p["id"],)).fetchone()[0]
+                out.append(p)
+        return out
+
+    async def add_project_item(self, pid, kind, text, source=None):
+        async with self.lock:
+            cur = self.db.execute("INSERT INTO project_items(project_id, kind, text, done, source, ts) VALUES(?,?,?,0,?,?)",
+                                  (pid, kind, text, source, time.time()))
+            self.db.execute("UPDATE projects SET updated_ts=? WHERE id=?", (time.time(), pid))
+            self.db.commit()
+            return cur.lastrowid
+
+    async def project_items(self, pid, kind=None, limit=300):
+        q = "SELECT id, project_id, kind, text, done, source, ts FROM project_items WHERE project_id=?" + (" AND kind=?" if kind else "") + " ORDER BY id DESC LIMIT ?"
+        args = (pid, kind, limit) if kind else (pid, limit)
+        async with self.lock:
+            rows = self.db.execute(q, args).fetchall()
+        return [{"id": r[0], "project_id": r[1], "kind": r[2], "text": r[3], "done": bool(r[4]), "source": r[5], "ts": r[6]} for r in rows]
+
+    async def set_project_item_done(self, item_id, done):
+        async with self.lock:
+            cur = self.db.execute("UPDATE project_items SET done=? WHERE id=?", (1 if done else 0, item_id))
+            self.db.commit()
+            return cur.rowcount > 0
+
+    async def delete_project_item(self, item_id):
+        async with self.lock:
+            cur = self.db.execute("DELETE FROM project_items WHERE id=?", (item_id,))
+            self.db.commit()
+            return cur.rowcount > 0
+
+    async def replace_project_docs(self, pid, docs):
+        """docs: [(بخش, متن)] — همهٔ مستندات قبلیِ پروژه جایگزین می‌شود (ورود دوباره تکرار نمی‌سازد)."""
+        async with self.lock:
+            old = [r[0] for r in self.db.execute("SELECT id FROM project_docs WHERE project_id=?", (pid,)).fetchall()]
+            if self.fts and old:
+                self.db.executemany("DELETE FROM project_docs_fts WHERE doc_id=?", [(i,) for i in old])
+            self.db.execute("DELETE FROM project_docs WHERE project_id=?", (pid,))
+            for pos, (section, body) in enumerate(docs):
+                cur = self.db.execute("INSERT INTO project_docs(project_id, section, body, pos) VALUES(?,?,?,?)", (pid, section, body, pos))
+                if self.fts:
+                    self.db.execute("INSERT INTO project_docs_fts(section, body, doc_id) VALUES(?,?,?)", (normalize_fa(section), normalize_fa(body), cur.lastrowid))
+            self.db.commit()
+
+    async def list_project_docs(self, pid):
+        async with self.lock:
+            rows = self.db.execute("SELECT id, section, LENGTH(body) FROM project_docs WHERE project_id=? ORDER BY pos", (pid,)).fetchall()
+        return [{"id": r[0], "section": r[1], "size": r[2]} for r in rows]
+
+    async def get_project_doc(self, doc_id):
+        async with self.lock:
+            r = self.db.execute("SELECT d.id, d.project_id, d.section, d.body, p.name FROM project_docs d JOIN projects p ON p.id=d.project_id WHERE d.id=?", (doc_id,)).fetchone()
+        return {"id": r[0], "project_id": r[1], "section": r[2], "body": r[3], "project": r[4]} if r else None
+
+    async def search_project_docs(self, query, limit=3, snippet=900):
+        """جست‌وجوی مستندات پروژه‌ها؛ خروجی هم‌شکل نتیجه‌های search_memory تا مغز یکسان استفاده کند."""
+        tokens = [t for t in _TOKEN.findall(normalize_fa(query)) if len(t) > 1][:8]
+        if not tokens:
+            return []
+        async with self.lock:
+            rows = []
+            if self.fts:
+                match = " OR ".join('"%s"*' % t.replace('"', "") for t in tokens)
+                try:
+                    rows = self.db.execute(
+                        "SELECT p.name, d.section, d.body FROM project_docs_fts f JOIN project_docs d ON d.id=f.doc_id "
+                        "JOIN projects p ON p.id=d.project_id WHERE project_docs_fts MATCH ? ORDER BY bm25(project_docs_fts) LIMIT ?",
+                        (match, limit)).fetchall()
+                except sqlite3.OperationalError:
+                    rows = []
+        return [{"type": "project", "summary": f"[پروژه {r[0]}] {r[1]}", "detail": r[2][:snippet], "amount": None, "ts": None} for r in rows]
+
     # ---------- inbox (پیامک/نوتیفیکیشن ورودی از گوشی) ----------
     async def add_inbox(self, kind, source, text, ts, dedup_key=None, notified=0):
         """None اگر قبلاً همین مورد ثبت شده باشد (تلاش دوباره‌ی اپ/ایجنت نباید دوبار ثبت کند)."""
@@ -633,7 +771,8 @@ class Memory:
                     f"SELECT type, summary, detail, amount, ts FROM memory WHERE {like} ORDER BY id DESC LIMIT ?",
                     (*params, limit),
                 ).fetchall()
-            return [{"type": r[0], "summary": r[1], "detail": r[2], "amount": r[3], "ts": r[4]} for r in rows]
+            found = [{"type": r[0], "summary": r[1], "detail": r[2], "amount": r[3], "ts": r[4]} for r in rows]
+        return found + await self.search_project_docs(query, limit=3)
 
     async def recent_memory(self, limit=40):
         async with self.lock:

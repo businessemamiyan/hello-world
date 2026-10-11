@@ -12,6 +12,7 @@ import re
 from . import agents, finance, life, novatunnel, profile
 from .coach import Coach
 from .payroll import Payroll
+from .projects import Projects
 from . import payroll as payroll_mod
 from .media import MAX_IMAGE_BYTES, sniff_image
 from .memory import normalize_fa, today_str
@@ -33,6 +34,7 @@ HELP = """سلام، منم مهرداد، مغز دومت 🧠
 /today /week /month — خرج و درآمد، غذا، قلیان، کارها و عادت‌های امروز، هفته یا ماه
 /finance — موجودی حساب‌ها، بدهی و اقساط و هشدارها
 /salary — حقوق این ماه (از روی فیش نمونه) و ماه بعد
+/projects — وضعیت پروژه‌هات (VQ ERP، VQ Factory، NovaTunnel…)
 /goals — هدف‌هایی که از روی شناختم از تو پیشنهاد می‌دم
 /nova — فروش و درآمد NovaTunnel (فقط می‌خونم)
 /inbox — آخرین پیام‌های ایمیل و تلگرام که ایجنت‌ها دیدن (/mailtest برای تست ایمیل)
@@ -91,6 +93,7 @@ class Bot:
         self._ctx_debt_ids = set()        # شناسهٔ بدهی‌های فعالی که مغز در همین گفتگو دیده است
         self.coach = Coach(self)
         self.payroll = Payroll(mem)
+        self.projects = Projects(mem)
         self.stt = None                   # app.stt.STT؛ main آن را وصل می‌کند (None = ویس خاموش)
 
     async def chat(self, text, images=None, voice=False):
@@ -143,6 +146,12 @@ class Bot:
         self._ctx_ids = {e["id"] for e in snap["profile"][-60:]} | {g["id"] for g in snap["goals"]}
         if digest:
             parts.append(digest)
+        try:
+            proj = await self.projects.prompt()
+            if proj:
+                parts.append(proj)
+        except Exception:
+            log.exception("چکیدهٔ پروژه‌ها ساخته نشد")
         try:
             pay = await self.payroll.prompt()
             if pay:
@@ -259,7 +268,7 @@ class Bot:
     async def _apply_entries(self, entries, allowed_ids):
         """ورودی‌های مغز: جدید → ثبت؛ update_id/delete_id → فقط روی رکوردهای اخیری که مغز دیده؛ account_op/debt_op/habit_new → به‌روزرسانی اپ.
         خروجی: لیست خط‌های تأیید (حقیقت سمت سرور) برای نمایش زیر پاسخ."""
-        adds, notes, pay_ops = [], [], []
+        adds, notes, pay_ops, proj_ops = [], [], [], []
         paying = any("debt_op" in e and e["debt_op"]["op"] == "pay" for e in entries)
         for e in entries:
             if "delete_id" in e:
@@ -282,6 +291,8 @@ class Bot:
                     notes.append(note)
             elif "payroll_op" in e:
                 pay_ops.append(e["payroll_op"])
+            elif "project_op" in e:
+                proj_ops.append(e["project_op"])
             elif "payslip" in e:
                 notes.append(await self._apply_payslip(e["payslip"]))
             elif "habit_new" in e:
@@ -296,6 +307,8 @@ class Bot:
                 adds.append(e)
         if pay_ops:
             notes.extend(await self.payroll.apply_ops(pay_ops))
+        if proj_ops:
+            notes.extend(await self.projects.apply_ops(proj_ops))
         if adds:
             await self.mem.add_memory(adds)
         return [n for n in notes if n]
@@ -573,6 +586,10 @@ class Bot:
         head = text.split(maxsplit=1)[0] if text else ""
         if head in ("/today", "/week", "/month"):
             await self.handle_summary(chat_id, head[1:], private="private" in text)
+            return
+
+        if text == "/projects":
+            await self.tg.send(chat_id, await self.projects.text())
             return
 
         if text == "/salary":

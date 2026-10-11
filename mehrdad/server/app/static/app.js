@@ -23,7 +23,7 @@ let token = store.get('mehrdad_token') || '';
 const hash = new URLSearchParams(location.hash.slice(1));
 if (hash.get('t')) { token = hash.get('t'); store.set('mehrdad_token', token); history.replaceState(null, '', location.pathname); }
 if (!token && window.MehrdadNative && MehrdadNative.getToken) token = MehrdadNative.getToken() || '';
-const S = { tab: store.get('mehrdad_tab') || 'today', mview: 'tx', pmonth: '', gview: 'goals', mrange: 'month', lrange: 'week', priv: store.get('mehrdad_priv') === '1',
+const S = { tab: store.get('mehrdad_tab') || 'today', mview: 'tx', pmonth: '', pid: '', gview: 'goals', mrange: 'month', lrange: 'week', priv: store.get('mehrdad_priv') === '1',
             cache: {}, busy: false };
 applyTheme(store.get('mehrdad_theme') || 'night');
 
@@ -177,7 +177,7 @@ function composer(id, ph) {
 
 // ------------------------------------------------------------- صفحه‌ها
 async function viewToday() {
-  const d = await api('/api/dashboard?range=today'); S.cache.today = d;
+  const [d, pjs] = await Promise.all([api('/api/dashboard?range=today'), api('/api/projects').catch(() => ({ projects: [] }))]); S.cache.today = d;
   $('#subtitle').textContent = d.today_jalali;
   const f = d.finance, c = d.counts || {};
   const tasks = d.tasks || [], open = tasks.filter(t => (t.fields || {}).status !== 'done');
@@ -189,6 +189,7 @@ async function viewToday() {
     <div class="card ai"><div class="row spread"><h2>امروز چی شد؟</h2><span class="pill ai">مهرداد</span></div>
       ${composer('sayToday', 'مثلاً: ۲۰۰ ت فروش داشتم، ناهار برنج خوردم')}
       <p class="muted small">هر چی بنویسی خودش در بخش درست ثبت می‌شه.</p></div>
+    ${projectsStrip(pjs.projects)}
     ${plannedLine(f)}
     ${groupKpis(d, 4)}
     ${timeBars(d)}
@@ -368,7 +369,8 @@ async function viewLife() {
 const gviewSeg = () => `<div class="seg" role="group" style="justify-self:start">
   <button data-act="gview" data-val="goals" aria-pressed="${S.gview === 'goals'}">هدف‌ها</button>
   <button data-act="gview" data-val="habits" aria-pressed="${S.gview === 'habits'}">عادت‌ها و روتین</button>
-  <button data-act="gview" data-val="profile" aria-pressed="${S.gview === 'profile'}">پروفایل من</button></div>`;
+  <button data-act="gview" data-val="profile" aria-pressed="${S.gview === 'profile'}">پروفایل من</button>
+  <button data-act="gview" data-val="projects" aria-pressed="${S.gview === 'projects'}">پروژه‌ها</button></div>`;
 
 async function viewHabits() {
   const [p, d] = await Promise.all([api('/api/profile'), api('/api/dashboard?range=today')]);
@@ -420,9 +422,59 @@ async function viewProfile() {
   </section>`;
 }
 
+const mdLite = s => esc(s).replace(/\[([^\]\n]+)\]\([^)\n]*\)/g, '$1').replace(/\*\*([^*\n]+)\*\*/g, '<b>$1</b>').replace(/`([^`\n]+)`/g, '<code>$1</code>').replace(/^#{1,4}\s*(.*)$/gm, '<b>$1</b>');
+const isoDay = ts => new Date(ts * 1000).toISOString().slice(0, 10);
+function projectsStrip(ps) {
+  if (!ps || !ps.length) return '';
+  return `<div class="card"><div class="row spread"><h2>🗂 پروژه‌هام</h2><button class="btn sm" data-act="goto-projects">همه</button></div>
+    ${ps.map(p => `<button class="m-pj" data-act="proj-open" data-id="${esc(p.id)}" style="border-inline-start-color:${esc(p.color)}"><span class="r1"><b>${esc(p.icon)} ${esc(p.name)}</b><span class="row" style="gap:4px;flex-wrap:wrap"><span class="pill">${esc(p.status)}</span>${p.open_count ? `<span class="pill gold num">${fa(p.open_count)} کار باز</span>` : ''}</span></span><span class="r2">${esc(p.summary.slice(0, 90))}${p.summary.length > 90 ? '…' : ''}</span></button>`).join('')}</div>`;
+}
+async function viewProjects() {
+  if (S.pid) return viewProjectDetail();
+  const r = await api('/api/projects'); S.cache.projects = r.projects;
+  const card = p => `<div class="card m-goal" style="border-inline-start:4px solid ${esc(p.color)}"><div class="row spread"><b>${esc(p.icon)} ${esc(p.name)}</b><span class="pill">${esc(p.status)}</span></div>
+      ${p.subtitle ? `<div class="muted small">${esc(p.subtitle)}</div>` : ''}<div class="small">${esc(p.summary)}</div>
+      ${(p.kpis || []).length ? `<div class="kpis m-k3">${p.kpis.slice(0, 3).map(([l, v]) => kpi(esc(l), esc(v))).join('')}</div>` : ''}
+      ${p.last_note ? `<div class="muted small">آخرین: ${esc(p.last_note.text.slice(0, 120))}</div>` : ''}
+      <div class="row spread"><span class="muted small num">${fa(p.open_count)} کار باز · ${fa(p.docs_count)} بخش مستند</span><button class="btn sm primary" data-act="proj-open" data-id="${esc(p.id)}">باز کن</button></div></div>`;
+  return `<section class="pane">${gviewSeg()}<div class="pane-title"><h1>پروژه‌ها</h1></div>
+    <p class="muted small">مهرداد از این پروژه‌ها خبر داره. هر پیشرفت، مشکل یا کار تازه‌ای رو که تو چت بگی خودش همین‌جا ثبت می‌کنه.</p>
+    <div class="stack">${r.projects.length ? r.projects.map(card).join('') : `<div class="card">${empty('هنوز پروژه‌ای نیست.')}</div>`}</div>
+    <form class="row" data-form="proj-new" style="flex-wrap:nowrap"><input type="text" name="name" placeholder="پروژهٔ تازه…" required maxlength="80"><button class="btn" type="submit">افزودن</button></form></section>`;
+}
+async function viewProjectDetail() {
+  let d;
+  try { d = await api('/api/projects/' + encodeURIComponent(S.pid)); } catch (e) { S.pid = ''; throw e; }
+  S.cache.pdetail = d;
+  const open = d.tasks.filter(t => !t.done), done = d.tasks.filter(t => t.done);
+  const trow = t => `<div class="m-task ${t.done ? 'done' : ''}"><button class="m-check" data-act="proj-toggle" data-id="${t.id}" data-done="${t.done ? 0 : 1}" aria-label="انجام شد">✓</button>
+      <div><div class="m-t">${esc(t.text)}</div></div><button class="x" data-act="proj-del" data-id="${t.id}" aria-label="حذف">✕</button><span></span></div>`;
+  const STATUSES = ['فعال', 'در انتظار', 'متوقف', 'تمام‌شده'];
+  const sel = STATUSES.includes(d.status) ? STATUSES : [d.status, ...STATUSES];
+  return `<section class="pane"><div class="row spread"><button class="btn sm" data-act="proj-back">‹ همهٔ پروژه‌ها</button>
+      <select data-act="proj-status" data-id="${esc(d.id)}" aria-label="وضعیت">${sel.map(s => `<option ${s === d.status ? 'selected' : ''}>${esc(s)}</option>`).join('')}</select></div>
+    <div class="north" style="border-inline-start:4px solid ${esc(d.color)}"><span class="eyebrow">${esc(d.subtitle || 'پروژه')}</span>
+      <div class="fig"><strong style="font-size:1.4rem">${esc(d.icon)} ${esc(d.name)}</strong></div>
+      <div style="color:var(--hero-sub);line-height:1.8">${esc(d.summary)}</div></div>
+    ${(d.kpis || []).length ? `<div class="kpis">${d.kpis.map(([l, v]) => kpi(esc(l), esc(v))).join('')}</div>` : ''}
+    <div class="card"><div class="row spread"><h2>✅ کارهای باز</h2><span class="pill num">${fa(open.length)}</span></div>
+      ${open.length ? open.map(trow).join('') : empty('کار بازی نیست.')}
+      <form class="form" data-form="proj-item"><label class="f full"><span>کار تازه یا یادداشت پیشرفت</span><input type="text" name="text" required maxlength="500" placeholder="مثلاً: ایندکس‌های دیتابیس اجرا شد"></label>
+        <label class="f"><span>نوع</span><select name="kind"><option value="task">کار باز</option><option value="note">یادداشت پیشرفت</option></select></label>
+        <button class="btn primary" type="submit">افزودن</button></form>
+      ${done.length ? `<details style="margin-top:8px"><summary>انجام‌شده‌ها (${fa(done.length)})</summary>${done.map(trow).join('')}</details>` : ''}</div>
+    <div class="card"><div class="row spread"><h2>📝 یادداشت‌ها و پیشرفت</h2><span class="pill num">${fa(d.notes.length)}</span></div>
+      <p class="muted small">یا همین‌ها رو تو چت به مهرداد بگو؛ خودش می‌نویسه.</p>
+      ${d.notes.length ? d.notes.slice(0, 40).map(n => `<div class="m-tl" style="grid-template-columns:1fr auto"><div class="m-tl-b"><div>${esc(n.text)}</div><div class="muted small num">${esc(jdate(isoDay(n.ts)))}${n.source === 'import' ? ' · از سند اولیه' : ''}</div></div><button class="x" data-act="proj-del" data-id="${n.id}" aria-label="حذف">✕</button></div>`).join('') : empty('هنوز یادداشتی نیست.')}</div>
+    ${d.docs.length ? `<div class="card"><div class="row spread"><h2>📚 مستندات کامل</h2><span class="pill num">${fa(d.docs.length)} بخش</span></div>
+      <p class="muted small">مهرداد این مستندات رو هم می‌خونه و وقتی ازش بپرسی (مثلاً «باگ‌های لعاب‌زنی چی بود؟») جواب می‌ده.</p>
+      ${d.docs.map(x => `<details data-doc="${x.id}"><summary>${esc(x.section)}</summary><div class="c-body small" id="doc${x.id}" dir="auto"><span class="muted">در حال باز کردن…</span></div></details>`).join('')}</div>` : ''}</section>`;
+}
+
 async function viewGoals() {
   if (S.gview === 'habits') return viewHabits();
   if (S.gview === 'profile') return viewProfile();
+  if (S.gview === 'projects') return viewProjects();
   const r = await api('/api/events?kind=goal,task&limit=150'); const ev = r.events;
   S.cache.goals = ev;
   const goals = ev.filter(e => e.type === 'goal'), tasks = ev.filter(e => e.type === 'task');
@@ -788,6 +840,11 @@ document.addEventListener('click', async ev => {
     }
     else if (act === 'coach-book') { await api('/api/coach/books/' + id, { method: 'PATCH', body: { status: b.dataset.st } }); renderKeep(); }
     else if (act === 'coach-book-del') { if (confirm('این کتاب از فهرست حذف بشه؟')) { await api('/api/coach/books/' + id, { method: 'DELETE' }); renderKeep(); } }
+    else if (act === 'goto-projects') { S.tab = 'goals'; S.gview = 'projects'; S.pid = ''; store.set('mehrdad_tab', 'goals'); render(); window.scrollTo(0, 0); }
+    else if (act === 'proj-open') { S.tab = 'goals'; S.gview = 'projects'; S.pid = b.dataset.id; store.set('mehrdad_tab', 'goals'); render(); window.scrollTo(0, 0); }
+    else if (act === 'proj-back') { S.pid = ''; render(); window.scrollTo(0, 0); }
+    else if (act === 'proj-toggle') { await api('/api/projects/items/' + id, { method: 'PATCH', body: { done: b.dataset.done === '1' } }); renderKeep(); }
+    else if (act === 'proj-del') { if (confirm('این مورد حذف بشه؟')) { await api('/api/projects/items/' + id, { method: 'DELETE' }); renderKeep(); } }
     else if (act === 'pshift') { S.pmonth = shiftM(S.pmonth, Number(b.dataset.d)); render(); }
     else if (act === 'pmonth') { S.pmonth = b.dataset.val; render(); window.scrollTo(0, 0); }
     else if (act === 'pay-del') { if (confirm('فیش واقعی این ماه حذف بشه؟ (ماه دوباره تخمینی می‌شه)')) { await api('/api/payroll/slips/' + S.pmonth, { method: 'DELETE' }); toast('حذف شد'); render(); } }
@@ -824,6 +881,9 @@ document.addEventListener('click', async ev => {
 document.addEventListener('change', async ev => {
   const t = ev.target;
   if (t.id === 'privChk') { S.priv = t.checked; store.set('mehrdad_priv', S.priv ? '1' : '0'); syncPriv(); render(); }
+  else if (t.dataset.act === 'proj-status') {
+    try { await api('/api/projects/' + encodeURIComponent(t.dataset.id), { method: 'PATCH', body: { status: t.value } }); toast('وضعیت عوض شد'); } catch (e) { toast(e.message); }
+  }
   else if (t.dataset.act === 'pay-setting') {
     try { await api('/api/payroll/settings', { method: 'PUT', body: { [t.dataset.key]: t.value } }); toast('ذخیره شد'); renderKeep(); } catch (e) { toast(e.message); }
   }
@@ -835,6 +895,15 @@ document.addEventListener('change', async ev => {
     try { await api('/api/events/' + t.dataset.id, { method: 'PATCH', body: { fields: { progress: Number(t.value) } } }); render(); } catch (e) { toast(e.message); }
   }
 });
+
+document.addEventListener('toggle', async ev => {
+  const d = ev.target;
+  if (!d || !d.dataset || !d.dataset.doc || !d.open || d.dataset.loaded) return;
+  d.dataset.loaded = '1';
+  const box = $('#doc' + d.dataset.doc);
+  try { const r = await api('/api/projects/doc/' + d.dataset.doc); box.innerHTML = mdLite(r.body); }
+  catch (e) { d.dataset.loaded = ''; if (box) box.textContent = 'باز نشد: ' + e.message; }
+}, true);
 
 document.addEventListener('keydown', ev => {
   if (ev.target.matches && ev.target.matches('textarea[id^=say]') && ev.key === 'Enter' && !ev.shiftKey && !ev.isComposing) { ev.preventDefault(); say(ev.target.id); }
@@ -852,6 +921,8 @@ document.addEventListener('submit', async ev => {
       if (window.MehrdadNative && MehrdadNative.savePairing) MehrdadNative.savePairing(location.origin, token);
       toast('وصل شد ✓'); return boot();
     }
+    if (kind === 'proj-item') { await api('/api/projects/' + encodeURIComponent(S.pid) + '/items', { method: 'POST', body: { kind: v.kind, text: v.text.trim() } }); toast('ثبت شد ✓'); return renderKeep(); }
+    if (kind === 'proj-new') { const r = await api('/api/projects', { method: 'POST', body: { name: v.name.trim() } }); S.pid = r.id; toast('پروژه ساخته شد'); return render(); }
     if (kind === 'payvar') {
       const val = Number(en(v.value)); if (!(val >= 0)) return toast('مقدار نامعتبر');
       const r = await api('/api/payroll/vars', { method: 'POST', body: { month: S.pmonth, op: v.op, value: val, mode: v.mode } });

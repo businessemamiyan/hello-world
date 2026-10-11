@@ -171,6 +171,25 @@ class PayrollSettingsIn(BaseModel):
     insurable: list[str] | None = Field(default=None, max_length=12)
 
 
+class ProjectItemIn(BaseModel):
+    kind: str = Field(pattern="^(task|note)$")
+    text: str = Field(min_length=1, max_length=500)
+
+
+class ProjectItemPatch(BaseModel):
+    done: bool
+
+
+class ProjectPatch(BaseModel):
+    status: str | None = Field(default=None, min_length=1, max_length=40)
+    summary: str | None = Field(default=None, max_length=700)
+
+
+class ProjectIn(BaseModel):
+    name: str = Field(min_length=1, max_length=80)
+    subtitle: str = Field(default="", max_length=160)
+
+
 class CoachDoneIn(BaseModel):
     key: str = Field(min_length=1, max_length=12)
     on: bool = True
@@ -394,6 +413,68 @@ def create_router(mem, svc):
         snap["sections"] = list(profile.SECTIONS)
         snap["next_questions"] = [{"id": q[0], "section": q[1], "text": q[2]} for q in profile.SELF_QUESTIONS]
         return snap
+
+    # ---------- پروژه‌ها ----------
+    def _proj():
+        p = getattr(svc, "projects", None)
+        if p is None:
+            raise HTTPException(status_code=503, detail="projects unavailable")
+        return p
+
+    @router.get("/projects")
+    async def projects_list(dev=Depends(current_device)):
+        return {"projects": await _proj().listing()}
+
+    @router.post("/projects")
+    async def projects_create(body: ProjectIn, dev=Depends(current_device)):
+        import re as _re
+        base = _re.sub(r"[^a-z0-9]+", "-", body.name.lower()).strip("-") or "proj"
+        existing = {p["id"] for p in await _proj().listing()}
+        pid, n = base, 2
+        while pid in existing:
+            pid, n = f"{base}-{n}", n + 1
+        await mem.upsert_project({"id": pid, "name": body.name.strip(), "subtitle": body.subtitle.strip(), "status": "فعال", "color": "#E3B35C", "icon": "🗂",
+                                  "summary": "", "meta": {}, "pos": 100 + len(existing)})
+        return {"id": pid}
+
+    @router.get("/projects/doc/{doc_id}")
+    async def projects_doc(doc_id: int, dev=Depends(current_device)):
+        d = await mem.get_project_doc(doc_id)
+        if not d:
+            raise HTTPException(status_code=404, detail="not found")
+        return d
+
+    @router.patch("/projects/items/{item_id}")
+    async def projects_item_patch(item_id: int, body: ProjectItemPatch, dev=Depends(current_device)):
+        if not await mem.set_project_item_done(item_id, body.done):
+            raise HTTPException(status_code=404, detail="not found")
+        return {"ok": True}
+
+    @router.delete("/projects/items/{item_id}")
+    async def projects_item_delete(item_id: int, dev=Depends(current_device)):
+        if not await mem.delete_project_item(item_id):
+            raise HTTPException(status_code=404, detail="not found")
+        return {"ok": True}
+
+    @router.get("/projects/{pid}")
+    async def projects_detail(pid: str, dev=Depends(current_device)):
+        d = await _proj().detail(pid)
+        if not d:
+            raise HTTPException(status_code=404, detail="not found")
+        return d
+
+    @router.patch("/projects/{pid}")
+    async def projects_patch(pid: str, body: ProjectPatch, dev=Depends(current_device)):
+        if not await mem.get_project(pid):
+            raise HTTPException(status_code=404, detail="not found")
+        await mem.update_project(pid, body.model_dump(exclude_none=True))
+        return await _proj().detail(pid)
+
+    @router.post("/projects/{pid}/items")
+    async def projects_item_add(pid: str, body: ProjectItemIn, dev=Depends(current_device)):
+        if not await mem.get_project(pid):
+            raise HTTPException(status_code=404, detail="not found")
+        return {"id": await mem.add_project_item(pid, body.kind, body.text.strip(), source="app")}
 
     # ---------- فیش حقوقی ----------
     def _pay():
