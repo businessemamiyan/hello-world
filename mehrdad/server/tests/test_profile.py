@@ -278,3 +278,43 @@ def test_wife_form_fallback_without_javascript(tmp_path):
     assert c.post("/who/BADTOKEN/submit", content="w2=x", headers={"Content-Type": "application/x-www-form-urlencoded"}).status_code == 404
     assert c.post(f"/who/{tok}/submit", content="w3=%20", headers={"Content-Type": "application/x-www-form-urlencoded"}).status_code == 422
     assert c.post(f"/who/{tok}/submit", content="w2=" + "a" * 300_000, headers={"Content-Type": "application/x-www-form-urlencoded"}).status_code == 413
+
+
+def test_wife_autosave_per_answer_then_done(tmp_path):
+    """جواب‌ها یکی‌یکی و کوچک ذخیره می‌شوند (برای اینترنت ضعیف)؛ «تموم شد» فقط یک نوبت مصرف و مالک را خبر می‌کند."""
+    import time
+    mem = Memory(str(tmp_path / "a.db"))
+    tg = FakeTG()
+
+    class NoBrain:
+        context_provider = None
+
+        async def think(self, *a, **k):
+            return "ok", []
+
+    loop = asyncio.new_event_loop()
+    loop.run_until_complete(mem.set_owner(7))
+    bot = Bot(mem, tg, NoBrain(), Config(bot_token="x", setup_code="S", anthropic_api_key="k"))
+    code = loop.run_until_complete(mem.create_pair_code())
+    c = TestClient(create_app(mem, time.time(), bot))
+    h = {"Authorization": "Bearer " + c.post("/api/pair", json={"code": code, "name": "t"}).json()["token"]}
+    tok = c.post("/api/invites", json={"label": "همسر", "days": 7}, headers=h).json()["url"].rsplit("/", 1)[1]
+    page = c.get(f"/who/{tok}").text
+    tg.sent.clear()                                                                                          # پیام جفت‌سازی دستگاه را کنار بگذار
+    assert "/answer" in page and "/done" in page and "هر جوابی که می‌نویسی خودش ذخیره می‌شه" in page
+    assert c.put(f"/api/invite/{tok}/answer", json={"qid": "w2", "text": "صبور", "who": "سارا"}).json() == {"saved": 1}
+    assert c.put(f"/api/invite/{tok}/answer", json={"qid": "w2", "text": "صبور و زحمتکش"}).json() == {"saved": 1}      # جایگزین، نه تکرار
+    c.put(f"/api/invite/{tok}/answer", json={"qid": "w5", "text": "اینستا"})
+    facts = loop.run_until_complete(mem.latest_of_kinds(("profile",), 20))
+    assert sorted((f["fields"]["qid"], f["summary"]) for f in facts) == [("w2", "صبور و زحمتکش"), ("w5", "اینستا")]
+    assert not tg.sent                                                                                       # هنوز «تموم شد» نزده: مالک را اذیت نکن
+    assert c.put(f"/api/invite/{tok}/answer", json={"qid": "w5", "text": "   "}).json() == {"saved": 0}       # خالی = پاک
+    assert [f["fields"]["qid"] for f in loop.run_until_complete(mem.latest_of_kinds(("profile",), 20))] == ["w2"]
+    assert c.put(f"/api/invite/{tok}/answer", json={"qid": "zzz", "text": "x"}).status_code == 422
+    assert c.put("/api/invite/BADTOKEN/answer", json={"qid": "w2", "text": "x"}).status_code == 404
+    assert c.put(f"/api/invite/{tok}/answer", json={"qid": "w2", "text": "x" * 2000}).status_code == 422
+    assert c.get("/api/invites", headers=h).json()["invites"][0]["uses"] == 0
+    r = c.post(f"/api/invite/{tok}/done")
+    assert r.status_code == 200 and r.json() == {"saved": 1} and any("جواب‌هاش رو فرستاد" in m for m in tg.sent)
+    assert c.get("/api/invites", headers=h).json()["invites"][0]["uses"] == 1
+    assert c.post("/api/invite/BADTOKEN/done").status_code == 404

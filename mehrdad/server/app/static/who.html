@@ -11,6 +11,9 @@
 <style>
  .q{display:grid;gap:8px}
  .q .sec{font-size:.72rem;color:var(--ink3);font-weight:700}
+ .q .st{font-size:.74rem;min-height:1em;color:var(--ink3)}
+ .q .st.ok{color:var(--good)}
+ .q .st.bad{color:var(--warn)}
  textarea{min-height:92px}
  .prog{height:6px;background:var(--sunk);border-radius:4px;overflow:hidden}
  .prog>i{display:block;height:100%;background:var(--gold);width:0}
@@ -32,67 +35,111 @@
   const esc = s => String(s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
   const FA = '۰۱۲۳۴۵۶۷۸۹', fa = n => String(n).replace(/\d/g, d => FA[d]);
   const app = $('#app');
+  const base = '/api/invite/' + encodeURIComponent(token);
+  const sleep = ms => new Promise(r => setTimeout(r, ms));
+
+  // ارسال یک درخواست کوچک؛ اول fetch با timeout، بعد XHR (بعضی مرورگرها/شبکه‌ها یکی‌شان گیر می‌کند)
+  function send(method, url, obj, ms = 10000) {
+    const body = JSON.stringify(obj || {});
+    const viaFetch = () => new Promise((ok, bad) => {
+      if (!window.fetch) return bad(new Error('no fetch'));
+      const ac = window.AbortController ? new AbortController() : null; const t = setTimeout(() => { if (ac) ac.abort(); bad(new Error('timeout')); }, ms);
+      fetch(url, { method, headers: { 'Content-Type': 'application/json' }, body, signal: ac ? ac.signal : undefined, cache: 'no-store' })
+        .then(r => { clearTimeout(t); ok({ ok: r.ok, status: r.status }); }, e => { clearTimeout(t); bad(e); });
+    });
+    const viaXhr = () => new Promise((ok, bad) => {
+      const x = new XMLHttpRequest(); x.open(method, url); x.setRequestHeader('Content-Type', 'application/json'); x.timeout = ms;
+      x.onload = () => ok({ ok: x.status >= 200 && x.status < 300, status: x.status });
+      x.onerror = () => bad(new Error('network')); x.ontimeout = () => bad(new Error('timeout')); x.send(body);
+    });
+    return viaFetch().catch(() => viaXhr());
+  }
+  // با چند بار تلاش و صبر بین‌شان؛ 4xx (مثل لینک باطل) تلاش دوباره ندارد
+  async function retry(method, url, obj) {
+    let last;
+    for (let i = 0; i < 4; i++) {
+      try { const r = await send(method, url, obj); if (r.ok || (r.status >= 400 && r.status < 500 && r.status !== 429)) return r; last = r; }
+      catch (e) { last = { ok: false, status: 0 }; }
+      await sleep(900 * (i + 1));
+    }
+    return last;
+  }
 
   async function load() {
-    const r = await fetch('/api/invite/' + encodeURIComponent(token));
+    const r = await fetch(base);
     if (!r.ok) { app.innerHTML = `<div class="card"><h2>این لینک دیگه کار نمی‌کنه</h2><p class="muted">شاید مهلتش تموم شده یا باطل شده. از مهرداد بخواه یه لینک تازه برات بفرسته.</p></div>`; return; }
     const d = await r.json();
     app.innerHTML = `
       <div class="card gold"><h2>سلام 👋</h2>
         <p>من <b>MEHRDAD</b> هستم، دستیار شخصی همسرت. مهرداد ازم خواسته کمکش کنم به هدف‌هاش برسه (سلامتی، پول، عادت‌ها، آرامش)، و برای این باید خوب بشناسمش.
         تو از همه بهتر می‌شناسیش، واسه همین چند تا سؤال کوتاه دارم. هر چی به ذهنت می‌رسه بنویس؛ جواب درست و غلط نداره 💛</p></div>
-      <div class="note">هر سؤالی رو که دلت نخواست جواب نده، خالی بذار. راحت و بی‌دغدغه، با همون لحنی که خودت حرف می‌زنی.</div>
+      <div class="note">هر سؤالی رو که دلت نخواست جواب نده، خالی بذار. راحت و بی‌دغدغه، با همون لحنی که خودت حرف می‌زنی. هر جوابی که می‌نویسی خودش ذخیره می‌شه.</div>
       <div class="prog"><i id="bar"></i></div>
       <form id="f" class="stack">
         <label class="f"><span>اسمت چیه؟ (اختیاری)</span><input type="text" name="__who" maxlength="40"></label>
         ${d.questions.map((q, i) => `<div class="card q"><span class="sec">${fa(i + 1)} از ${fa(d.questions.length)} · ${esc(q.section)}</span>
-          <label>${esc(q.text)}</label><textarea name="${esc(q.id)}" maxlength="1500" placeholder="هر چی به ذهنت می‌رسه…"></textarea></div>`).join('')}
+          <label>${esc(q.text)}</label><textarea name="${esc(q.id)}" maxlength="1500" placeholder="هر چی به ذهنت می‌رسه…"></textarea><span class="st" id="st_${esc(q.id)}"></span></div>`).join('')}
         <div id="err" class="note" hidden style="background:var(--crit-bg);color:var(--ink)"></div>
-        <button class="btn primary" type="submit" id="send">بفرست 💛</button>
+        <button class="btn primary" type="submit" id="send">تموم شد، بفرست 💛</button>
       </form>`;
-    const total = d.questions.length;
-    const form = $('#f');
+    const form = $('#f'), qids = d.questions.map(q => q.id), total = qids.length;
     const DK = 'who_draft_' + token.slice(0, 10);
     const draftGet = () => { try { return JSON.parse(localStorage.getItem(DK) || '{}'); } catch (e) { return {}; } };
     const draftSet = () => { try { const o = {}; new FormData(form).forEach((v, k) => { if (String(v).trim()) o[k] = String(v); }); localStorage.setItem(DK, JSON.stringify(o)); } catch (e) {} };
     const draftDrop = () => { try { localStorage.removeItem(DK); } catch (e) {} };
-    const saved = draftGet();
-    Object.keys(saved).forEach(k => { const el = form.elements[k]; if (el && !el.value) el.value = saved[k]; });
-    const upd = () => { const n = [...document.querySelectorAll('textarea')].filter(t => t.value.trim()).length; $('#bar').style.width = (n / total * 100) + '%'; };
-    document.addEventListener('input', () => { upd(); draftSet(); });
+    const val = id => (form.elements[id] ? String(form.elements[id].value).trim() : '');
+    const who = () => (form.elements['__who'] ? String(form.elements['__who'].value).trim() : '');
+    const synced = {};                       // qid → آخرین متنی که مطمئنیم به سرور رسیده
+    const st = (id, cls, txt) => { const e = $('#st_' + id); if (e) { e.className = 'st ' + cls; e.textContent = txt; } };
+    const draft = draftGet();
+    qids.forEach(id => { if (draft[id] && form.elements[id] && !form.elements[id].value) form.elements[id].value = draft[id]; });
+    if (draft.__who && form.elements['__who']) form.elements['__who'].value = draft.__who;
+    const upd = () => { const n = qids.filter(id => val(id)).length; $('#bar').style.width = (n / total * 100) + '%'; };
     upd();
+
+    let busy = Promise.resolve();
+    const pending = new Set();
+    // هر جواب جداگانه و کوچک ذخیره می‌شود (اگر اینترنت ضعیف باشد، درخواست‌های بزرگ گیر می‌کنند ولی کوچک‌ها می‌رسند)
+    const saveOne = id => {
+      const text = val(id);
+      if (text === (synced[id] || '')) return busy;
+      pending.add(id); st(id, '', 'در حال ذخیره…');
+      busy = busy.then(async () => {
+        const cur = val(id);
+        const r = await retry('PUT', base + '/answer', { qid: id, text: cur, who: who() });
+        if (r && r.ok) { synced[id] = cur; pending.delete(id); st(id, 'ok', cur ? '✓ ذخیره شد' : ''); }
+        else if (r && r.status === 404) { st(id, 'bad', 'این لینک دیگه کار نمی‌کنه'); }
+        else st(id, 'bad', 'هنوز نرسیده؛ بعداً دوباره می‌فرستم');
+      });
+      return busy;
+    };
+    const timers = {};
+    const later = id => { clearTimeout(timers[id]); timers[id] = setTimeout(() => saveOne(id), 1500); };
+    form.addEventListener('input', ev => { upd(); draftSet(); if (ev.target.name && ev.target.name !== '__who') later(ev.target.name); });
+    form.addEventListener('focusout', ev => { if (ev.target.name && ev.target.name !== '__who') { clearTimeout(timers[ev.target.name]); saveOne(ev.target.name); } });
+    document.addEventListener('visibilitychange', () => { if (document.hidden) qids.forEach(id => { if (val(id) !== (synced[id] || '')) { clearTimeout(timers[id]); saveOne(id); } }); });
+
     const showErr = (msg, native) => {
       const e = $('#err'); e.hidden = false;
       e.innerHTML = esc(msg) + (native ? ' <button type="button" class="btn sm" id="alt">یه روش دیگه امتحان کن</button>' : '');
       const alt = $('#alt'); if (alt) alt.onclick = () => { form.method = 'post'; form.action = '/who/' + encodeURIComponent(token) + '/submit'; form.acceptCharset = 'utf-8'; HTMLFormElement.prototype.submit.call(form); };
-      $('#send').disabled = false; $('#send').textContent = 'بفرست 💛';
+      $('#send').disabled = false; $('#send').textContent = 'تموم شد، بفرست 💛';
     };
-    const postJson = (url, body) => new Promise((ok, bad) => {
-      if (window.fetch && window.AbortController) {
-        const ac = new AbortController(); const t = setTimeout(() => ac.abort(), 25000);
-        fetch(url, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body, signal: ac.signal })
-          .then(r => { clearTimeout(t); ok(r); }, e => { clearTimeout(t); bad(e); });
-      } else bad(new Error('no fetch'));
-    });
-    const xhrJson = (url, body) => new Promise((ok, bad) => {
-      const x = new XMLHttpRequest(); x.open('POST', url); x.setRequestHeader('Content-Type', 'application/json'); x.timeout = 25000;
-      x.onload = () => ok({ ok: x.status >= 200 && x.status < 300, status: x.status, json: () => Promise.resolve(JSON.parse(x.responseText || '{}')) });
-      x.onerror = () => bad(new Error('network')); x.ontimeout = () => bad(new Error('timeout')); x.send(body);
-    });
     form.addEventListener('submit', async ev => {
       ev.preventDefault();
       $('#err').hidden = true;
-      const fd = new FormData(form); const answers = {}; let who = '';
-      fd.forEach((v, k) => { if (k === '__who') who = v; else if (String(v).trim()) answers[k] = v; });
-      if (!Object.keys(answers).length) return showErr('یه سؤال رو جواب بده بعد بفرست 🙏', false);
+      const filled = qids.filter(id => val(id));
+      if (!filled.length) return showErr('یه سؤال رو جواب بده بعد بفرست 🙏', false);
       $('#send').disabled = true; $('#send').textContent = 'دارم می‌فرستم…';
-      const url = '/api/invite/' + encodeURIComponent(token), body = JSON.stringify({ answers, who });
-      let r;
-      try { r = await postJson(url, body); }
-      catch (e1) { try { r = await xhrJson(url, body); } catch (e2) { return showErr('نت وصل نشد یا قطع شد؛ جواب‌هات همین‌جا نگه داشته شده، دوباره بزن.', true); } }
-      if (r.ok) { const j = await r.json(); draftDrop(); app.innerHTML = `<div class="card done"><h2>مرسی 💛</h2><p>${fa(j.saved)} تا جواب رسید. خیلی کمک می‌کنه.</p><p class="muted">می‌تونی صفحه رو ببندی. اگه بعداً چیزی یادت اومد، دوباره همین لینک رو باز کن (تا ۳ بار).</p></div>`; }
-      else if (r.status === 404) showErr('این لینک دیگه کار نمی‌کنه؛ از مهرداد بخواه یه لینک تازه بفرسته.', false);
-      else showErr((r.status === 429 ? 'یه کم صبر کن و دوباره بزن' : 'نشد بفرستم (کد ' + fa(r.status) + ')') + '؛ جواب‌هات نگه داشته شده.', true);
+      qids.forEach(id => clearTimeout(timers[id]));
+      for (const id of qids) await saveOne(id);                 // هر چی هنوز نرسیده را بفرست
+      await busy;
+      const missing = filled.filter(id => val(id) !== (synced[id] || ''));
+      if (missing.length) return showErr(`${fa(missing.length)} تا از جواب‌هات هنوز نرسیده. نت ضعیفه؛ جواب‌هات توی گوشیت نگه داشته شده، دوباره بزن یا روش دیگه رو امتحان کن.`, true);
+      const r = await retry('POST', base + '/done', {});
+      if (r && r.status === 404) return showErr('این لینک دیگه کار نمی‌کنه؛ از مهرداد بخواه یه لینک تازه بفرسته.', false);
+      draftDrop();                                              // جواب‌ها رسیده‌اند؛ حتی اگر «تمام» نرسید، مهم‌ترین کار انجام شده
+      app.innerHTML = `<div class="card done"><h2>مرسی 💛</h2><p>${fa(filled.length)} تا جواب رسید. خیلی کمک می‌کنه.</p><p class="muted">می‌تونی صفحه رو ببندی. اگه بعداً چیزی یادت اومد، دوباره همین لینک رو باز کن.</p></div>`;
     });
   }
   load().catch(() => { app.innerHTML = '<div class="card"><h2>وصل نشد</h2><p class="muted">اینترنت یا فیلترشکنت رو چک کن و صفحه رو دوباره باز کن.</p></div>'; });
