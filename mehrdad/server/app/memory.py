@@ -143,6 +143,12 @@ class Memory:
                 revoked INTEGER NOT NULL DEFAULT 0
             );
             CREATE TABLE IF NOT EXISTS kv(key TEXT PRIMARY KEY, value TEXT);
+            CREATE TABLE IF NOT EXISTS contacts(
+                id INTEGER PRIMARY KEY AUTOINCREMENT, ckey TEXT UNIQUE, name TEXT NOT NULL, norm TEXT NOT NULL, numbers TEXT NOT NULL, updated_ts REAL NOT NULL);
+            CREATE TABLE IF NOT EXISTS phone_actions(
+                id INTEGER PRIMARY KEY AUTOINCREMENT, kind TEXT NOT NULL, to_name TEXT, to_number TEXT, text TEXT, status TEXT NOT NULL,
+                detail TEXT, origin TEXT, created_ts REAL NOT NULL, updated_ts REAL NOT NULL);
+            CREATE INDEX IF NOT EXISTS ix_pactions ON phone_actions(status, created_ts);
             CREATE TABLE IF NOT EXISTS projects(
                 id TEXT PRIMARY KEY, name TEXT NOT NULL, subtitle TEXT, status TEXT NOT NULL DEFAULT 'فعال', color TEXT, icon TEXT,
                 summary TEXT, meta TEXT, pos INTEGER NOT NULL DEFAULT 0, created_ts REAL NOT NULL, updated_ts REAL NOT NULL);
@@ -462,6 +468,104 @@ class Memory:
             rows = self.db.execute("SELECT key, value FROM kv WHERE key LIKE ? ESCAPE '\\'", (esc + "%",)).fetchall()
         return {k: v for k, v in rows}
 
+    # ---------- مخاطبین گوشی ----------
+    async def replace_contacts(self, items, replace=True):
+        """items: [{"key", "name", "norm", "numbers": [..]}]. replace=True → اول همهٔ مخاطبین قبلی پاک می‌شود (برای تکهٔ اول همگام‌سازی)."""
+        now = time.time()
+        async with self.lock:
+            if replace:
+                self.db.execute("DELETE FROM contacts")
+            for it in items:
+                self.db.execute(
+                    "INSERT INTO contacts(ckey, name, norm, numbers, updated_ts) VALUES(?,?,?,?,?) "
+                    "ON CONFLICT(ckey) DO UPDATE SET name=excluded.name, norm=excluded.norm, numbers=excluded.numbers, updated_ts=excluded.updated_ts",
+                    (it["key"], it["name"], it["norm"], json.dumps(it["numbers"], ensure_ascii=False), now))
+            self.db.commit()
+
+    async def all_contacts(self):
+        async with self.lock:
+            rows = self.db.execute("SELECT id, ckey, name, norm, numbers FROM contacts ORDER BY name").fetchall()
+        return [{"id": r[0], "key": r[1], "name": r[2], "norm": r[3], "numbers": json.loads(r[4])} for r in rows]
+
+    async def contacts_count(self):
+        async with self.lock:
+            return self.db.execute("SELECT COUNT(*) FROM contacts").fetchone()[0]
+
+    # ---------- اقدام‌های گوشی (پیامک/تماس/پیام) ----------
+    _PA_COLS = "id, kind, to_name, to_number, text, status, detail, origin, created_ts, updated_ts"
+
+    @staticmethod
+    def _pa(r):
+        return {"id": r[0], "kind": r[1], "to_name": r[2], "to_number": r[3], "text": r[4], "status": r[5], "detail": r[6], "origin": r[7],
+                "created_ts": r[8], "updated_ts": r[9]}
+
+    async def add_phone_action(self, a):
+        now = time.time()
+        async with self.lock:
+            cur = self.db.execute(
+                "INSERT INTO phone_actions(kind, to_name, to_number, text, status, detail, origin, created_ts, updated_ts) VALUES(?,?,?,?,?,?,?,?,?)",
+                (a["kind"], a.get("to_name"), a.get("to_number"), a.get("text"), a["status"], a.get("detail"), a.get("origin"), now, now))
+            self.db.commit()
+            return cur.lastrowid
+
+    async def get_phone_action(self, aid):
+        async with self.lock:
+            r = self.db.execute(f"SELECT {self._PA_COLS} FROM phone_actions WHERE id=?", (aid,)).fetchone()
+        return self._pa(r) if r else None
+
+    async def list_phone_actions(self, statuses=None, limit=30, kinds=None):
+        q, args = f"SELECT {self._PA_COLS} FROM phone_actions", []
+        cond = []
+        if statuses:
+            cond.append("status IN (%s)" % ",".join("?" * len(statuses)))
+            args += list(statuses)
+        if kinds:
+            cond.append("kind IN (%s)" % ",".join("?" * len(kinds)))
+            args += list(kinds)
+        if cond:
+            q += " WHERE " + " AND ".join(cond)
+        q += " ORDER BY id DESC LIMIT ?"
+        async with self.lock:
+            rows = self.db.execute(q, (*args, limit)).fetchall()
+        return [self._pa(r) for r in rows]
+
+    async def set_phone_action(self, aid, status, detail=None, only_from=None):
+        """تغییر وضعیت؛ only_from: فقط اگر وضعیت فعلی یکی از این‌ها باشد (برای جلوگیری از رقابت). True اگر عوض شد."""
+        async with self.lock:
+            q, args = "UPDATE phone_actions SET status=?, updated_ts=?" + (", detail=?" if detail is not None else "") + " WHERE id=?", [status, time.time()]
+            if detail is not None:
+                args.append(detail)
+            args.append(aid)
+            if only_from:
+                q += " AND status IN (%s)" % ",".join("?" * len(only_from))
+                args += list(only_from)
+            cur = self.db.execute(q, args)
+            self.db.commit()
+            return cur.rowcount > 0
+
+    async def phone_actions_since(self, ts, kinds=None):
+        async with self.lock:
+            return self.db.execute("SELECT COUNT(*) FROM phone_actions WHERE created_ts>=? AND status NOT IN ('cancelled')", (ts,)).fetchone()[0]
+
+    async def expire_phone_actions(self, now=None):
+        now = now or time.time()
+        async with self.lock:
+            self.db.execute("UPDATE phone_actions SET status='expired', updated_ts=? WHERE status='awaiting' AND created_ts<?", (now, now - 15 * 60))
+            self.db.execute("UPDATE phone_actions SET status='expired', detail='گوشی جواب نداد', updated_ts=? WHERE status='approved' AND updated_ts<?", (now, now - 10 * 60))
+            self.db.execute("UPDATE phone_actions SET status='failed', detail='گوشی تأیید نکرد', updated_ts=? WHERE status='sending' AND updated_ts<?", (now, now - 3 * 60))
+            self.db.commit()
+
+    async def search_inbox(self, query, limit=3):
+        """پیامک/ایمیل/اعلان‌های ذخیره‌شده (داده‌ی خام؛ نه دستور) برای پاسخ به «آخرین پیام فلانی چی بود؟»."""
+        tokens = [t for t in _TOKEN.findall(normalize_fa(query)) if len(t) > 1][:6]
+        if not tokens:
+            return []
+        like = " OR ".join("(LOWER(text) LIKE ? OR LOWER(source) LIKE ?)" for _ in tokens)
+        params = [p for t in tokens for p in (f"%{t}%", f"%{t}%")]
+        async with self.lock:
+            rows = self.db.execute(f"SELECT kind, source, text, ts FROM inbox WHERE {like} ORDER BY ts DESC LIMIT ?", (*params, limit)).fetchall()
+        return [{"type": r[0], "summary": f"[{r[0]} از {r[1]}] {r[2][:140]}", "detail": r[2][:500], "amount": None, "ts": r[3]} for r in rows]
+
     # ---------- پروژه‌ها ----------
     @staticmethod
     def _project(r):
@@ -772,7 +876,7 @@ class Memory:
                     (*params, limit),
                 ).fetchall()
             found = [{"type": r[0], "summary": r[1], "detail": r[2], "amount": r[3], "ts": r[4]} for r in rows]
-        return found + await self.search_project_docs(query, limit=3)
+        return found + await self.search_project_docs(query, limit=3) + await self.search_inbox(query, limit=3)
 
     async def recent_memory(self, limit=40):
         async with self.lock:

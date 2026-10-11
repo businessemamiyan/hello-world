@@ -6,7 +6,7 @@ import android.content.Intent;
 import android.provider.Telephony;
 import android.telephony.SmsMessage;
 
-/** هر پیامک ورودی: اگر مالی بود و رمز یک‌بارمصرف نبود → صف ارسال به سرور شخصی. بقیه همان‌جا دور ریخته می‌شوند. */
+/** هر پیامک ورودی: اگر مالی بود (یا کاربر «همهٔ پیامک‌ها» را روشن کرده) و رمز یک‌بارمصرف نبود → صف ارسال به سرور شخصی. بقیه همان‌جا دور ریخته می‌شوند. */
 public class SmsReceiver extends BroadcastReceiver {
     @Override
     public void onReceive(Context context, Intent intent) {
@@ -24,7 +24,8 @@ public class SmsReceiver extends BroadcastReceiver {
             if (b != null) body.append(b);
         }
         String text = body.toString();
-        if (!Filters.shouldForward(text)) return;
+        boolean ok = Prefs.smsAll(context) ? (text.trim().length() >= 2 && !Filters.isSensitive(text)) : Filters.shouldForward(text);
+        if (!ok) return;
         Outbox.add(context, "sms", from, text);
     }
 }

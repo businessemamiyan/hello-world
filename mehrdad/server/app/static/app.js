@@ -177,7 +177,8 @@ function composer(id, ph) {
 
 // ------------------------------------------------------------- صفحه‌ها
 async function viewToday() {
-  const [d, pjs] = await Promise.all([api('/api/dashboard?range=today'), api('/api/projects').catch(() => ({ projects: [] }))]); S.cache.today = d;
+  const [d, pjs, phs] = await Promise.all([api('/api/dashboard?range=today'), api('/api/projects').catch(() => ({ projects: [] })), api('/api/phone/status').catch(() => null)]); S.cache.today = d;
+  if (phs && phs.pending && phs.pending.length) setTimeout(() => { if (S.tab === 'today') render(); }, 12000);
   $('#subtitle').textContent = d.today_jalali;
   const f = d.finance, c = d.counts || {};
   const tasks = d.tasks || [], open = tasks.filter(t => (t.fields || {}).status !== 'done');
@@ -189,6 +190,7 @@ async function viewToday() {
     <div class="card ai"><div class="row spread"><h2>امروز چی شد؟</h2><span class="pill ai">مهرداد</span></div>
       ${composer('sayToday', 'مثلاً: ۲۰۰ ت فروش داشتم، ناهار برنج خوردم')}
       <p class="muted small">هر چی بنویسی خودش در بخش درست ثبت می‌شه.</p></div>
+    ${phoneCard(phs)}
     ${projectsStrip(pjs.projects)}
     ${plannedLine(f)}
     ${groupKpis(d, 4)}
@@ -675,6 +677,43 @@ function openDebtEdit(id) {
 function nativeStatus() {
   try { return window.MehrdadNative && MehrdadNative.status ? JSON.parse(MehrdadNative.status() || '{}') : null; } catch { return null; }
 }
+const PA_KIND = { sms: 'پیامک', call: 'تماس', telegram: 'پیام تلگرام', instagram: 'پیام اینستاگرام' };
+const PA_ST = { awaiting: ['⏳', 'منتظر تأیید'], approved: ['📥', 'در صف گوشی'], sending: ['📤', 'در حال انجام'], sent: ['✓', 'انجام شد'], failed: ['⚠️', 'نشد'],
+  cancelled: ['✕', 'لغو شد'], expired: ['⌛', 'منقضی شد'], needs_tap: ['👆', 'لمس لازم'] };
+const maskN = n => (n && !String(n).startsWith('tg:') && n.length > 8) ? n.slice(0, 4) + '…' + n.slice(-3) : (String(n || '').startsWith('tg:') ? '' : (n || ''));
+const paWho = a => `«${esc(a.to_name || maskN(a.to_number))}»${a.to_name && a.to_number && maskN(a.to_number) ? ` <span class="muted small num">${esc(maskN(a.to_number))}</span>` : ''}`;
+function phoneCard(ps) {
+  if (!ps || !ps.pending || !ps.pending.length) return '';
+  return `<div class="card gold"><div class="row spread"><h2>📲 منتظر تأیید تو</h2><span class="pill gold num">${fa(ps.pending.length)}</span></div>
+    ${ps.pending.map(a => `<div class="m-goal" style="padding:8px 0;border-bottom:1px solid var(--line)"><div class="c-id">${PA_KIND[a.kind] || a.kind} به ${paWho(a)}</div>
+      ${a.text ? `<div class="small" style="white-space:pre-wrap">${esc(a.text)}</div>` : ''}
+      <div class="row"><button class="btn sm primary" data-act="phone-ok" data-id="${a.id}">✅ بفرست</button><button class="btn sm" data-act="phone-no" data-id="${a.id}">❌ لغو</button></div></div>`).join('')}
+    <p class="muted small">هیچ پیامک یا تماسی بدون این تأیید انجام نمی‌شه.</p></div>`;
+}
+async function renderPhoneSection() {
+  const box = $('#phoneBox'); if (!box) return;
+  let sv;
+  try { sv = await api('/api/phone/status'); } catch (e) { box.innerHTML = empty('نشد: ' + esc(e.message)); return; }
+  let nat = null; try { nat = (window.MehrdadNative && MehrdadNative.phoneStatus) ? JSON.parse(MehrdadNative.phoneStatus() || '{}') : null; } catch (e) { nat = null; }
+  const ok = v => v ? '<b class="m-pos">✓</b>' : '<b class="m-neg">✗</b>';
+  const when = ms => ms ? esc(jdate(isoDay(ms / 1000))) : 'هنوز نه';
+  const perm = (key, label, need) => nat ? `<div class="row spread"><span>${label} ${ok(nat[key])}</span>${nat[key] ? '' : `<button class="btn sm" data-act="ph-perm" data-p="${need}">فعال کن</button>`}</div>` : '';
+  const hist = (sv.recent || []).slice(0, 6).map(a => `<div class="row spread small"><span>${PA_ST[a.status] ? PA_ST[a.status][0] : '•'} ${PA_KIND[a.kind] || a.kind} به ${paWho(a)}</span><span class="muted">${PA_ST[a.status] ? PA_ST[a.status][1] : esc(a.status)}</span></div>`).join('');
+  box.innerHTML = `<p class="muted small">مخاطبین و پیامک‌هات فقط روی سرور خودت می‌مونه. هیچ پیامک، تماس یا پیامی بدون تأیید یک‌لمسی خودت انجام نمی‌شه، و متنی که از بیرون می‌رسه (پیامک، ایمیل، اعلان) هرگز دستور حساب نمی‌شه.</p>
+    <div class="stack6 small">
+      <div class="row spread"><span>مخاطبین روی سرور: <b class="num">${fa(sv.contacts)}</b></span>${nat ? `<span class="muted">آخرین همگام‌سازی: ${when(nat.lastContacts)}</span>` : ''}</div>
+      ${nat ? `${perm('contacts', 'دسترسی به مخاطبین', 'contacts')}${perm('smsRead', 'خواندن پیامک‌ها', 'sms_read')}${perm('smsSend', 'فرستادن پیامک', 'sms_send')}${perm('call', 'تماس گرفتن', 'call')}${perm('notif', 'اعلان‌ها', 'notif')}
+      <div class="row"><button class="btn sm" data-act="ph-sync-contacts">همگام‌سازی مخاطبین</button><button class="btn sm" data-act="ph-sync-sms">خواندن پیامک‌های ۳۰ روز اخیر</button></div>
+      <label class="row"><input type="checkbox" data-act="ph-service" ${nat.service ? 'checked' : ''}> کنترل گوشی (پیامک و تماسی که تأیید می‌کنی از همین گوشی انجام بشه) ${sv.online ? '<span class="pill good">وصله</span>' : '<span class="pill warn">وصل نیست</span>'}</label>
+      <label class="row"><input type="checkbox" data-act="ph-smsall" ${nat.smsAll ? 'checked' : ''}> همهٔ پیامک‌های تازه هم برای مهرداد ذخیره بشه (نه فقط بانکی؛ رمز یک‌بارمصرف هرگز)</label>
+      <div class="row"><button class="btn sm" data-act="ph-battery">جلوگیری از بسته‌شدن توسط باتری ${nat.battery ? '✓' : ''}</button></div>`
+        : '<div class="muted">ارسال پیامک و تماس فقط داخل اپ اندروید ممکنه.</div>'}
+      <label class="row"><input type="checkbox" data-act="ph-auto" ${sv.settings.auto_confirm ? 'checked' : ''}> ارسال بدون تأیید (فقط وقتی خودم اسم یا شمارهٔ گیرنده رو توی دستورم می‌گم)</label>
+      ${hist ? `<span class="eyebrow">آخرین اقدام‌ها</span>${hist}` : ''}
+    </div>`;
+}
+window.onPhoneChanged = () => { if ($('#phoneBox')) renderPhoneSection(); };
+
 function openSettings() {
   const nat = nativeStatus();
   const natHtml = nat ? `<span class="eyebrow">این گوشی</span><div class="stack6 small">
@@ -686,9 +725,11 @@ function openSettings() {
     <div class="stack"><span class="eyebrow">تم</span><div class="seg">${Object.entries(THEMES).map(([k, v]) =>
       `<button data-act="theme" data-val="${k}" aria-pressed="${(document.documentElement.dataset.theme || 'night') === k}">${v}</button>`).join('')}</div>
     ${natHtml}
+    <span class="eyebrow">📲 دسترسی مهرداد به گوشی</span><div id="phoneBox"><span class="m-spin"></span></div>
     <label class="row"><input type="checkbox" id="privChk" ${S.priv ? 'checked' : ''}> نمایش بخش‌های خصوصی (🔒)</label>
     <p class="muted small">پیامک بانکی و اعلان‌های مالی رو اپ اندروید می‌فرسته. برای قطع این دستگاه در تلگرام /devices و /unpair.</p>
     <button class="btn danger" data-act="logout">خروج از این دستگاه</button></div>`);
+  renderPhoneSection();
 }
 
 // ------------------------------------------------------------- جفت‌سازی
@@ -778,6 +819,14 @@ document.addEventListener('click', async ev => {
     else if (act === 'reload') render();
     else if (act === 'seg') { S[b.dataset.scope] = b.dataset.val; render(); }
     else if (act === 'edit') openEdit(id);
+    else if (act === 'phone-ok' || act === 'phone-no') {
+      const r = await api(`/api/phone/actions/${id}/${act === 'phone-ok' ? 'approve' : 'cancel'}`, { method: 'POST' });
+      toast(r.message || 'انجام شد'); render();
+    }
+    else if (act === 'ph-perm') MehrdadNative.requestPhonePermissions(b.dataset.p);
+    else if (act === 'ph-sync-contacts') { toast('دارم مخاطبین رو همگام می‌کنم…'); MehrdadNative.syncContacts(); }
+    else if (act === 'ph-sync-sms') { toast('دارم پیامک‌ها رو می‌خونم…'); MehrdadNative.syncSms(30); }
+    else if (act === 'ph-battery') MehrdadNative.openBatterySettings();
     else if (act === 'n-sms') MehrdadNative.requestSmsPermission();
     else if (act === 'n-notif') MehrdadNative.openNotificationAccess();
     else if (act === 'n-update') { closeSheet(); MehrdadNative.checkUpdate(); }
@@ -881,6 +930,16 @@ document.addEventListener('click', async ev => {
 document.addEventListener('change', async ev => {
   const t = ev.target;
   if (t.id === 'privChk') { S.priv = t.checked; store.set('mehrdad_priv', S.priv ? '1' : '0'); syncPriv(); render(); }
+  else if (t.dataset.act === 'ph-service') {
+    try { MehrdadNative.setPhoneService(t.checked); toast(t.checked ? 'کنترل گوشی روشن شد' : 'کنترل گوشی خاموش شد'); setTimeout(renderPhoneSection, 1200); } catch (e) { toast(e.message); }
+  }
+  else if (t.dataset.act === 'ph-smsall') {
+    try { MehrdadNative.setSmsAll(t.checked); await api('/api/phone/settings', { method: 'PUT', body: { sms_all: t.checked } }); toast('ذخیره شد'); } catch (e) { toast(e.message); }
+  }
+  else if (t.dataset.act === 'ph-auto') {
+    if (t.checked && !confirm('با این گزینه، وقتی خودت اسم یا شمارهٔ گیرنده رو توی دستورت بگی پیامک/تماس بدون تأیید انجام می‌شه. اگه مطمئنی روشنش کن.')) { t.checked = false; return; }
+    try { await api('/api/phone/settings', { method: 'PUT', body: { auto_confirm: t.checked } }); toast(t.checked ? 'ارسال بدون تأیید روشن شد' : 'از این به بعد همیشه تأیید می‌گیرم'); } catch (e) { toast(e.message); }
+  }
   else if (t.dataset.act === 'proj-status') {
     try { await api('/api/projects/' + encodeURIComponent(t.dataset.id), { method: 'PATCH', body: { status: t.value } }); toast('وضعیت عوض شد'); } catch (e) { toast(e.message); }
   }

@@ -1,7 +1,8 @@
-"""ایجنت تلگرام شخصی (Telethon): فقط‌خواندنی و فقط روی چت‌هایی که خودت در allowlist گذاشته‌ای.
+"""ایجنت تلگرام شخصی (Telethon): خواندن فقط از چت‌هایی که خودت در allowlist گذاشته‌ای؛ فرستادن پیام فقط وقتی خودت
+دستور داده‌ای و در اپ/تلگرام تأیید کرده‌ای (app/phone.py).
 
 هشدار امنیتی: فایل session این ایجنت = دسترسی کامل به حساب تلگرام تو. فقط روی سرور خودت، با دسترسی ۶۰۰ نگه داشته می‌شود
-و هیچ‌جا کپی نمی‌شود. ایجنت هیچ پیامی نمی‌فرستد، «خوانده‌شد» نمی‌زند و چت‌های سکرت/کدهای ورود تلگرام را رد می‌کند.
+و هیچ‌جا کپی نمی‌شود. ایجنت «خوانده‌شد» نمی‌زند و چت‌های سکرت/کدهای ورود تلگرام را رد می‌کند.
 
 راه‌اندازی (یک‌بار، خودت روی سرور؛ api_id/api_hash را از my.telegram.org بگیر):
   docker exec -it mehrdad-mehrdad-1 python -m app.agent_tg login      ← شماره، کد و رمز دومرحله‌ای را خودت وارد می‌کنی
@@ -47,6 +48,40 @@ class TelegramAgent:
         self.bot, self.cfg = bot, cfg
         self.allow = parse_allow(cfg.tg_allow)
         self._factory = client_factory
+        self.client = None
+        self.ready = False
+
+    async def find_dialogs(self, query, limit=5):
+        """چت‌های تلگرامِ هم‌نام با query → [{"id", "title"}]. نام دقیق اولویت دارد؛ @username هم پذیرفته می‌شود."""
+        from .memory import normalize_fa
+        if not self.ready or not self.client:
+            return []
+        q = (query or "").strip()
+        if q.startswith("@"):
+            try:
+                ent = await self.client.get_entity(q)
+                name = " ".join(filter(None, [getattr(ent, "first_name", None), getattr(ent, "last_name", None)])) or getattr(ent, "title", None) or q
+                return [{"id": ent.id, "title": name}]
+            except Exception:
+                return []
+        nq = normalize_fa(q).strip()
+        toks = nq.split()
+        if not toks:
+            return []
+        exact, loose = [], []
+        async for d in self.client.iter_dialogs(limit=400):
+            nn = normalize_fa(d.name or "").strip()
+            if nn == nq:
+                exact.append({"id": d.id, "title": d.name})
+            elif all(t in nn.split() for t in toks) or all(t in nn for t in toks):
+                loose.append({"id": d.id, "title": d.name})
+        return (exact or loose)[:limit]
+
+    async def send(self, entity_id, text):
+        """فقط از مسیر تأییدشدهٔ app/phone.py صدا زده می‌شود."""
+        if not self.ready or not self.client:
+            raise RuntimeError("tg agent not ready")
+        await self.client.send_message(entity_id, text)
 
     def _client(self):
         if self._factory:
@@ -62,19 +97,22 @@ class TelegramAgent:
                                               dedup_key=f"{chat_id}:{msg_id}")
 
     async def run_forever(self):
-        if not self.allow:
-            log.warning("TG_ALLOW خالیه؛ ایجنت تلگرام شروع نشد (برای امنیت، بدون allowlist کار نمی‌کنه)")
-            return
-        from telethon import events
         client = self._client()
         await client.connect()
         if not await client.is_user_authorized():
             await self.bot.notify_owner("⚠️ ایجنت تلگرام وارد حساب نشده؛ روی سرور اجرا کن: docker exec -it mehrdad-mehrdad-1 python -m app.agent_tg login")
             return
+        self.client, self.ready = client, True
         try:
             os.chmod(session_path(self.cfg) + ".session", 0o600)
         except OSError:
             pass
+
+        if not self.allow:
+            log.warning("TG_ALLOW خالیه؛ خواندن چت‌ها خاموشه (فقط ارسال با تأیید فعاله)")
+            await client.run_until_disconnected()
+            return
+        from telethon import events
 
         @client.on(events.NewMessage(incoming=True, chats=self.allow))
         async def on_message(event):

@@ -17,7 +17,9 @@ import android.widget.LinearLayout;
 import android.widget.TextView;
 import android.graphics.Color;
 import android.net.Uri;
+import android.os.Build;
 import android.os.Bundle;
+import android.os.PowerManager;
 import android.provider.Settings;
 import android.speech.RecognizerIntent;
 import android.view.ViewGroup;
@@ -59,6 +61,7 @@ public class MainActivity extends AppCompatActivity {
     private ActivityResultLauncher<Intent> speech;
     private ActivityResultLauncher<String> smsPermission;
     private ActivityResultLauncher<String> micPermission;
+    private ActivityResultLauncher<String[]> phonePermissions;
     private ActivityResultLauncher<Intent> fileChooser;
     private ValueCallback<Uri[]> filePathCb;
     private Uri cameraUri;
@@ -105,6 +108,11 @@ public class MainActivity extends AppCompatActivity {
         micPermission = registerForActivityResult(new ActivityResultContracts.RequestPermission(), granted -> {
             if (granted) startVoice();
             else Toast.makeText(this, "بدون مجوز میکروفون نمی‌تونم صداتو بشنوم", Toast.LENGTH_LONG).show();
+        });
+        phonePermissions = registerForActivityResult(new ActivityResultContracts.RequestMultiplePermissions(), result -> {
+            web.evaluateJavascript("window.onPhoneChanged && window.onPhoneChanged()", null);
+            if (result.containsValue(Boolean.FALSE))
+                Toast.makeText(this, "بعضی مجوزها داده نشد؛ اگه پنجرهٔ مجوز نیومد: اطلاعات برنامه ← ⋮ ← Allow restricted settings", Toast.LENGTH_LONG).show();
         });
         fileChooser = registerForActivityResult(new ActivityResultContracts.StartActivityForResult(), result -> {
             if (filePathCb == null) return;
@@ -404,6 +412,97 @@ public class MainActivity extends AppCompatActivity {
             runOnUiThread(MainActivity.this::showNotificationAccessGuide);
         }
 
+        /** وضعیت مجوزها و سرویس کنترل گوشی برای صفحهٔ تنظیمات. */
+        @JavascriptInterface
+        public String phoneStatus() {
+            try {
+                PowerManager pm = (PowerManager) getSystemService(POWER_SERVICE);
+                return new JSONObject()
+                        .put("contacts", granted(Manifest.permission.READ_CONTACTS))
+                        .put("smsRead", granted(Manifest.permission.READ_SMS))
+                        .put("smsSend", granted(Manifest.permission.SEND_SMS))
+                        .put("call", granted(Manifest.permission.CALL_PHONE))
+                        .put("notif", Build.VERSION.SDK_INT < 33 || granted(Manifest.permission.POST_NOTIFICATIONS))
+                        .put("service", Prefs.phoneService(MainActivity.this))
+                        .put("smsAll", Prefs.smsAll(MainActivity.this))
+                        .put("battery", pm != null && pm.isIgnoringBatteryOptimizations(getPackageName()))
+                        .put("lastContacts", Prefs.lastContactsSync(MainActivity.this))
+                        .put("lastSms", Prefs.lastSmsSync(MainActivity.this)).toString();
+            } catch (Exception e) {
+                return "{}";
+            }
+        }
+
+        /** names: فهرست جداشده با ویرگول از contacts, sms_read, sms_send, call, notif */
+        @JavascriptInterface
+        public void requestPhonePermissions(String names) {
+            runOnUiThread(() -> {
+                ArrayList<String> perms = new ArrayList<>();
+                for (String n : String.valueOf(names).split(",")) {
+                    switch (n.trim()) {
+                        case "contacts": perms.add(Manifest.permission.READ_CONTACTS); break;
+                        case "sms_read": perms.add(Manifest.permission.READ_SMS); perms.add(Manifest.permission.RECEIVE_SMS); break;
+                        case "sms_send": perms.add(Manifest.permission.SEND_SMS); break;
+                        case "call": perms.add(Manifest.permission.CALL_PHONE); break;
+                        case "notif": if (Build.VERSION.SDK_INT >= 33) perms.add(Manifest.permission.POST_NOTIFICATIONS); break;
+                        default: break;
+                    }
+                }
+                if (!perms.isEmpty()) phonePermissions.launch(perms.toArray(new String[0]));
+            });
+        }
+
+        @JavascriptInterface
+        public void setPhoneService(boolean on) {
+            runOnUiThread(() -> {
+                Prefs.setPhoneService(MainActivity.this, on);
+                if (on && Prefs.isPaired(MainActivity.this)) {
+                    if (Build.VERSION.SDK_INT >= 33 && !granted(Manifest.permission.POST_NOTIFICATIONS))
+                        phonePermissions.launch(new String[]{Manifest.permission.POST_NOTIFICATIONS});
+                    PhoneService.start(MainActivity.this);
+                } else {
+                    PhoneService.stop(MainActivity.this);
+                }
+            });
+        }
+
+        @JavascriptInterface
+        public void setSmsAll(boolean on) { Prefs.setSmsAll(MainActivity.this, on); }
+
+        @JavascriptInterface
+        public void syncContacts() {
+            new Thread(() -> {
+                int n = ContactsSync.run(MainActivity.this);
+                runOnUiThread(() -> {
+                    Toast.makeText(MainActivity.this, n >= 0 ? n + " مخاطب برای مهرداد همگام شد" : "همگام‌سازی مخاطبین نشد (مجوز یا اینترنت)", Toast.LENGTH_LONG).show();
+                    web.evaluateJavascript("window.onPhoneChanged && window.onPhoneChanged()", null);
+                });
+            }).start();
+        }
+
+        @JavascriptInterface
+        public void syncSms(int days) {
+            new Thread(() -> {
+                int n = SmsSync.run(MainActivity.this, days);
+                runOnUiThread(() -> {
+                    Toast.makeText(MainActivity.this, n >= 0 ? n + " پیامک تازه برای مهرداد ذخیره شد" : "همگام‌سازی پیامک‌ها نشد (مجوز یا اینترنت)", Toast.LENGTH_LONG).show();
+                    web.evaluateJavascript("window.onPhoneChanged && window.onPhoneChanged()", null);
+                });
+            }).start();
+        }
+
+        /** برای شیائومی و مشابه: سرویس پس‌زمینه را نکُشد. */
+        @JavascriptInterface
+        public void openBatterySettings() {
+            runOnUiThread(() -> {
+                try {
+                    startActivity(new Intent(Settings.ACTION_IGNORE_BATTERY_OPTIMIZATION_SETTINGS));
+                } catch (Exception e) {
+                    startActivity(new Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS, Uri.fromParts("package", getPackageName(), null)));
+                }
+            });
+        }
+
         @JavascriptInterface
         public void checkUpdate() { runOnUiThread(() -> Updater.check(MainActivity.this, true)); }
 
@@ -421,6 +520,10 @@ public class MainActivity extends AppCompatActivity {
                 return "{}";
             }
         }
+    }
+
+    private boolean granted(String perm) {
+        return ContextCompat.checkSelfPermission(this, perm) == PackageManager.PERMISSION_GRANTED;
     }
 
     private void requestSms() {

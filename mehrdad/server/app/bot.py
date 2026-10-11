@@ -13,6 +13,7 @@ from . import agents, finance, life, novatunnel, profile
 from .coach import Coach
 from .payroll import Payroll
 from .projects import Projects
+from .phone import Phone
 from . import payroll as payroll_mod
 from .media import MAX_IMAGE_BYTES, sniff_image
 from .memory import normalize_fa, today_str
@@ -38,6 +39,9 @@ HELP = """سلام، منم مهرداد، مغز دومت 🧠
 /goals — هدف‌هایی که از روی شناختم از تو پیشنهاد می‌دم
 /nova — فروش و درآمد NovaTunnel (فقط می‌خونم)
 /inbox — آخرین پیام‌های ایمیل و تلگرام که ایجنت‌ها دیدن (/mailtest برای تست ایمیل)
+
+گوشی (بعد از فعال‌کردن توی اپ ← تنظیمات ← دسترسی به گوشی):
+مثلاً بگو «به علی پیامک بزن که فردا میام» یا «به مامان زنگ بزن» یا «تو تلگرام به رضا بگو …»؛ قبل از ارسال با یه دکمه ازت تأیید می‌گیرم.
 
 بیشتر بشناسمت:
 /onboard — مصاحبهٔ ۱۵ سؤالی
@@ -94,6 +98,8 @@ class Bot:
         self.coach = Coach(self)
         self.payroll = Payroll(mem)
         self.projects = Projects(mem)
+        self.phone = Phone(self)
+        self.tg_agent = None              # app.agent_tg.TelegramAgent؛ main وصلش می‌کند
         self.stt = None                   # app.stt.STT؛ main آن را وصل می‌کند (None = ویس خاموش)
 
     async def chat(self, text, images=None, voice=False):
@@ -119,7 +125,7 @@ class Bot:
                 reply, entries = await self.brain.think(history, recent_mem, brain_text, active_habits)
             notes = []
             if entries:
-                notes = await self._apply_entries(entries, {m["id"] for m in recent_mem if m.get("id")} | self._ctx_ids)
+                notes = await self._apply_entries(entries, {m["id"] for m in recent_mem if m.get("id")} | self._ctx_ids, user_text=text)
             if notes:       # حقیقتِ سمت سرور: دقیقاً چه چیزی در اپ ثبت شد (مستقل از حرف مدل)
                 reply = reply.rstrip() + "\n\n" + "\n".join(notes)
             await self.mem.add_message("assistant", reply)
@@ -146,6 +152,12 @@ class Bot:
         self._ctx_ids = {e["id"] for e in snap["profile"][-60:]} | {g["id"] for g in snap["goals"]}
         if digest:
             parts.append(digest)
+        try:
+            ph = await self.phone.prompt()
+            if ph:
+                parts.append(ph)
+        except Exception:
+            log.exception("چکیدهٔ گوشی ساخته نشد")
         try:
             proj = await self.projects.prompt()
             if proj:
@@ -265,10 +277,10 @@ class Bot:
         await self.mem.add_debt(d)
         return f"⛓ بدهی تازه «{d['title']}»: مانده {m(d['remaining'])}، قسط {m(d['installment_amount'])} تومان"
 
-    async def _apply_entries(self, entries, allowed_ids):
+    async def _apply_entries(self, entries, allowed_ids, user_text=""):
         """ورودی‌های مغز: جدید → ثبت؛ update_id/delete_id → فقط روی رکوردهای اخیری که مغز دیده؛ account_op/debt_op/habit_new → به‌روزرسانی اپ.
         خروجی: لیست خط‌های تأیید (حقیقت سمت سرور) برای نمایش زیر پاسخ."""
-        adds, notes, pay_ops, proj_ops = [], [], [], []
+        adds, notes, pay_ops, proj_ops, phone_ops = [], [], [], [], []
         paying = any("debt_op" in e and e["debt_op"]["op"] == "pay" for e in entries)
         for e in entries:
             if "delete_id" in e:
@@ -293,6 +305,8 @@ class Bot:
                 pay_ops.append(e["payroll_op"])
             elif "project_op" in e:
                 proj_ops.append(e["project_op"])
+            elif "phone_op" in e:
+                phone_ops.append(e["phone_op"])
             elif "payslip" in e:
                 notes.append(await self._apply_payslip(e["payslip"]))
             elif "habit_new" in e:
@@ -309,6 +323,8 @@ class Bot:
             notes.extend(await self.payroll.apply_ops(pay_ops))
         if proj_ops:
             notes.extend(await self.projects.apply_ops(proj_ops))
+        if phone_ops:
+            notes.extend(await self.phone.create_many(phone_ops, user_text))
         if adds:
             await self.mem.add_memory(adds)
         return [n for n in notes if n]
@@ -733,6 +749,19 @@ class Bot:
         data = cq.get("data", "")
         if not await self._is_owner(chat_id):
             await self.tg.answer(cq["id"])
+            return
+        if data.startswith("pa:"):
+            try:
+                _, aid_s, ok_s = data.split(":")
+                msg, a = await self.phone.decide(int(aid_s), ok_s == "1")
+            except ValueError:
+                await self.tg.answer(cq["id"])
+                return
+            await self.tg.answer(cq["id"])
+            try:
+                await self.tg.edit(chat_id, message_id, (f"{msg}\n{__import__('app.phone', fromlist=['describe']).describe(a)}" if a else msg))
+            except TGError:
+                await self.tg.send(chat_id, msg)
             return
         if not data.startswith("hb:"):
             await self.tg.answer(cq["id"])

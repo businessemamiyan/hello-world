@@ -183,14 +183,67 @@ async def test_telegram_agent_handles_messages_readonly(tmp_path):
     assert await bot.send_digest() is True and "ظهر چی بخوریم" in tg.sent[-1]
 
 
+class FakeTgClient:
+    """کلاینت جعلی Telethon: فقط آنچه ایجنت صدا می‌زند."""
+
+    def __init__(self, authorized=True, dialogs=()):
+        self.authorized, self.dialogs, self.sent, self.handlers = authorized, list(dialogs), [], []
+
+    async def connect(self):
+        pass
+
+    async def is_user_authorized(self):
+        return self.authorized
+
+    def on(self, ev):
+        def deco(fn):
+            self.handlers.append(fn)
+            return fn
+        return deco
+
+    async def run_until_disconnected(self):
+        pass
+
+    async def iter_dialogs(self, limit=None):
+        for d in self.dialogs:
+            yield d
+
+    async def send_message(self, entity, text):
+        self.sent.append((entity, text))
+
+
+class FakeDialog:
+    def __init__(self, id, name):
+        self.id, self.name = id, name
+
+
 @pytest.mark.asyncio
-async def test_telegram_agent_refuses_to_run_without_allowlist(tmp_path):
+async def test_telegram_agent_without_allowlist_listens_to_nothing_but_can_send(tmp_path):
     mem, tg, bot, cfg = make(tmp_path)
     cfg.tg_allow = ""
-    created = []
-    agent = TelegramAgent(bot, cfg, client_factory=lambda: created.append(1))
-    await agent.run_forever()                                                          # بدون allowlist هیچ کلاینتی ساخته نمی‌شود
-    assert created == []
+    fake = FakeTgClient(dialogs=[FakeDialog(11, "علی کریمی"), FakeDialog(12, "علیرضا")])
+    agent = TelegramAgent(bot, cfg, client_factory=lambda: fake)
+    assert not agent.ready and await agent.find_dialogs("علی") == []
+    await agent.run_forever()
+    assert agent.ready and fake.handlers == []                                          # هیچ چتی خوانده نمی‌شود
+    assert [d["id"] for d in await agent.find_dialogs("علی کریمی")] == [11]              # نام دقیق
+    assert [d["id"] for d in await agent.find_dialogs("علیرضا")] == [12]
+    assert len(await agent.find_dialogs("علی")) == 2                                      # مبهم: هر دو
+    assert await agent.find_dialogs("کسی که نیست") == []
+    await agent.send(11, "سلام")
+    assert fake.sent == [(11, "سلام")]
+
+
+@pytest.mark.asyncio
+async def test_telegram_agent_not_logged_in_never_sends(tmp_path):
+    mem, tg, bot, cfg = make(tmp_path)
+    await mem.set_owner(7)
+    fake = FakeTgClient(authorized=False)
+    agent = TelegramAgent(bot, cfg, client_factory=lambda: fake)
+    await agent.run_forever()
+    assert not agent.ready and any("وارد حساب نشده" in m for m in tg.sent)
+    with pytest.raises(RuntimeError):
+        await agent.send(1, "x")
 
 
 # ---------------------------------------------------------------- زمان‌بند خلاصه

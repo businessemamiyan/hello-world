@@ -10,11 +10,13 @@ import os
 import time
 from collections import defaultdict, deque
 
-from fastapi import APIRouter, Depends, Header, HTTPException, Request
+from fastapi import APIRouter, Depends, Header, HTTPException, Request, Response
 from pydantic import BaseModel, Field
 
 from . import finance, life, novatunnel, payroll as payroll_mod, profile
 from .ingest import is_sensitive, memory_entry, parse_bank_text
+from .memory import normalize_fa
+from .phone import norm_number
 from .media import decode_image_b64
 
 log = logging.getLogger("api")
@@ -188,6 +190,39 @@ class ProjectPatch(BaseModel):
 class ProjectIn(BaseModel):
     name: str = Field(min_length=1, max_length=80)
     subtitle: str = Field(default="", max_length=160)
+
+
+class ContactIn(BaseModel):
+    key: str = Field(min_length=1, max_length=80)
+    name: str = Field(min_length=1, max_length=100)
+    numbers: list[str] = Field(default_factory=list, max_length=6)
+
+
+class ContactsSyncIn(BaseModel):
+    contacts: list[ContactIn] = Field(max_length=600)
+    replace: bool = False
+
+
+class PhoneSettingsIn(BaseModel):
+    auto_confirm: bool | None = None
+    sms_all: bool | None = None
+
+
+class PhoneAckIn(BaseModel):
+    status: str = Field(pattern="^(sent|failed|needs_tap)$")
+    detail: str = Field(default="", max_length=200)
+
+
+class SmsSyncItem(BaseModel):
+    id: str = Field(min_length=1, max_length=40)
+    address: str = Field(default="", max_length=60)
+    body: str = Field(min_length=1, max_length=1500)
+    ts: float
+    box: str = Field(default="inbox", pattern="^(inbox|sent)$")
+
+
+class SmsSyncIn(BaseModel):
+    messages: list[SmsSyncItem] = Field(max_length=300)
 
 
 class CoachDoneIn(BaseModel):
@@ -413,6 +448,89 @@ def create_router(mem, svc):
         snap["sections"] = list(profile.SECTIONS)
         snap["next_questions"] = [{"id": q[0], "section": q[1], "text": q[2]} for q in profile.SELF_QUESTIONS]
         return snap
+
+    # ---------- گوشی: مخاطبین، پیامک، اقدام‌ها ----------
+    def _phone():
+        p = getattr(svc, "phone", None)
+        if p is None:
+            raise HTTPException(status_code=503, detail="phone unavailable")
+        return p
+
+    @router.put("/contacts")
+    async def contacts_sync(body: ContactsSyncIn, dev=Depends(current_device)):
+        items = []
+        for c in body.contacts:
+            nums = []
+            for n in c.numbers:
+                nn = norm_number(n)
+                if nn and nn not in nums:
+                    nums.append(nn)
+            if nums:
+                items.append({"key": c.key, "name": c.name.strip(), "norm": normalize_fa(c.name).strip(), "numbers": nums})
+        await mem.replace_contacts(items, replace=body.replace)
+        return {"stored": len(items), "total": await mem.contacts_count()}
+
+    @router.get("/phone/status")
+    async def phone_status(dev=Depends(current_device)):
+        return await _phone().status()
+
+    @router.put("/phone/settings")
+    async def phone_settings(body: PhoneSettingsIn, dev=Depends(current_device)):
+        return await _phone().save_settings(body.model_dump(exclude_none=True))
+
+    @router.get("/phone/next")
+    async def phone_next(wait: int = 20, dev=Depends(current_device)):
+        """گوشی (سرویس پس‌زمینه) اینجا long-poll می‌کند تا اقدام تأییدشده را بگیرد؛ ۲۰۴ = فعلاً چیزی نیست."""
+        ph = _phone()
+        await ph.touch()
+        deadline = time.time() + max(0, min(wait, 25))
+        while True:
+            a = await ph.claim_next()
+            if a:
+                return a
+            if time.time() >= deadline:
+                return Response(status_code=204)
+            await asyncio.sleep(1.0)
+
+    @router.post("/phone/actions/{aid}/ack")
+    async def phone_ack(aid: int, body: PhoneAckIn, dev=Depends(current_device)):
+        msg = await _phone().ack(aid, body.status, body.detail)
+        if msg is None:
+            raise HTTPException(status_code=404, detail="not found")
+        return {"ok": True}
+
+    @router.post("/phone/actions/{aid}/approve")
+    async def phone_approve(aid: int, dev=Depends(current_device)):
+        msg, a = await _phone().decide(aid, True)
+        if a is None:
+            raise HTTPException(status_code=404, detail="not found")
+        return {"message": msg, "action": await mem.get_phone_action(aid)}
+
+    @router.post("/phone/actions/{aid}/cancel")
+    async def phone_cancel(aid: int, dev=Depends(current_device)):
+        msg, a = await _phone().decide(aid, False)
+        if a is None:
+            raise HTTPException(status_code=404, detail="not found")
+        return {"message": msg, "action": await mem.get_phone_action(aid)}
+
+    @router.post("/sms/sync")
+    async def sms_sync(body: SmsSyncIn, dev=Depends(current_device)):
+        """پیامک‌های گوشی (قدیمی‌ها/ارسالی‌ها) → صندوق مهرداد برای جست‌وجو؛ رمز یک‌بارمصرف هرگز ذخیره نمی‌شود."""
+        names = {}
+        for c in await mem.all_contacts():
+            for n in c["numbers"]:
+                names[n] = c["name"]
+        stored = dup = skipped = 0
+        for m in body.messages:
+            if is_sensitive(m.body) or not m.body.strip():
+                skipped += 1
+                continue
+            num = norm_number(m.address)
+            who = names.get(num) or m.address or "نامشخص"
+            text = ("[ارسالی] " if m.box == "sent" else "") + m.body.strip()[:600]
+            rid = await mem.add_inbox("sms", who, text, m.ts, dedup_key=f"sms:{m.box}:{m.id}", notified=1)
+            stored, dup = (stored + 1, dup) if rid else (stored, dup + 1)
+        return {"stored": stored, "duplicate": dup, "skipped": skipped}
 
     # ---------- پروژه‌ها ----------
     def _proj():

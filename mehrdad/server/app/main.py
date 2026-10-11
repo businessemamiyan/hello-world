@@ -58,8 +58,9 @@ async def amain():
         mail = MailAgent(bot, mem, cfg)
         bot.mail_agent = mail
         tasks.append(guarded("ایجنت ایمیل", mail.run_forever()))
-    if cfg.tg_api_id and cfg.tg_api_hash and cfg.tg_allow:
-        tasks.append(guarded("ایجنت تلگرام", TelegramAgent(bot, cfg).run_forever()))
+    if cfg.tg_api_id and cfg.tg_api_hash:
+        bot.tg_agent = TelegramAgent(bot, cfg)
+        tasks.append(guarded("ایجنت تلگرام", bot.tg_agent.run_forever()))
     await asyncio.gather(*tasks)
 
 
