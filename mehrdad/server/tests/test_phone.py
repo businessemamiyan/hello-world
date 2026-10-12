@@ -326,7 +326,7 @@ def test_phone_api_contacts_actions_and_sms_sync(api):
 # ---------------------------------------------------------------- اعلان پیام‌رسان‌ها، پاسخ، تماس/تقویم
 def test_ingest_messenger_notifications_conv_reply_and_search(api):
     c, h, bot, mem, loop, tg = api
-    ts = time.time()
+    ts = (time.time() // 600) * 600 + 100        # وسط یک بازهٔ ۱۰دقیقه‌ای؛ کلید تکراری‌یاب بر پایهٔ ts//600 است و نباید مرز را رد کند
     body = {"items": [
         {"kind": "notification", "source": "واتس‌اپ", "app": "واتس‌اپ", "title": "علی کریمی", "conv": "com.whatsapp|علی کریمی", "text": "۵۰۰ هزار تومن واریز کردم", "ts": ts},
         {"kind": "notification", "source": "واتس‌اپ", "app": "واتس‌اپ", "title": "علی کریمی", "conv": "com.whatsapp|علی کریمی", "text": "۵۰۰ هزار تومن واریز کردم", "ts": ts + 30},
