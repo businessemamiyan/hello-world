@@ -231,3 +231,34 @@ async def test_brain_complete_images_routes_by_provider():
     b = Brain("", provider="cli", cli_runner=text_runner, cli_image_runner=img_runner)
     assert await b.complete_images("S", "U", [("image/png", PNG)]) == "با عکس" and seen["img"][2] == [("image/png", PNG)]
     assert await b.complete_images("S", "U", None) == "متن" and seen["text"] == ("S", "U")
+
+
+# ---------------- عکس در مربی روزانه (جواب سؤال‌ها و «از مربی بپرس») ----------------
+@pytest.mark.asyncio
+async def test_daily_coach_teach_and_answer_accept_images(tmp_path):
+    from test_coach import PLAN
+    mem, brain, bot = make(tmp_path)
+    _with_images(brain)
+    seen = {}
+
+    async def think(history, recent, text, habits=None, images=None):
+        seen["text"], seen["images"] = text, images
+        return "دیدم", []
+    brain.think = think
+    out = await bot.coach.teach("", images=[("image/png", PNG)])
+    assert "چت مشتری" in out and brain.images and "همین عکس" in brain.calls[-1][1]
+    assert await bot.coach.teach("", None) is None
+    await bot.coach.save_day(bot.coach.today(), {"plan": PLAN, "done": {}, "answers": {}})
+    reply = await bot.coach.answer(0, "", "q", images=[("image/png", PNG)])
+    assert reply == "دیدم" and seen["images"] == [("image/png", PNG)] and "جوابم رو با عکس فرستادم" in seen["text"]
+    st = await bot.coach.state()
+    assert st["answers"]["0"]["text"].startswith("📷 ")
+
+
+def test_daily_coach_api_image_validation(api):
+    brain, client, h = api
+    _with_images(brain)
+    assert client.post("/api/coach/teach", json={"topic": "", "image": PNG_B64}, headers=h).status_code == 200
+    assert client.post("/api/coach/teach", json={"topic": "x"}, headers=h).status_code == 422                   # موضوع خیلی کوتاه و بدون عکس
+    assert client.post("/api/coach/teach", json={"topic": "فروش", "image": "data:image/png;base64," + base64.b64encode(b"zzz" * 60).decode()}, headers=h).status_code == 422
+    assert client.post("/api/coach/answer", json={"idx": 0, "text": ""}, headers=h).status_code == 422

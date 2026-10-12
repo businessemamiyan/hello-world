@@ -26,7 +26,7 @@ if (!token && window.MehrdadNative && MehrdadNative.getToken) token = MehrdadNat
 const S = { tab: store.get('mehrdad_tab') || 'today', mview: 'tx', pmonth: '', pid: '', gview: 'goals', mrange: 'month', lrange: 'week', priv: store.get('mehrdad_priv') === '1',
             cache: {}, busy: false, talk: false, talkSilent: 0, voiceIn: false,
             sview: store.get('mehrdad_sview') || 'today', cq: '', cst: '', cid: null,
-            cview: store.get('mehrdad_cview') || 'today', coachId: null };
+            cview: store.get('mehrdad_cview') || 'today', coachId: null, attach: {} };
 applyTheme(store.get('mehrdad_theme') || 'night');
 
 function applyTheme(t) {
@@ -615,7 +615,7 @@ function eveCard(c) {
   const qs = c.evening_questions || [], ans = c.answers || {};
   return `<div class="card"><div class="row spread"><h2>🌙 مرور شبانه</h2><span class="pill ai">روز رو ببند</span></div>
     ${qs.map((q, i) => { const a = ans['e' + i]; return `<div class="c-q" style="padding:8px 0;border-bottom:1px solid var(--line)"><div class="c-id">${esc(q)}</div>${a ? `<div class="m-b me" style="max-width:100%;margin-top:6px">${esc(a.text)}</div><div class="m-b bot" style="max-width:100%;margin-top:6px">${esc(a.reply)}</div>`
-      : `<textarea id="ce${i}" rows="2" placeholder="جوابت…"></textarea><div class="row"><button class="btn sm primary" data-act="coach-answer" data-kind="e" data-i="${i}">ثبت</button></div>`}</div>`; }).join('')}</div>`;
+      : `<textarea id="ce${i}" rows="2" placeholder="جوابت…"></textarea><div id="att-ce${i}"></div><div class="row"><button class="m-mic" data-act="attach" data-for="ce${i}" aria-label="عکس">📷</button><button class="btn sm primary" data-act="coach-answer" data-kind="e" data-i="${i}">ثبت</button></div>`}</div>`; }).join('')}</div>`;
 }
 const BOOK_ST = { suggested: 'پیشنهادی', reading: 'در حال مطالعه', done: 'تمام شد' };
 async function viewCoachToday() {
@@ -637,7 +637,7 @@ async function viewCoachToday() {
   const library = `<h2>📚 کتاب و آموزش</h2>
     <div class="card ai"><div class="row spread"><h2>از مربی بپرس / یاد بگیر</h2><span class="pill ai">استاد</span></div>
       <p class="muted small">هر موضوعی که می‌خوای (فروش، تمرکز، مدیریت پول، زبان…) برات درس مستقل و تمرین می‌ده.</p>
-      <div class="row" style="flex-wrap:nowrap"><input type="text" id="teachTopic" placeholder="مثلاً: چطور فروش فیلترشکن رو بالا ببرم؟" maxlength="300"><button class="btn primary" data-act="coach-teach">یاد بده</button></div><div id="teachOut"></div></div>
+      <div class="row" style="flex-wrap:nowrap"><input type="text" id="teachTopic" placeholder="مثلاً: چطور فروش فیلترشکن رو بالا ببرم؟" maxlength="300"><button class="m-mic" data-act="attach" data-for="teach" aria-label="عکس">📷</button><button class="btn primary" data-act="coach-teach">یاد بده</button></div><div id="att-teach"></div><div id="teachOut"></div></div>
     <div class="stack">${books.length ? books.map(bookCard).join('') : `<div class="card">${empty('هنوز کتابی نیست. پیشنهاد بگیر یا خودت اضافه کن.')}</div>`}</div>
     <div class="row"><button class="btn ai" data-act="coach-rec">پیشنهاد کتاب برای من</button></div><div id="recOut"></div>
     <form class="row" data-form="coach-book" style="flex-wrap:nowrap"><input type="text" name="title" placeholder="اسم کتابی که می‌خوای یاد بگیری…" required maxlength="120"><button class="btn" type="submit">افزودن</button></form>`;
@@ -648,7 +648,7 @@ async function viewCoachToday() {
   const t = st.today, pct = t.total ? Math.round(t.done / t.total * 100) : 0;
   const qs = (p.questions || []).map((q, i) => { const a = (c.answers || {})[String(i)];
     return `<div class="c-q" style="padding:8px 0;border-bottom:1px solid var(--line)"><div class="c-id">${esc(q)}</div>${a ? `<div class="m-b me" style="max-width:100%;margin-top:6px">${esc(a.text)}</div><div class="m-b bot" style="max-width:100%;margin-top:6px">${esc(a.reply)}</div>`
-      : `<textarea id="cq${i}" rows="2" placeholder="جوابت رو بنویس…"></textarea><div class="row"><button class="btn sm primary" data-act="coach-answer" data-i="${i}">ثبت جواب</button></div>`}</div>`; }).join('');
+      : `<textarea id="cq${i}" rows="2" placeholder="جوابت رو بنویس…"></textarea><div id="att-cq${i}"></div><div class="row"><button class="m-mic" data-act="attach" data-for="cq${i}" aria-label="عکس">📷</button><button class="btn sm primary" data-act="coach-answer" data-i="${i}">ثبت جواب</button></div>`}</div>`; }).join('');
   const swaps = (p.swaps || []).map((s, i) => `<div class="c-swap"><div><b>${esc(s.bad)}</b> ← <b class="m-pos">${esc(s.replacement)}</b></div>
       ${s.cue ? `<div class="muted small">نشانهٔ احتمالی: ${esc(s.cue)}</div>` : ''}${s.if_then ? `<div class="small">${esc(s.if_then)}</div>` : ''}
       ${s.tiny_step ? `<div class="small">قدم کوچک: ${esc(s.tiny_step)}</div>` : ''}${s.target ? `<div class="small">هدف این هفته: ${esc(s.target)}</div>` : ''}
@@ -1188,6 +1188,15 @@ async function downscale(file, max = 1600) {
 }
 async function sendPhoto(file, forId) {
   if (!file || S.busy) return;
+  if (forId.startsWith('attach:')) {
+    const key = forId.slice(7);
+    try {
+      S.attach[key] = await downscale(file);
+      const ch = $('#att-' + key); if (ch) ch.innerHTML = `<span class="pill gold">📎 عکس پیوست شد <button class="x" data-act="attach-del" data-for="${key}" aria-label="حذف عکس">✕</button></span>`;
+      toast('عکس پیوست شد ✓');
+    } catch (e) { toast(e.message); }
+    return;
+  }
   if (forId === 'sayCoach') {
     const ta = $('#sayCoach'); const caption = ta ? ta.value.trim() : '';
     try { const image = await downscale(file); if (ta) ta.value = ''; await coachAsk({ image, text: caption }); } catch (e) { toast(e.message); }
@@ -1311,15 +1320,16 @@ document.addEventListener('click', async ev => {
     else if (act === 'coach-done') { const key = b.dataset.key, on = !b.closest('.m-task').classList.contains('done');
       await api('/api/coach/done', { method: 'POST', body: { key, on } }); renderKeep(); }
     else if (act === 'coach-answer') {
-      const i = b.dataset.i, kind = b.dataset.kind || 'q', ta = $('#c' + (kind === 'e' ? 'e' : 'q') + i), text = (ta.value || '').trim(); if (!text) return toast('جوابت رو بنویس');
+      const i = b.dataset.i, kind = b.dataset.kind || 'q', key = 'c' + (kind === 'e' ? 'e' : 'q') + i, ta = $('#' + key), text = (ta.value || '').trim(), image = S.attach[key];
+      if (!text && !image) return toast('جوابت رو بنویس یا عکس بفرست');
       b.disabled = true; b.textContent = 'در حال ثبت…';
-      try { await api('/api/coach/answer', { method: 'POST', body: { idx: Number(i), text, kind } }); renderKeep(); } finally { b.disabled = false; }
+      try { await api('/api/coach/answer', { method: 'POST', body: { idx: Number(i), text, kind, image: image || undefined } }); delete S.attach[key]; renderKeep(); } finally { b.disabled = false; }
     }
     else if (act === 'coach-track') { const r = await api(`/api/coach/swap/${b.dataset.i}/track`, { method: 'POST' }); toast(r.existing ? 'از قبل پیگیری می‌شد 🔥' : 'ثبت شد؛ هر شب از تو می‌پرسم 🔥'); b.disabled = true; }
     else if (act === 'coach-teach') {
-      const topic = ($('#teachTopic').value || '').trim(); if (topic.length < 2) return toast('موضوع رو بنویس');
+      const topic = ($('#teachTopic').value || '').trim(), image = S.attach.teach; if (topic.length < 2 && !image) return toast('موضوع رو بنویس یا عکس بفرست');
       const out = $('#teachOut'); out.innerHTML = '<span class="m-spin"></span> استاد داره درس رو آماده می‌کنه…'; b.disabled = true;
-      try { const r = await api('/api/coach/teach', { method: 'POST', body: { topic } }); out.innerHTML = `<div class="m-b bot c-body" style="max-width:100%;margin-top:8px">${esc(r.text)}</div>`; }
+      try { const r = await api('/api/coach/teach', { method: 'POST', body: { topic, image: image || undefined } }); delete S.attach.teach; const ch = $('#att-teach'); if (ch) ch.innerHTML = ''; out.innerHTML = `<div class="m-b bot c-body" style="max-width:100%;margin-top:8px">${esc(r.text)}</div>`; }
       catch (e) { out.innerHTML = empty('نشد: ' + esc(e.message)); } finally { b.disabled = false; }
     }
     else if (act === 'coach-rec') {
@@ -1363,6 +1373,8 @@ document.addEventListener('click', async ev => {
     else if (act === 'say') say(b.dataset.for);
     else if (act === 'mic') mic(b.dataset.for);
     else if (act === 'photo') { S.photoFor = b.dataset.for; $('#photoIn').click(); }
+    else if (act === 'attach') { S.photoFor = 'attach:' + b.dataset.for; $('#photoIn').click(); }
+    else if (act === 'attach-del') { delete S.attach[b.dataset.for]; const ch = $('#att-' + b.dataset.for); if (ch) ch.innerHTML = ''; }
     else if (act === 'theme') { applyTheme(b.dataset.val); $$('.seg [data-act=theme]').forEach(x => x.setAttribute('aria-pressed', x === b)); }
     else if (act === 'logout') { closeSheet(); logout(false); }
     else if (act === 'plan') {

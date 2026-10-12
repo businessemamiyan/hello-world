@@ -281,16 +281,17 @@ class Coach:
         await self.save_day(date, rec)
         return rec["done"]
 
-    async def answer(self, idx, text, kind="q"):
+    async def answer(self, idx, text, kind="q", images=None):
         """جواب یک سؤال مربی (kind=q) یا سؤال مرور شبانه (kind=e)؛ از مسیر چت عادی می‌رود تا مغز آنچه گفته را ثبت کند."""
         date = self.today()
         rec = await self.get_day(date)
         qs = EVENING_QUESTIONS if kind == "e" else (((rec or {}).get("plan") or {}).get("questions") or [])
-        if not rec or not (0 <= idx < len(qs)) or not text.strip():
+        if not rec or not (0 <= idx < len(qs)) or not (text.strip() or images):
             return None
         label = "بازتاب شبانهٔ من" if kind == "e" else "پاسخ من به سؤال مربی"
-        reply = await self.bot.chat(f"({label}: «{qs[idx]}»)\n{text.strip()[:2000]}")
-        rec.setdefault("answers", {})[f"{kind}{idx}" if kind == "e" else str(idx)] = {"text": text.strip()[:2000], "reply": reply}
+        body = text.strip()[:2000] or "(جوابم رو با عکس فرستادم؛ ببین و بگو چی می‌بینی)"
+        reply = await self.bot.chat(f"({label}: «{qs[idx]}»)\n{body}", images=images)
+        rec.setdefault("answers", {})[f"{kind}{idx}" if kind == "e" else str(idx)] = {"text": ("📷 " if images else "") + body, "reply": reply}
         rec.setdefault("done", {})[f"{kind}{idx}"] = True
         await self.save_day(date, rec)
         return reply
@@ -309,16 +310,19 @@ class Coach:
         hid = await self.mem.add_habit(sw["replacement"], sw["bad"])
         return {"id": hid, "existing": False}
 
-    async def teach(self, topic):
-        """درس کوتاه و کاربردی دربارهٔ هر موضوع، شخصی‌سازی‌شده."""
+    async def teach(self, topic, images=None):
+        """درس کوتاه و کاربردی دربارهٔ هر موضوع (یا دربارهٔ عکس/اسکرین‌شات فرستاده‌شده)، شخصی‌سازی‌شده."""
         topic = topic.strip()[:300]
-        if not topic:
+        if not topic and not images:
             return None
         ctx = await self._ctx()
         system = (COACH_SYSTEM + "\n\nحالا نقش «استاد» رو داری: یک درس مستقل بده، نه برنامهٔ روزانه. متن ساده بنویس (بدون JSON، بدون مارک‌داون سنگین).\n\n" + ctx)
-        user = (f"دربارهٔ «{topic}» به من آموزش بده. ساختار: ۱) ایدهٔ اصلی در دو جمله ۲) توضیح با یک مثال مرتبط با زندگی/کار خودم "
+        subject = f"دربارهٔ «{topic}»" if topic else "دربارهٔ همین عکس/اسکرین‌شاتی که فرستادم (اول بگو چی می‌بینی)"
+        user = (f"{subject} به من آموزش بده. ساختار: ۱) ایدهٔ اصلی در دو جمله ۲) توضیح با یک مثال مرتبط با زندگی/کار خودم "
                 "۳) یک تمرین ۱۰ دقیقه‌ای برای امروز ۴) دو سؤال برای سنجش فهمم. حداکثر ۴۰۰ کلمه. اگه دربارهٔ چیزی مطمئن نیستی حدس نزن و بگو.")
         async with self.bot.brain_lock:
+            if images:
+                return (await self.bot.brain.complete_images(system, user, images)).strip()
             return (await self.bot.brain.complete(system, user)).strip()
 
     # ---------- کتاب ----------

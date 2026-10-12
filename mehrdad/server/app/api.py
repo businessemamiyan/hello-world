@@ -303,7 +303,8 @@ class CoachDoneIn(BaseModel):
 class CoachAnswerIn(BaseModel):
     idx: int = Field(ge=0, le=5)
     kind: str = Field(default="q", pattern="^[qe]$")
-    text: str = Field(min_length=1, max_length=2000)
+    text: str = Field(default="", max_length=2000)
+    image: str | None = Field(default=None, min_length=100, max_length=9_000_000)
 
 
 class CoachRoomAskIn(BaseModel):
@@ -324,7 +325,8 @@ class CoachRoomDoneIn(BaseModel):
 
 
 class CoachTeachIn(BaseModel):
-    topic: str = Field(min_length=2, max_length=300)
+    topic: str = Field(default="", max_length=300)
+    image: str | None = Field(default=None, min_length=100, max_length=9_000_000)
 
 
 class CoachBookIn(BaseModel):
@@ -797,6 +799,14 @@ def create_router(mem, svc):
         return await _pay().snapshot()
 
     # ---------- مربی ----------
+    def _decode_images(image):
+        if not image:
+            return None
+        dec = decode_image_b64(image)
+        if not dec:
+            raise HTTPException(status_code=422, detail="فقط عکس jpg/png/webp تا ۶ مگابایت")
+        return [dec]
+
     def _coach():
         c = getattr(svc, "coach", None)
         if c is None:
@@ -906,8 +916,11 @@ def create_router(mem, svc):
 
     @router.post("/coach/answer")
     async def coach_answer(body: CoachAnswerIn, dev=Depends(current_device)):
+        images = _decode_images(body.image)
+        if not body.text.strip() and not images:
+            raise HTTPException(status_code=422, detail="متن یا عکس لازمه")
         try:
-            reply = await _coach().answer(body.idx, body.text, body.kind)
+            reply = await _coach().answer(body.idx, body.text, body.kind, images)
         except Exception:
             log.exception("coach answer failed")
             raise HTTPException(status_code=502, detail="brain unavailable")
@@ -924,8 +937,11 @@ def create_router(mem, svc):
 
     @router.post("/coach/teach")
     async def coach_teach(body: CoachTeachIn, dev=Depends(current_device)):
+        images = _decode_images(body.image)
+        if len(body.topic.strip()) < 2 and not images:
+            raise HTTPException(status_code=422, detail="موضوع یا عکس لازمه")
         try:
-            text = await _coach().teach(body.topic)
+            text = await _coach().teach(body.topic, images)
         except Exception:
             log.exception("coach teach failed")
             raise HTTPException(status_code=502, detail="brain unavailable")
