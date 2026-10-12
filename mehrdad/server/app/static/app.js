@@ -727,7 +727,7 @@ async function viewCoachRoom(id) {
     ${lessons ? `<h2>📚 درس‌ها</h2><div class="stack">${lessons}</div>` : ''}
     <h2>💬 از مربی بپرس یا نقش‌بازی کن</h2>
     <div class="m-chatwrap"><div class="m-chat" id="roomChat">${msgs || empty('هر سؤالی داری بپرس؛ یا بگو «تو مشتری باش، من بفروشم».')}</div></div>
-    <div class="m-composer-fixed">${composer('sayCoach', 'از ' + d.name + ' بپرس…', false)}</div>
+    <div class="m-composer-fixed">${composer('sayCoach', 'از ' + d.name + ' بپرس یا عکس/اسکرین‌شات بفرست…')}</div>
     <div class="row"><button class="btn sm" data-act="room-reset">پاک کردن این کلاس</button></div>
   </section>`;
 }
@@ -756,20 +756,23 @@ async function roomAct(act, b) {
   }
 }
 
-async function coachAsk() {
-  const ta = $('#sayCoach'); const text = ta ? ta.value.trim() : ''; if (!text || S.busy || !S.coachId) return;
-  stopSpeaking(); S.busy = true; ta.value = ''; ta.style.height = '';
+async function coachAsk(opts = {}) {
+  const ta = $('#sayCoach'); const image = opts.image || null;
+  const fromBox = opts.text == null;
+  const text = fromBox ? (ta ? ta.value.trim() : '') : String(opts.text).trim();
+  if ((!text && !image) || S.busy || !S.coachId) return;
+  stopSpeaking(); S.busy = true; if (fromBox && ta) { ta.value = ''; ta.style.height = ''; }
   const speak = S.voiceIn || ttsAlways(); S.voiceIn = false;
   const send = $('[data-act=say][data-for=sayCoach]'); if (send) send.disabled = true;
   const list = $('#roomChat'); const empt = $('.m-empty', list); if (empt) empt.remove();
-  list.insertAdjacentHTML('beforeend', `${bubble('me', text)}<div class="m-b bot typing" id="typing"><span class="m-spin"></span></div>`);
+  list.insertAdjacentHTML('beforeend', `${bubble('me', image ? '📷 ' + (text || 'عکس') : text)}<div class="m-b bot typing" id="typing"><span class="m-spin"></span></div>`);
   window.scrollTo(0, document.body.scrollHeight);
   try {
-    const r = await api(`/api/coaches/${S.coachId}/ask`, { method: 'POST', body: { text } });
+    const r = await api(`/api/coaches/${S.coachId}/ask`, { method: 'POST', body: { text, image: image || undefined } });
     fillBot($('#typing'), r.reply); window.scrollTo(0, document.body.scrollHeight);
     if (speak) speakText(r.reply);
   } catch (e) {
-    if (e.message !== 'unauthorized') { toast(e.message); const t = $('#typing'); if (t) { t.classList.remove('typing'); t.removeAttribute('id'); t.textContent = 'مربی جواب نداد؛ دوباره بپرس.'; } ta.value = text; }
+    if (e.message !== 'unauthorized') { toast(e.message); const t = $('#typing'); if (t) { t.classList.remove('typing'); t.removeAttribute('id'); t.textContent = 'مربی جواب نداد؛ دوباره بفرست.'; } if (fromBox && ta && !image) ta.value = text; }
   } finally { S.busy = false; const s2 = $('[data-act=say][data-for=sayCoach]'); if (s2) s2.disabled = false; }
 }
 
@@ -1185,6 +1188,11 @@ async function downscale(file, max = 1600) {
 }
 async function sendPhoto(file, forId) {
   if (!file || S.busy) return;
+  if (forId === 'sayCoach') {
+    const ta = $('#sayCoach'); const caption = ta ? ta.value.trim() : '';
+    try { const image = await downscale(file); if (ta) ta.value = ''; await coachAsk({ image, text: caption }); } catch (e) { toast(e.message); }
+    return;
+  }
   S.busy = true;
   const ta = $('#' + forId); const caption = ta ? ta.value.trim() : ''; if (ta) ta.value = '';
   const inChat = forId === 'sayChat' && $('#chatList');
@@ -1233,6 +1241,8 @@ document.addEventListener('click', async ev => {
   const act = b.dataset.act, id = b.dataset.id;
   try {
     if (act.startsWith('crm-')) await crmAct(act, b);
+    else if (act === 'shared-send') await sharedSend(b.dataset.to);
+    else if (act === 'shared-cancel') { S.shared = null; closeSheet(); }
     else if (act.startsWith('room-')) await roomAct(act, b);
     else if (act === 'coach-view') { S.cview = b.dataset.val; S.coachId = null; store.set('mehrdad_cview', S.cview); render(); }
     else if (act === 'speak-el') { const el = $('#' + b.dataset.for); if (el) speakText(el.textContent); }
@@ -1479,14 +1489,45 @@ document.addEventListener('submit', async ev => {
 
 function syncPriv() { const b = $('#privBtn'); b.classList.toggle('on', S.priv); b.textContent = S.priv ? '🔓' : '🔒'; }
 
+document.addEventListener('visibilitychange', () => { if (document.hidden) stopSpeaking(); });
+// عکس/اسکرین‌شاتی که از گالری با «Share» به MEHRDAD داده شده: بپرس برای کی بفرستم
+window.onSharedImage = async () => {
+  if (!token || !window.MehrdadNative || !MehrdadNative.takeSharedImage) return;
+  let img = ''; try { img = MehrdadNative.takeSharedImage() || ''; } catch (e) { return; }
+  if (!img) return;
+  let coaches = []; try { coaches = (await api('/api/coaches')).coaches; } catch (e) { /* فقط مهرداد */ }
+  S.shared = img;
+  sheet(`<div class="row spread"><h2>📷 این عکس رو برای کی بفرستم؟</h2><button class="x" data-act="shared-cancel">✕</button></div>
+    <img src="${img}" alt="" style="max-width:100%;max-height:220px;border-radius:12px;justify-self:center;object-fit:contain">
+    <input type="text" id="sharedCap" placeholder="یه توضیح کوتاه (اختیاری): مثلاً این چت مشتریمه" maxlength="300">
+    <button class="btn primary" data-act="shared-send" data-to="chat">🧠 مهرداد (فیش، رسید، ثبت و …)</button>
+    <span class="eyebrow">یا یکی از مربی‌ها</span>
+    <div class="row">${coaches.map(c => `<button class="btn sm" data-act="shared-send" data-to="${c.id}">${c.emoji} ${esc(c.name.replace(/^مربی /, ''))}</button>`).join('')}</div>`);
+};
+async function sharedSend(to) {
+  const image = S.shared; if (!image) return; const text = (($('#sharedCap') || {}).value || '').trim();
+  S.shared = null; closeSheet();
+  if (to === 'chat') {
+    go('chat'); await new Promise(r => setTimeout(r, 400));
+    const list = $('#chatList');
+    if (list) { const empt = $('.m-empty', list); if (empt) empt.remove(); list.insertAdjacentHTML('beforeend', `${bubble('me', '📷 ' + (text || 'عکس'))}<div class="m-b bot typing" id="typing"><span class="m-spin"></span></div>`); window.scrollTo(0, document.body.scrollHeight); }
+    try { const r = await api('/api/chat/image', { method: 'POST', body: { image, text } }); fillBot($('#typing'), r.reply); window.scrollTo(0, document.body.scrollHeight); if (ttsAlways()) speakText(r.reply); }
+    catch (e) { if (e.message !== 'unauthorized') { toast(e.message); const t = $('#typing'); if (t) t.textContent = 'عکس رو نتونستم بخونم؛ دوباره بفرست.'; } }
+    return;
+  }
+  S.tab = 'coach'; S.cview = 'coaches'; S.coachId = to; store.set('mehrdad_tab', 'coach'); store.set('mehrdad_cview', 'coaches');
+  await render(); window.scrollTo(0, document.body.scrollHeight);
+  await coachAsk({ image, text });
+}
+document.addEventListener('visibilitychange', () => { if (!document.hidden && window.onSharedImage) window.onSharedImage(); });
+
 // ------------------------------------------------------------- شروع
 function boot() {
   syncPriv();
   if (!token) return pairScreen();
   $('#nav').hidden = false;
   render();
+  setTimeout(() => { if (window.onSharedImage) window.onSharedImage(); }, 900);        // عکسی که قبل از باز شدن اپ Share شده
 }
 boot();
 })();
-
-document.addEventListener('visibilitychange', () => { if (document.hidden) stopSpeaking(); });

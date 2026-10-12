@@ -307,7 +307,8 @@ class CoachAnswerIn(BaseModel):
 
 
 class CoachRoomAskIn(BaseModel):
-    text: str = Field(min_length=1, max_length=2000)
+    text: str = Field(default="", max_length=2000)
+    image: str | None = Field(default=None, min_length=100, max_length=9_000_000)
 
 
 class CoachRoomLessonIn(BaseModel):
@@ -848,8 +849,16 @@ def create_router(mem, svc):
 
     @router.post("/coaches/{cid}/ask")
     async def coaches_ask(cid: str, body: CoachRoomAskIn, dev=Depends(current_device)):
+        images = None
+        if body.image:
+            dec = decode_image_b64(body.image)
+            if not dec:
+                raise HTTPException(status_code=422, detail="فقط عکس jpg/png/webp تا ۶ مگابایت")
+            images = [dec]
+        if not body.text.strip() and not images:
+            raise HTTPException(status_code=422, detail="متن یا عکس لازمه")
         try:
-            reply = await _rooms().ask(cid, body.text)
+            reply = await _rooms().ask(cid, body.text, images)
         except CoachRoomError as e:
             raise HTTPException(status_code=502, detail=str(e))
         except Exception:

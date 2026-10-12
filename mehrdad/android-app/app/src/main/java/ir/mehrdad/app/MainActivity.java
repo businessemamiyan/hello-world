@@ -70,6 +70,7 @@ public class MainActivity extends AppCompatActivity {
     private Voice voice;
     private static final int V_TEXT = 0, V_COMMAND = 1, V_CHAT = 2;      // نوشتن در جعبه | دستور مستقیم | گفتگوی صوتی نوبتی
     private int pendingVoiceMode;
+    private volatile String sharedImage = "";          // data:image/jpeg;base64,… از «Share» گوشی؛ JS با takeSharedImage() برمی‌دارد
     private TextToSpeech tts;
     private boolean ttsFa;
 
@@ -144,6 +145,7 @@ public class MainActivity extends AppCompatActivity {
         });
 
         pendingVoiceMode = getIntent().getBooleanExtra("voice", false) ? V_COMMAND : V_TEXT;
+        handleShare(getIntent());
         tts = new TextToSpeech(this, st -> {
             if (st == TextToSpeech.SUCCESS) ttsFa = tts.setLanguage(new Locale("fa")) >= TextToSpeech.LANG_AVAILABLE;
         });
@@ -154,6 +156,7 @@ public class MainActivity extends AppCompatActivity {
     protected void onNewIntent(Intent intent) {
         super.onNewIntent(intent);
         setIntent(intent);
+        handleShare(intent);
         if (intent != null && intent.getBooleanExtra("voice", false)) {
             intent.removeExtra("voice");
             startVoice(V_COMMAND);                 // دکمهٔ اعلان / کاشی / دستیار: مستقیم گوش بده
@@ -311,6 +314,28 @@ public class MainActivity extends AppCompatActivity {
         }
         voice = new Voice(mode);
         voice.begin();
+    }
+
+    /** عکس/اسکرین‌شات از Share گوشی: کوچک (حداکثر ۱۶۰۰ پیکسل) و JPEG می‌شود تا سبک برای سرور برود؛ بعد صفحه خبر می‌شود. */
+    @SuppressWarnings("deprecation")
+    private void handleShare(Intent intent) {
+        try {
+            if (intent == null || !Intent.ACTION_SEND.equals(intent.getAction())) return;
+            String type = intent.getType();
+            if (type == null || !type.startsWith("image/")) return;
+            final Uri uri = intent.getParcelableExtra(Intent.EXTRA_STREAM);
+            intent.setAction(Intent.ACTION_MAIN);                 // دوباره پردازش نشود
+            if (uri == null || !"content".equals(uri.getScheme())) return;
+            new Thread(() -> {
+                String data = ShareImage.toDataUrl(MainActivity.this, uri);
+                if (data == null) {
+                    runOnUiThread(() -> Toast.makeText(MainActivity.this, "این عکس خونده نشد", Toast.LENGTH_LONG).show());
+                    return;
+                }
+                sharedImage = data;
+                runOnUiThread(() -> { if (web != null) web.evaluateJavascript("window.onSharedImage && window.onSharedImage()", null); });
+            }).start();
+        } catch (Exception ignored) { }
     }
 
     /** راهنمای «Restricted setting»: اندروید ۱۳+ برای اپ‌های خارج از فروشگاه، دسترسی اعلان‌ها رو تا تأیید دستی قفل می‌کنه. */
@@ -592,6 +617,14 @@ public class MainActivity extends AppCompatActivity {
 
         @JavascriptInterface
         public boolean speakAvailable() { return ttsFa; }
+
+        /** عکس Share‌شده (یک‌بار مصرف). خالی = چیزی نیست. */
+        @JavascriptInterface
+        public String takeSharedImage() {
+            String d = sharedImage;
+            sharedImage = "";
+            return d;
+        }
 
         @JavascriptInterface
         public void stopSpeak() {

@@ -526,6 +526,18 @@ class Brain:
         data = await self._call(system, [{"role": "user", "content": user}], None)
         return "".join(b.get("text", "") for b in data.get("content", []) if b.get("type") == "text")
 
+    async def complete_images(self, system, user, images):
+        """مثل complete ولی با عکس‌ها (لیست (media_type, bytes)): اسکرین‌شات، فاکتور، چت مشتری… برای مربی‌ها."""
+        if not images:
+            return await self.complete(system, user)
+        if self.provider == "cli":
+            return await self.cli_image_runner(system, user, images, self.cli_model)
+        import base64
+        content = [{"type": "image", "source": {"type": "base64", "media_type": mt, "data": base64.b64encode(raw_).decode("ascii")}} for mt, raw_ in images]
+        content.append({"type": "text", "text": user})
+        data = await self._call(system, [{"role": "user", "content": content}], None)
+        return "".join(b.get("text", "") for b in data.get("content", []) if b.get("type") == "text")
+
     async def _call(self, system, messages, tools):
         body = {"model": self.model, "max_tokens": 1024, "system": system, "messages": messages}
         if tools:
