@@ -81,12 +81,14 @@ async def test_owner_message_stored_and_replied(setup):
     brain.entries = [{"type": "expense", "summary": "ناهار", "detail": None, "amount": 250000}]
     await mem.set_owner(1)
     await bot.handle_message({"chat": {"id": 1}, "text": "۲۵۰ ناهار"})
-    assert tg.sent[-1][:2] == (1, "چقدر گفتی خرج کردی؟")
+    assert tg.sent[-2][1].startswith("چقدر گفتی خرج کردی؟") and "منتظر تأییدته" in tg.sent[-2][1]
+    assert "ثبت کنم؟" in tg.sent[-1][1] and "ناهار" in tg.sent[-1][1]                  # دکمه‌های ✅/❌
     hist = await mem.recent_messages(10)
     assert hist[-2] == ("user", "۲۵۰ ناهار")
-    assert hist[-1] == ("assistant", "چقدر گفتی خرج کردی؟")
-    recent = await mem.recent_memory(10)
-    assert recent[0]["summary"] == "ناهار"
+    assert hist[-1][0] == "assistant" and hist[-1][1].startswith("چقدر گفتی خرج کردی؟")
+    assert await mem.recent_memory(10) == []                                           # تا تأیید نشده چیزی ثبت نمی‌شود
+    await bot.handle_message({"chat": {"id": 1}, "text": "آره"})
+    assert (await mem.recent_memory(10))[0]["summary"] == "ناهار"
 
 
 @pytest.mark.asyncio

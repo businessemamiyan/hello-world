@@ -74,8 +74,9 @@ async def test_telegram_photo_is_seen_recorded_and_answered(tmp_path):
     await bot.handle_message({"chat": {"id": 7}, "photo": [{"file_id": "small", "file_size": 100}, {"file_id": "big", "file_size": 5000}], "caption": "فیش امروز"})
     assert tg.downloaded == ["big"]                                           # بزرگ‌ترین اندازه
     assert brain.images == [("image/png", PNG)] and brain.texts == ["فیش امروز"]
-    assert tg.sent[-1].startswith("فیش را خواندم")
-    assert [e["amount"] for e in await mem.recent_memory(5) if e["type"] == "expense"] == [120000.0]
+    assert tg.sent[-2].startswith("فیش را خواندم") and "ثبت کنم؟" in tg.sent[-1]
+    assert [e["amount"] for e in await mem.recent_memory(5) if e["type"] == "expense"] == []         # خوانده‌شدهٔ عکس هم اول تأیید می‌خواهد
+    assert [p["amount"] for p in await bot.pending.list()] == [120000.0]
     assert any("📷" in m[1] for m in await mem.recent_messages(5))             # خودِ عکس ذخیره نمی‌شود، فقط نشانه‌اش
     assert not any(b"PNG" in str(m[1]).encode() for m in await mem.recent_messages(5))
 

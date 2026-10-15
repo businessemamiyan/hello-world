@@ -59,6 +59,36 @@ BY_ID = {c["id"]: c for c in COACHES}
 
 MAX_LESSONS = 60
 MAX_CHAT = 40
+SLOTS = ["08:00", "12:30", "17:00", "20:00"]      # ساعت‌های پیش‌فرض ارسال درس (برای مربی‌های پشت‌سرهم پخش می‌شود)
+DUE_WINDOW = 3 * 3600                              # اگر سرور ساعت ارسال خاموش بود، تا ۳ ساعت بعدش هنوز می‌فرستد
+TG_LIMIT = 3800
+MSG_MAP_MAX = 120
+
+
+def _hhmm(s):
+    m = re.match(r"^\s*(\d{1,2}):(\d{2})\s*$", str(s or ""))
+    return "%02d:%02d" % (int(m.group(1)), int(m.group(2))) if m and int(m.group(1)) < 24 and int(m.group(2)) < 60 else ""
+
+
+def split_message(text, limit=TG_LIMIT):
+    """پیام بلند را روی مرز پاراگراف به تکه‌های کمتر از حد تلگرام می‌شکند."""
+    parts, cur = [], ""
+    for para in str(text).split("\n\n"):
+        while len(para) > limit:
+            cut = para.rfind(" ", 0, limit)
+            cut = cut if cut > limit // 2 else limit
+            if cur:
+                parts.append(cur.strip())
+                cur = ""
+            parts.append(para[:cut].strip())
+            para = para[cut:].strip()
+        if len(cur) + len(para) + 2 > limit and cur:
+            parts.append(cur.strip())
+            cur = ""
+        cur += para + "\n\n"
+    if cur.strip():
+        parts.append(cur.strip())
+    return parts
 
 
 def _json_obj(raw):
@@ -143,15 +173,49 @@ class Coaches:
             r = await self.room(c["id"])
             done = len([l for l in r["lessons"] if l.get("done")])
             last = max([l["ts"] for l in r["lessons"]] + [m["ts"] for m in r["chat"]] + [0])
-            out.append({**self._public(c), "lessons": len(r["lessons"]), "done": done, "curriculum": len(r["curriculum"]), "last_ts": last or None})
+            sub = (await self.subs()).get(c["id"]) or {}
+            out.append({**self._public(c), "lessons": len(r["lessons"]), "done": done, "curriculum": len(r["curriculum"]), "last_ts": last or None,
+                        "unread": len([l for l in r["lessons"] if l.get("seen") is False]), "sub": {"on": bool(sub.get("on")), "time": sub.get("time") or ""}})
         return out
+
+    async def unread_total(self):
+        n = 0
+        for c in COACHES:
+            n += len([l for l in (await self.room(c["id"]))["lessons"] if l.get("seen") is False])
+        return n
 
     async def detail(self, cid):
         c = BY_ID.get(cid)
         if not c:
             return None
         r = await self.room(cid)
-        return {**self._public(c), **r}
+        sub = (await self.subs()).get(cid) or {}
+        out = {**self._public(c), **json.loads(json.dumps(r)), "sub": {"on": bool(sub.get("on")), "time": sub.get("time") or ""}}   # کپی: «جدید» بودن را برای همین نمایش نگه می‌دارد
+        if any(l.get("seen") is False for l in r["lessons"]):          # اتاق را باز کرد = درس‌ها دیده شدند (out همان وضعیتِ قبلی را برای نشان‌دادن «جدید» دارد)
+            for l in r["lessons"]:
+                if l.get("seen") is False:
+                    l["seen"] = True
+            await self.save(cid, r)
+        return out
+
+    # ---------- اشتراک ارسال خودکار ----------
+    async def subs(self):
+        raw = await self.mem.kv_get("coaches:subs")
+        try:
+            d = json.loads(raw) if raw else {}
+        except ValueError:
+            d = {}
+        return d if isinstance(d, dict) else {}
+
+    async def set_sub(self, cid, on, hhmm=None):
+        if cid not in BY_ID:
+            return None
+        subs = await self.subs()
+        cur = subs.get(cid) or {}
+        t = _hhmm(hhmm) or cur.get("time") or SLOTS[len([1 for v in subs.values() if v.get("on")]) % len(SLOTS)]
+        subs[cid] = {"on": bool(on), "time": t}
+        await self.mem.kv_set("coaches:subs", json.dumps(subs, ensure_ascii=False))
+        return subs[cid]
 
     def digest_line(self, rooms):
         """یک خط کوتاه برای زمینهٔ مغز: کدام کلاس‌ها را رفته."""
@@ -190,7 +254,7 @@ class Coaches:
         return r
 
     # ---------- درس ----------
-    async def next_lesson(self, cid, topic=""):
+    async def next_lesson(self, cid, topic="", delivered=False):
         c = BY_ID.get(cid)
         if not c:
             return None
@@ -215,9 +279,128 @@ class Coaches:
         if not lesson:
             raise CoachRoomError("درس خالی بود؛ دوباره امتحان کن")
         lesson.update({"n": n, "ts": time.time(), "done": False, "topic": topic})
+        if delivered:
+            lesson["seen"] = False                      # از ربات/اعلان رسیده؛ تا اتاق را باز نکند «جدید» است
         r["lessons"].append(lesson)
         await self.save(cid, r)
         return {"lesson": lesson, "room": r}
+
+    # ---------- ارسال به تلگرام و اعلان اپ ----------
+    def lesson_text(self, c, lesson):
+        from . import life
+        parts = [f"{c['emoji']} {c['name']} — درس {life.fa(lesson['n'])}\n📖 {lesson['title']}", lesson["body"]]
+        if lesson.get("takeaway"):
+            parts.append("💡 " + lesson["takeaway"])
+        if lesson.get("exercise"):
+            parts.append("⚡ تمرین: " + lesson["exercise"])
+        if lesson.get("quiz"):
+            parts.append("❓ از خودت بپرس:\n" + "\n".join("• " + q for q in lesson["quiz"]))
+        parts.append("💬 سؤالی داری؟ روی همین پیام ریپلای کن و بنویس (عکس هم می‌تونی بفرستی).")
+        return "\n\n".join(parts)
+
+    async def remember_msg(self, message_id, cid):
+        if not message_id:
+            return
+        raw = await self.mem.kv_get("coaches:msgmap")
+        try:
+            d = json.loads(raw) if raw else {}
+        except ValueError:
+            d = {}
+        d[str(message_id)] = cid
+        if len(d) > MSG_MAP_MAX:
+            d = dict(list(d.items())[-MSG_MAP_MAX:])
+        await self.mem.kv_set("coaches:msgmap", json.dumps(d))
+
+    async def coach_for_msg(self, message_id):
+        raw = await self.mem.kv_get("coaches:msgmap")
+        try:
+            return (json.loads(raw) if raw else {}).get(str(message_id))
+        except ValueError:
+            return None
+
+    async def send_lesson(self, c, lesson):
+        """درس کامل را (تکه‌تکه اگر بلند بود) به صاحب در تلگرام می‌فرستد؛ آخرین تکه دکمه دارد."""
+        from .telegram import btn
+        owner = await self.mem.get_owner()
+        if not owner:
+            return False
+        parts = split_message(self.lesson_text(c, lesson))
+        for i, part in enumerate(parts):
+            last = i == len(parts) - 1
+            kb = [[btn("✅ تمرینش رو انجام دادم", f"cl:{c['id']}:{lesson['n']}:d"), btn("🔊 صوتی بخون", f"cl:{c['id']}:{lesson['n']}:v")]] if last else None
+            res = await self.bot.tg.send(owner, part, kb=kb)
+            await self.remember_msg((res or {}).get("message_id") if isinstance(res, dict) else None, c["id"])
+        return True
+
+    async def deliver(self, cid, force=False):
+        """درس بعدی کلاس را می‌سازد و در تلگرام می‌فرستد (+ اعلان اپ). اگر دو درس قبلی هنوز تمرینشان مانده و force نباشد، فقط یادآوری می‌کند."""
+        c = BY_ID.get(cid)
+        if not c:
+            return None
+        from . import life
+        today = life.now_tehran().date().isoformat()
+        r = await self.room(cid)
+        undone = [l for l in r["lessons"] if not l.get("done")]
+        owner = await self.mem.get_owner()
+        if len(undone) >= 2 and not force:
+            if owner:
+                await self.bot.tg.send(owner, f"{c['emoji']} {c['name']}: {life.fa(len(undone))} درس قبلی هنوز تمرینش مونده ({'، '.join(l['title'] for l in undone[-2:])}). اول اون‌ها رو انجام بده، بعد درس تازه می‌فرستم.\nاپ ← مربی ← مربی‌های من.")
+            await self.mem.kv_set(f"coaches:last:{cid}", today)
+            return {"nudge": True}
+        res = await self.next_lesson(cid, delivered=True)
+        lesson = res["lesson"]
+        await self.send_lesson(c, lesson)
+        notices = getattr(self.bot, "notices", None)
+        if notices:
+            await notices.add(f"{c['emoji']} درس تازه از {c['name']}", lesson["title"], f"coach:{cid}")
+        await self.mem.kv_set(f"coaches:last:{cid}", today)
+        return {"lesson": lesson}
+
+    async def deliver_due(self, hhmm, today):
+        """برای زمان‌بند: اشتراک‌های روشنی که ساعتشان رسیده (تا ۳ ساعت پیش) و امروز هنوز نفرستاده‌اند."""
+        sent = []
+        now_min = int(hhmm[:2]) * 60 + int(hhmm[3:])
+        for cid, sub in (await self.subs()).items():
+            if not sub.get("on") or cid not in BY_ID or not _hhmm(sub.get("time")):
+                continue
+            t_min = int(sub["time"][:2]) * 60 + int(sub["time"][3:])
+            if not (0 <= now_min - t_min <= DUE_WINDOW // 60):
+                continue
+            if await self.mem.kv_get(f"coaches:last:{cid}") == today:
+                continue
+            await self.mem.kv_set(f"coaches:last:{cid}", today)             # قبل از ساخت علامت می‌زنیم تا دو بار نرود
+            try:
+                await self.deliver(cid)
+                sent.append(cid)
+            except Exception:
+                log.exception("ارسال درس مربی %s ناموفق", cid)
+                await self.mem.kv_set(f"coaches:last:{cid}", "")
+        return sent
+
+    async def callback(self, data):
+        """دکمه‌های پیام درس (cl:<مربی>:<شماره>:d|v) → (متن کوتاه, voice_bytes یا None)."""
+        try:
+            _, cid, n_s, act = data.split(":")
+            n = int(n_s)
+        except ValueError:
+            return "نامعتبر", None
+        c = BY_ID.get(cid)
+        if not c:
+            return "این مربی نیست", None
+        if act == "d":
+            ok = await self.set_done(cid, n, True)
+            return ("آفرین 👏 تمرین ثبت شد" if ok else "این درس دیگه نیست"), None
+        if act == "v":
+            r = await self.room(cid)
+            lesson = next((l for l in r["lessons"] if l["n"] == n), None)
+            tts = getattr(self.bot, "tts", None)
+            if not lesson or not tts:
+                return "صدا الان نشد", None
+            try:
+                return "دارم صدا رو می‌فرستم 🔊", await tts.synth(f"{lesson['title']}. {lesson['body']}")
+            except Exception:
+                return "صدا الان نشد", None
+        return "نامعتبر", None
 
     async def set_done(self, cid, n, on=True):
         r = await self.room(cid)

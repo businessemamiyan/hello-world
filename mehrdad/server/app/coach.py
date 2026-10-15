@@ -271,6 +271,19 @@ class Coach:
         lines.append("جزئیات و تیک‌زدن کارها: اپ ← تب مربی")
         return "\n".join(lines)
 
+    def lesson_message(self, plan):
+        """درس امروز و چالش، کامل، برای خواندن توی ربات."""
+        lesson, chal = plan.get("lesson") or {}, plan.get("challenge") or {}
+        if not lesson.get("body"):
+            return ""
+        parts = [f"📖 درس امروز: {lesson.get('title') or ''}".strip(), lesson["body"]]
+        if lesson.get("takeaway"):
+            parts.append("💡 " + lesson["takeaway"])
+        if chal.get("title"):
+            steps = "\n".join(f"{i + 1}. {s}" for i, s in enumerate(chal.get("steps") or []))
+            parts.append(f"⚡ چالش امروز: {chal['title']}" + (f"\n{steps}" if steps else ""))
+        return "\n\n".join(parts)
+
     # ---------- تعامل ----------
     async def set_done(self, key, on):
         date = self.today()

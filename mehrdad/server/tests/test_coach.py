@@ -175,7 +175,9 @@ async def test_scheduler_sends_morning_plan_once(tmp_path):
     assert not tg.sent and not brain.calls
     await sch.maybe_coach("07:00", "2026-10-11")
     await sch.maybe_coach("07:00", "2026-10-11")
-    assert len(tg.sent) == 1 and "شروع بدون اسکرول" in tg.sent[0] and "تب مربی" in tg.sent[0] and len(brain.calls) == 1
+    assert len(tg.sent) == 2 and "شروع بدون اسکرول" in tg.sent[0] and "تب مربی" in tg.sent[0] and len(brain.calls) == 1
+    assert "درس امروز: قانون دو دقیقه" in tg.sent[1] and "هر عادت را به نسخهٔ دو دقیقه‌ای" in tg.sent[1] and "چالش امروز" in tg.sent[1]     # خود درس هم در ربات
+    assert await bot.notices.waiting() == 1                                                                      # اعلان اپ هم در صف است
 
 
 @pytest.fixture

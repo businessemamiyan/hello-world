@@ -38,6 +38,17 @@ class ChatIn(BaseModel):
     text: str = Field(min_length=1, max_length=4000)
 
 
+class PendingSettingsIn(BaseModel):
+    confirm: bool
+
+
+class PendingEditIn(BaseModel):
+    amount: float | None = Field(default=None, ge=0, le=1e12)
+    summary: str | None = Field(default=None, max_length=300)
+    category: str | None = Field(default=None, max_length=60)
+    type: str | None = Field(default=None, pattern="^(expense|income)$")
+
+
 class TTSIn(BaseModel):
     text: str = Field(min_length=1, max_length=6000)
     voice: str | None = Field(default=None, pattern="^(male|female)$")
@@ -320,6 +331,11 @@ class CoachRoomPathIn(BaseModel):
     goal: str = Field(default="", max_length=300)
 
 
+class CoachSubIn(BaseModel):
+    on: bool
+    time: str | None = Field(default=None, pattern=r"^\d{1,2}:\d{2}$")
+
+
 class CoachRoomDoneIn(BaseModel):
     on: bool = True
 
@@ -497,8 +513,11 @@ def create_router(mem, svc):
 
     @router.post("/chat")
     async def chat(body: ChatIn, dev=Depends(current_device)):
+        pend = getattr(svc, "pending", None)
+        before = await pend.max_id() if pend else 0
         reply = await svc.chat(body.text)
-        return {"reply": reply, "ts": time.time()}
+        fresh = await pend.since(before) if pend else []
+        return {"reply": reply, "ts": time.time(), "pending": fresh}
 
     @router.post("/tts")
     async def tts(body: TTSIn, dev=Depends(current_device)):
@@ -613,7 +632,11 @@ def create_router(mem, svc):
         ph = _phone()
         await ph.touch()
         deadline = time.time() + max(0, min(wait, 25))
+        notices = getattr(svc, "notices", None)
         while True:
+            n = await notices.claim() if notices else None
+            if n:                                   # اعلان اپ (مثلاً «درس تازه داری»): گوشی فقط نمایش می‌دهد
+                return {"id": n["id"], "kind": "notice", "to_name": n["title"], "to_number": n["target"], "text": n["text"]}
             a = await ph.claim_next()
             if a:
                 return a
@@ -830,6 +853,33 @@ def create_router(mem, svc):
         if d is None:
             raise HTTPException(status_code=404, detail="coach not found")
         return d
+
+    @router.put("/coaches/{cid}/sub")
+    async def coaches_sub(cid: str, body: CoachSubIn, dev=Depends(current_device)):
+        sub = await _rooms().set_sub(cid, body.on, body.time)
+        if sub is None:
+            raise HTTPException(status_code=404, detail="coach not found")
+        return sub
+
+    @router.post("/coaches/{cid}/send")
+    async def coaches_send(cid: str, dev=Depends(current_device)):
+        """همین حالا درس بعدی را بساز و در تلگرام هم بفرست."""
+        try:
+            r = await _rooms().deliver(cid, force=True)
+        except CoachRoomError as e:
+            raise HTTPException(status_code=502, detail=str(e))
+        except Exception:
+            log.exception("coach send failed")
+            raise HTTPException(status_code=502, detail="مربی الان جواب نداد؛ کمی بعد دوباره امتحان کن")
+        if r is None:
+            raise HTTPException(status_code=404, detail="coach not found")
+        return {"ok": True, "title": r["lesson"]["title"]}
+
+    @router.get("/badges")
+    async def badges(dev=Depends(current_device)):
+        pend = getattr(svc, "pending", None)
+        rooms = getattr(svc, "coaches", None)
+        return {"coach": await rooms.unread_total() if rooms else 0, "pending": len(await pend.list()) if pend else 0}
 
     @router.post("/coaches/{cid}/path")
     async def coaches_path(cid: str, body: CoachRoomPathIn, dev=Depends(current_device)):
@@ -1115,17 +1165,51 @@ def create_router(mem, svc):
             raise HTTPException(status_code=404, detail="not found")
         return updated
 
+    # ---------- تأیید قبل از ثبت خرج/درآمد ----------
+    def _pending():
+        p = getattr(svc, "pending", None)
+        if p is None:
+            raise HTTPException(status_code=503, detail="pending unavailable")
+        return p
+
+    @router.get("/pending")
+    async def pending_list(dev=Depends(current_device)):
+        p = _pending()
+        return {"items": await p.list(), "confirm": await p.enabled()}
+
+    @router.put("/pending/settings")
+    async def pending_settings(body: PendingSettingsIn, dev=Depends(current_device)):
+        await _pending().set_enabled(body.confirm)
+        return {"confirm": body.confirm}
+
+    @router.post("/pending/{pid}/confirm")
+    async def pending_confirm(pid: int, body: PendingEditIn, dev=Depends(current_device)):
+        p = _pending()
+        line, item = await p.confirm(pid, body.model_dump(exclude_none=True))
+        if line is None:
+            raise HTTPException(status_code=404 if item is None else 409, detail="not found" if item is None else "already decided")
+        return {"message": line}
+
+    @router.post("/pending/{pid}/reject")
+    async def pending_reject(pid: int, dev=Depends(current_device)):
+        line, item = await _pending().reject(pid)
+        if line is None:
+            raise HTTPException(status_code=404 if item is None else 409, detail="not found" if item is None else "already decided")
+        return {"message": line}
+
     @router.post("/chat/image")
     async def chat_image(body: ChatImageIn, dev=Depends(current_device)):
         dec = decode_image_b64(body.image)
         if not dec:
             raise HTTPException(status_code=422, detail="فقط عکس jpg/png/webp تا ۶ مگابایت")
+        pend = getattr(svc, "pending", None)
+        before = await pend.max_id() if pend else 0
         try:
             reply = await svc.chat(body.text.strip() or "این عکس رو ببین؛ اگه فیش پرداخت، رسید یا چیز قابل‌ثبته ثبتش کن و بگو چی خوندی.", images=[dec])
         except Exception:
             log.exception("image chat failed")
             raise HTTPException(status_code=502, detail="brain unavailable")
-        return {"reply": reply}
+        return {"reply": reply, "pending": await pend.since(before) if pend else []}
 
     @router.get("/history")
     async def history(limit: int = 50, dev=Depends(current_device)):
@@ -1134,7 +1218,7 @@ def create_router(mem, svc):
     @router.post("/ingest")
     async def ingest(body: IngestIn, dev=Depends(current_device)):
         stored = duplicate = skipped = parsed_n = 0
-        lines = []
+        lines, waiting = [], []
         for it in body.items:
             if is_sensitive(it.text):       # دفاع در عمق: اپ هم فیلتر می‌کند
                 skipped += 1
@@ -1158,13 +1242,26 @@ def create_router(mem, svc):
             parsed = parse_bank_text(it.text)
             if parsed:
                 entry = memory_entry(parsed, it.source, it.text)
+                pend = getattr(svc, "pending", None)
+                if pend is not None and await pend.enabled():          # فقط پیشنهاد؛ بعد از تأیید صاحب ثبت می‌شود
+                    made = await pend.add_many([entry], origin="sms" if it.kind == "sms" else "notification", source=it.source or "", inbox_id=inbox_id)
+                    waiting.extend(made)
+                    parsed_n += 1
+                    continue
                 await mem.add_memory([entry])
                 await mem.mark_inbox_parsed(inbox_id)
                 parsed_n += 1
                 lines.append(("💸 " if parsed["type"] == "expense" else "💰 ") + entry["summary"].split(" (")[0])
         if lines:
             await svc.notify_owner("ثبت شد:\n" + "\n".join(lines[:5]))
-        return {"stored": stored, "duplicate": duplicate, "skipped": skipped, "parsed": parsed_n}
+        if waiting:
+            owner = await mem.get_owner()
+            if owner:
+                await svc.pending.offer(owner, waiting)
+        res = {"stored": stored, "duplicate": duplicate, "skipped": skipped, "parsed": parsed_n}
+        if waiting:
+            res["pending"] = len(waiting)
+        return res
 
 
     # ---------- فروش و پیگیری (CRM) ----------

@@ -250,7 +250,7 @@ async function chatTurn(text, speak) {
   }
   try {
     const r = await api(room ? `/api/coaches/${room}/ask` : '/api/chat', { method: 'POST', body: { text } });
-    fillBot($('#typing'), r.reply); window.scrollTo(0, document.body.scrollHeight);
+    const tpn = $('#typing'); fillBot(tpn, r.reply); attachPending(tpn, r.pending); window.scrollTo(0, document.body.scrollHeight);
     if (speak) await speakText(r.reply);
     return r.reply;
   } catch (e) {
@@ -269,7 +269,7 @@ function composer(id, ph, photo = true) {
 
 // ------------------------------------------------------------- صفحه‌ها
 async function viewToday() {
-  const [d, pjs, phs] = await Promise.all([api('/api/dashboard?range=today'), api('/api/projects').catch(() => ({ projects: [] })), api('/api/phone/status').catch(() => null)]); S.cache.today = d;
+  const [d, pjs, phs, pms] = await Promise.all([api('/api/dashboard?range=today'), api('/api/projects').catch(() => ({ projects: [] })), api('/api/phone/status').catch(() => null), api('/api/pending').catch(() => ({ items: [] }))]); S.cache.today = d;
   if (phs && phs.pending && phs.pending.length) setTimeout(() => { if (S.tab === 'today') render(); }, 12000);
   $('#subtitle').textContent = d.today_jalali;
   const f = d.finance, c = d.counts || {};
@@ -282,6 +282,7 @@ async function viewToday() {
     <div class="card ai"><div class="row spread"><h2>امروز چی شد؟</h2><span class="pill ai">مهرداد</span></div>
       ${composer('sayToday', 'مثلاً: ۲۰۰ ت فروش داشتم، ناهار برنج خوردم')}
       <p class="muted small">هر چی بنویسی خودش در بخش درست ثبت می‌شه.</p></div>
+    ${pendingCard(pms.items)}
     ${phoneCard(phs)}
     ${projectsStrip(pjs.projects)}
     ${plannedLine(f)}
@@ -691,7 +692,7 @@ async function viewCoaches() {
   if (S.coachId) return viewCoachRoom(S.coachId);
   const r = await api('/api/coaches');
   const card = c => `<button class="card m-coach" data-act="room-open" data-id="${c.id}"><span class="m-ce">${c.emoji}</span><b>${esc(c.name)}</b>
-    <span class="muted small">${esc(c.tagline)}</span>${c.lessons ? `<span class="pill gold">${fa(c.lessons)} درس · ${fa(c.done)} تمرین</span>` : '<span class="pill">شروع نشده</span>'}</button>`;
+    <span class="muted small">${esc(c.tagline)}</span>${c.unread ? `<span class="pill gold">${fa(c.unread)} درس جدید</span>` : ''}${c.sub && c.sub.on ? `<span class="pill ai">🔔 ${esc(c.sub.time)}</span>` : ''}${c.lessons ? `<span class="pill gold">${fa(c.lessons)} درس · ${fa(c.done)} تمرین</span>` : '<span class="pill">شروع نشده</span>'}</button>`;
   return `<section class="pane">${coachSeg()}
     <div class="pane-title"><h1>مربی‌های من</h1><span class="muted small">${fa(r.coaches.length)} مربی</span></div>
     <p class="muted small">هر مربی یه کلاس شخصی داره: مسیر یادگیری مخصوص خودت، درس + تمرین، و گفتگوی آزاد (حتی نقش‌بازی). همه‌شون از روی چیزی که از تو می‌دونم درس می‌دن، نه عمومی.</p>
@@ -702,7 +703,7 @@ async function viewCoachRoom(id) {
   const d = await api('/api/coaches/' + id); S.cache.room = d;
   const have = new Set(d.lessons.map(l => l.title));
   const nextIdx = d.curriculum.findIndex(x => !have.has(x.title));
-  const lessons = d.lessons.slice().reverse().map((l, i) => `<details class="card m-lesson" ${i === 0 ? 'open' : ''}><summary><b>درس ${fa(l.n)}: ${esc(l.title)}</b> ${l.done ? '<span class="pill good">تمرین انجام شد</span>' : ''}</summary>
+  const lessons = d.lessons.slice().reverse().map((l, i) => `<details class="card m-lesson" ${i === 0 ? 'open' : ''}><summary><b>درس ${fa(l.n)}: ${esc(l.title)}</b> ${l.seen === false ? '<span class="pill gold">جدید</span>' : ''} ${l.done ? '<span class="pill good">تمرین انجام شد</span>' : ''}</summary>
       <div id="lsn${l.n}" class="c-body" style="margin-top:8px">${esc(l.body)}</div>
       ${l.takeaway ? `<div class="c-id" style="margin-top:6px">💡 ${esc(l.takeaway)}</div>` : ''}
       ${l.exercise ? `<div class="card gold" style="margin-top:8px"><b>⚡ تمرین</b><div class="small">${esc(l.exercise)}</div></div>` : ''}
@@ -720,6 +721,11 @@ async function viewCoachRoom(id) {
       <div class="row" style="flex-wrap:nowrap"><input type="text" id="roomTopic" placeholder="یا موضوع دلخواه خودت…" maxlength="300"><button class="btn" data-act="room-custom">درس بده</button></div>
       <div class="row">${(d.topics || []).map(t => `<button class="btn sm" data-act="room-topic" data-t="${esc(t)}">${esc(t)}</button>`).join('')}</div>
       <div id="roomOut"></div></div>
+    <div class="card"><h2>📬 درس روزانه در ربات و اپ</h2>
+      <label class="row"><input type="checkbox" data-act="room-sub" ${d.sub.on ? 'checked' : ''}> هر روز یه درس تازه از این مربی برام بفرست</label>
+      <div class="row"><span class="muted small">ساعت ارسال</span><input type="time" id="roomSubTime" data-act="room-subtime" value="${esc(d.sub.time || '08:00')}" style="max-width:140px"></div>
+      <p class="muted small">درس کامل تو تلگرام میاد (روی پیامش ریپلای کنی از همین مربی می‌پرسی) و توی اپ هم اعلان «درس تازه داری» می‌گیری.</p>
+      <div class="row"><button class="btn sm" data-act="room-send">📨 همین الان یه درس به ربات بفرست</button></div></div>
     <div class="card"><div class="row spread"><h2>🗺️ مسیر یادگیری</h2>${d.curriculum.length ? '<button class="btn sm" data-act="room-path">ساخت دوبارهٔ مسیر</button>' : ''}</div>
       ${d.curriculum.length ? `<div class="stack6">${d.curriculum.map((x, i) => `<div class="row small" style="flex-wrap:nowrap"><b>${have.has(x.title) ? '✅' : i === nextIdx ? '👉' : '○'}</b><span>${esc(x.title)}${x.goal ? `<span class="muted"> — ${esc(x.goal)}</span>` : ''}</span></div>`).join('')}</div>`
         : `<p class="muted small">یه مسیر ۱۰ درسی از ساده به پیشرفته، مخصوص وضعیت و هدف‌های خودت.</p>
@@ -748,6 +754,10 @@ async function roomAct(act, b) {
       await api(`/api/coaches/${id}/lesson`, { method: 'POST', body: { topic } }); toast('درس آماده‌ست 📖'); return render();
     }
     if (act === 'room-done') { await api(`/api/coaches/${id}/lessons/${b.dataset.n}/done`, { method: 'POST', body: { on: b.dataset.on === '1' } }); toast(b.dataset.on === '1' ? 'آفرین 👏' : 'برگشت'); return renderKeep(); }
+    if (act === 'room-send') {
+      busy('مربی داره درس رو آماده می‌کنه و می‌فرسته (۳۰ تا ۶۰ ثانیه)…');
+      const r = await api(`/api/coaches/${id}/send`, { method: 'POST' }); toast('درس «' + r.title + '» تو تلگرام رسید ✓'); return render();
+    }
     if (act === 'room-reset') { if (confirm('همهٔ درس‌ها و گفتگوهای این کلاس پاک بشه؟')) { await api('/api/coaches/' + id, { method: 'DELETE' }); toast('پاک شد'); return render(); } }
   } catch (e) {
     $$('[data-act^=room-]').forEach(x => { x.disabled = false; });
@@ -959,6 +969,62 @@ document.addEventListener('input', ev => {
   S.cq = t.value; clearTimeout(crmTimer); crmTimer = setTimeout(crmFilter, 250);
 });
 
+// ------------------------------------------------------------- تأیید قبل از ثبت خرج/درآمد
+const pmLine = p => `${p.type === 'expense' ? '💸 خرج' : '💰 درآمد'} <b class="num">${money(p.amount)}</b> تومان${p.summary ? ' — ' + esc(String(p.summary).split(' (')[0]) : ''}${p.category ? ` <span class="pill">${esc(p.category)}</span>` : ''}`;
+const pmButtons = p => `<div class="row"><button class="btn sm primary" data-act="pm-ok" data-id="${p.id}">✅ ثبت کن</button><button class="btn sm" data-act="pm-edit" data-id="${p.id}" data-amount="${p.amount}">✏️ مبلغ</button><button class="btn sm" data-act="pm-no" data-id="${p.id}">❌ نه</button></div>`;
+function pendingCard(items) {
+  if (!items || !items.length) return '';
+  return `<div class="card gold" id="pmCard"><div class="row spread"><h2>🧾 منتظر تأیید تو</h2><span class="pill gold num">${fa(items.length)}</span></div>
+    <p class="muted small">تا تأیید نکنی هیچ‌چیز ثبت نمی‌شه.</p>
+    ${items.map(p => `<div class="m-goal" id="pm${p.id}" style="padding:8px 0;border-bottom:1px solid var(--line)"><div class="c-id">${pmLine(p)}</div>
+      ${p.origin === 'sms' || p.origin === 'notification' ? `<div class="muted small">از ${esc(p.source || 'پیامک')}: ${esc((p.detail || '').slice(0, 90))}</div>` : ''}${pmButtons(p)}</div>`).join('')}</div>`;
+}
+// دکمه‌های تأیید زیر حباب پاسخ مهرداد
+function attachPending(el, items) {
+  if (!el || !items || !items.length) return;
+  el.insertAdjacentHTML('beforeend', `<div class="stack6" style="margin-top:8px">${items.map(p => `<div id="pm${p.id}" class="small">${pmLine(p)}${pmButtons(p)}</div>`).join('')}</div>`);
+}
+async function pmAct(act, b) {
+  const id = b.dataset.id, box = $('#pm' + id);
+  const done = msg => { if (box) box.innerHTML = `<div class="small ${msg.startsWith('✅') ? 'm-pos' : 'muted'}">${esc(msg)}</div>`; toast(msg); setTimeout(() => { if (S.tab === 'today') renderKeep(); }, 900); };
+  if (act === 'pm-ok') { const r = await api(`/api/pending/${id}/confirm`, { method: 'POST', body: {} }); return done(r.message); }
+  if (act === 'pm-no') { const r = await api(`/api/pending/${id}/reject`, { method: 'POST' }); return done(r.message); }
+  if (act === 'pm-edit') {
+    const v = prompt('مبلغ درست چنده؟ (تومان)', String(Math.round(Number(b.dataset.amount) || 0))); if (v === null) return;
+    const n = Number(en(v)); if (!(n >= 0)) return toast('مبلغ نامعتبر');
+    const r = await api(`/api/pending/${id}/confirm`, { method: 'POST', body: { amount: n } }); return done(r.message);
+  }
+}
+async function renderPendingSetting() {
+  const box = $('#pendBox'); if (!box) return;
+  try {
+    const r = await api('/api/pending');
+    box.innerHTML = `<label class="row"><input type="checkbox" data-act="pm-setting" ${r.confirm ? 'checked' : ''}> قبل از ثبت هر خرج یا درآمد ازم تأیید بگیر <span class="muted">(پیشنهاد می‌شه روشن بمونه)</span></label>`;
+  } catch (e) { box.textContent = ''; }
+}
+
+// ------------------------------------------------------------- نشان تب‌ها و باز کردن اعلان
+function setBadge(tab, n) {
+  const btn = $(`#nav button[data-tab=${tab}]`); if (!btn) return;
+  let d = $('.nav-dot', btn);
+  if (!n) { if (d) d.remove(); return; }
+  if (!d) { d = document.createElement('i'); d.className = 'nav-dot'; btn.appendChild(d); }
+  d.textContent = n > 9 ? '۹+' : fa(n);
+}
+async function refreshBadges() {
+  if (!token) return;
+  try { const b = await api('/api/badges'); setBadge('coach', b.coach); setBadge('today', b.pending); } catch (e) { /* بی‌صدا */ }
+}
+setInterval(() => { if (!document.hidden) refreshBadges(); }, 60000);
+window.onOpenTarget = async t => {
+  t = String(t || ''); if (!token || !t) return;
+  try { if (window.MehrdadNative && MehrdadNative.takeOpenTarget) MehrdadNative.takeOpenTarget(); } catch (e) { /* ignore */ }
+  closeSheet();
+  if (t.startsWith('coach:')) { S.tab = 'coach'; S.cview = 'coaches'; S.coachId = t.slice(6); store.set('mehrdad_tab', 'coach'); store.set('mehrdad_cview', 'coaches'); await render(); window.scrollTo(0, 0); }
+  else if (t === 'coach') { S.tab = 'coach'; S.cview = 'today'; S.coachId = null; store.set('mehrdad_tab', 'coach'); store.set('mehrdad_cview', 'today'); await render(); window.scrollTo(0, 0); }
+  else if (t === 'today') go('today');
+};
+
 const VIEWS = { crm: viewCrm, today: viewToday, money: viewMoney, life: viewLife, coach: viewCoach, goals: viewGoals, chat: viewChat };
 async function renderKeep() { const y = window.scrollY; await render(); window.scrollTo(0, y); }
 
@@ -971,6 +1037,7 @@ async function render() {
     return;
   }
   $$('#nav button').forEach(b => b.setAttribute('aria-current', b.dataset.tab === S.tab ? 'page' : 'false'));
+  refreshBadges();
   if (S.tab === 'chat') window.scrollTo(0, document.body.scrollHeight);
 }
 
@@ -1134,6 +1201,7 @@ function openSettings() {
     <div class="stack"><span class="eyebrow">تم</span><div class="seg">${Object.entries(THEMES).map(([k, v]) =>
       `<button data-act="theme" data-val="${k}" aria-pressed="${(document.documentElement.dataset.theme || 'night') === k}">${v}</button>`).join('')}</div>
     ${natHtml}
+    <span class="eyebrow">🧾 ثبت خرج و درآمد</span><div id="pendBox"></div>
     <span class="eyebrow">🔊 صدای مهرداد</span>
     <label class="row"><input type="checkbox" data-act="ph-tts" ${ttsAlways() ? 'checked' : ''}> همهٔ جواب‌ها رو با صدا بخون <span class="muted">(وقتی خودت با 🎤 یا صدا زدن حرف بزنی، جواب صوتی همیشه هست)</span></label>
     <div class="row spread"><span>صدا</span><select data-act="ph-voice"><option value="male"${store.get('mehrdad_voice') !== 'female' ? ' selected' : ''}>مرد (فرید)</option><option value="female"${store.get('mehrdad_voice') === 'female' ? ' selected' : ''}>زن (دلارا)</option></select></div>
@@ -1143,6 +1211,7 @@ function openSettings() {
     <p class="muted small">پیامک بانکی و اعلان‌های مالی رو اپ اندروید می‌فرسته. برای قطع این دستگاه در تلگرام /devices و /unpair.</p>
     <button class="btn danger" data-act="logout">خروج از این دستگاه</button></div>`);
   renderPhoneSection();
+  renderPendingSetting();
 }
 
 // ------------------------------------------------------------- جفت‌سازی
@@ -1169,7 +1238,7 @@ async function say(forId) {
   } else toast('در حال ثبت…');
   try {
     const r = await api('/api/chat', { method: 'POST', body: { text } });
-    if (forId === 'sayChat') { fillBot($('#typing'), r.reply); window.scrollTo(0, document.body.scrollHeight); }
+    if (forId === 'sayChat') { const tp = $('#typing'); fillBot(tp, r.reply); attachPending(tp, r.pending); window.scrollTo(0, document.body.scrollHeight); }
     else { toast(r.reply.length > 110 ? r.reply.slice(0, 110) + '…' : r.reply); await render(); }
     if (speak) speakText(r.reply);
   } catch (e) {
@@ -1213,7 +1282,7 @@ async function sendPhoto(file, forId) {
   try {
     const image = await downscale(file);
     const r = await api('/api/chat/image', { method: 'POST', body: { image, text: caption } });
-    if (inChat) { fillBot($('#typing'), r.reply); window.scrollTo(0, document.body.scrollHeight); }
+    if (inChat) { const tp = $('#typing'); fillBot(tp, r.reply); attachPending(tp, r.pending); window.scrollTo(0, document.body.scrollHeight); }
     else { toast(r.reply.length > 110 ? r.reply.slice(0, 110) + '…' : r.reply); await render(); }
     if (ttsAlways()) speakText(r.reply);
   } catch (e) {
@@ -1249,7 +1318,8 @@ document.addEventListener('click', async ev => {
   const b = ev.target.closest('[data-act]'); if (!b) return;
   const act = b.dataset.act, id = b.dataset.id;
   try {
-    if (act.startsWith('crm-')) await crmAct(act, b);
+    if (act.startsWith('pm-') && act !== 'pm-setting') await pmAct(act, b);
+    else if (act.startsWith('crm-')) await crmAct(act, b);
     else if (act === 'shared-send') await sharedSend(b.dataset.to);
     else if (act === 'shared-cancel') { S.shared = null; closeSheet(); }
     else if (act.startsWith('room-')) await roomAct(act, b);
@@ -1394,6 +1464,14 @@ document.addEventListener('change', async ev => {
   else if (t.dataset.act === 'ph-msgr') {
     try { MehrdadNative.setMessengerCapture(t.checked); toast(t.checked ? 'از این به بعد پیام‌های پیام‌رسان‌ها رو هم می‌بینم' : 'دیگه پیام‌رسان‌ها رو نمی‌خونم'); setTimeout(renderPhoneSection, 800); } catch (e) { toast(e.message); }
   }
+  else if (t.dataset.act === 'pm-setting') { try { await api('/api/pending/settings', { method: 'PUT', body: { confirm: t.checked } }); toast(t.checked ? 'از این به بعد قبل از ثبت ازت تأیید می‌گیرم ✅' : '⚠️ از این به بعد همه‌چیز خودکار ثبت می‌شه'); } catch (e) { toast(e.message); t.checked = !t.checked; } }
+  else if (t.dataset.act === 'room-sub' || t.dataset.act === 'room-subtime') {
+    try {
+      const time = ($('#roomSubTime') || {}).value || '08:00', on = ($('[data-act=room-sub]') || {}).checked;
+      await api(`/api/coaches/${S.coachId}/sub`, { method: 'PUT', body: { on: !!on, time } });
+      toast(on ? `🔔 هر روز ساعت ${fa(time)} درس می‌فرستم` : '🔕 ارسال خودکار خاموش شد');
+    } catch (e) { toast(e.message); }
+  }
   else if ((t.dataset.act || '').startsWith('crm-')) crmChange(t);
   else if (t.dataset.act === 'ph-tts') { if (t.checked) store.set('mehrdad_tts', '1'); else store.del('mehrdad_tts'); toast(t.checked ? 'از این به بعد همهٔ جواب‌ها صوتی هم هست' : 'فقط وقتی با صدا حرف بزنی جواب صوتی می‌گیری'); }
   else if (t.dataset.act === 'ph-voice') { store.set('mehrdad_voice', t.value); toast(t.value === 'female' ? 'صدا: دلارا' : 'صدا: فرید'); speakText('سلام، من مهرداد هستم. این صدای منه.'); }
@@ -1523,7 +1601,7 @@ async function sharedSend(to) {
     go('chat'); await new Promise(r => setTimeout(r, 400));
     const list = $('#chatList');
     if (list) { const empt = $('.m-empty', list); if (empt) empt.remove(); list.insertAdjacentHTML('beforeend', `${bubble('me', '📷 ' + (text || 'عکس'))}<div class="m-b bot typing" id="typing"><span class="m-spin"></span></div>`); window.scrollTo(0, document.body.scrollHeight); }
-    try { const r = await api('/api/chat/image', { method: 'POST', body: { image, text } }); fillBot($('#typing'), r.reply); window.scrollTo(0, document.body.scrollHeight); if (ttsAlways()) speakText(r.reply); }
+    try { const r = await api('/api/chat/image', { method: 'POST', body: { image, text } }); const tpx = $('#typing'); fillBot(tpx, r.reply); attachPending(tpx, r.pending); window.scrollTo(0, document.body.scrollHeight); if (ttsAlways()) speakText(r.reply); }
     catch (e) { if (e.message !== 'unauthorized') { toast(e.message); const t = $('#typing'); if (t) t.textContent = 'عکس رو نتونستم بخونم؛ دوباره بفرست.'; } }
     return;
   }
@@ -1531,7 +1609,7 @@ async function sharedSend(to) {
   await render(); window.scrollTo(0, document.body.scrollHeight);
   await coachAsk({ image, text });
 }
-document.addEventListener('visibilitychange', () => { if (!document.hidden && window.onSharedImage) window.onSharedImage(); });
+document.addEventListener('visibilitychange', () => { if (!document.hidden) { refreshBadges(); if (window.onSharedImage) window.onSharedImage(); } });
 
 // ------------------------------------------------------------- شروع
 function boot() {
@@ -1539,7 +1617,10 @@ function boot() {
   if (!token) return pairScreen();
   $('#nav').hidden = false;
   render();
-  setTimeout(() => { if (window.onSharedImage) window.onSharedImage(); }, 900);        // عکسی که قبل از باز شدن اپ Share شده
+  setTimeout(() => {                                                                    // چیزهایی که قبل از آماده‌شدن صفحه رسیده: عکس Share‌شده، یا اعلان «درس تازه»
+    if (window.onSharedImage) window.onSharedImage();
+    try { const t = window.MehrdadNative && MehrdadNative.takeOpenTarget && MehrdadNative.takeOpenTarget(); if (t && window.onOpenTarget) window.onOpenTarget(t); } catch (e) { /* ignore */ }
+  }, 900);
 }
 boot();
 })();

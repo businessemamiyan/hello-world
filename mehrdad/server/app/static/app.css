@@ -112,3 +112,6 @@ details>summary{cursor:pointer;padding:6px 0}
 .m-coach .m-ce{font-size:1.8rem;line-height:1}
 .m-lesson summary{cursor:pointer}
 .m-coach .pill{white-space:normal}
+
+nav.bottom button{position:relative}
+.nav-dot{position:absolute;top:2px;inset-inline-end:22%;min-width:17px;height:17px;padding:0 4px;border-radius:9px;background:var(--crit,#d94a4a);color:#fff;font-size:.62rem;font-style:normal;font-weight:900;line-height:17px;text-align:center}

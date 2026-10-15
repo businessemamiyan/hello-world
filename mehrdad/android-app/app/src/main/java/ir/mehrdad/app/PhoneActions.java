@@ -33,6 +33,7 @@ import java.util.concurrent.ConcurrentHashMap;
  */
 public final class PhoneActions {
     static final String CH_ACTION = "mehrdad_phone_actions";
+    static final String CH_LESSON = "mehrdad_lessons";
     static final String ACTION_SMS_SENT = "ir.mehrdad.app.SMS_SENT";
 
     private static final Map<Long, int[]> SMS_PENDING = new ConcurrentHashMap<>();   // شناسهٔ اقدام → {تکه‌های باقی‌مانده، تکه‌های ناموفق}
@@ -44,6 +45,7 @@ public final class PhoneActions {
         NotificationManager nm = (NotificationManager) ctx.getSystemService(Context.NOTIFICATION_SERVICE);
         if (Build.VERSION.SDK_INT >= 26 && nm != null) {
             nm.createNotificationChannel(new NotificationChannel(CH_ACTION, "اقدام‌های گوشی (یک لمس)", NotificationManager.IMPORTANCE_HIGH));
+            nm.createNotificationChannel(new NotificationChannel(CH_LESSON, "درس‌ها و یادآوری‌های مهرداد", NotificationManager.IMPORTANCE_HIGH));
         }
     }
 
@@ -57,6 +59,7 @@ public final class PhoneActions {
         String name = a.optString("to_name", "");
         String text = a.optString("text", "");
         if (id < 0) return;
+        if ("notice".equals(kind)) { postNotice(ctx, id, name, text, number); return; }      // اعلان اپ (مثلاً «درس تازه داری»)؛ اقدام نیست و ack ندارد
         try {
             if ("sms".equals(kind)) sendSms(ctx, id, number, text);
             else if ("call".equals(kind)) placeCall(ctx, id, number, name);
@@ -129,6 +132,20 @@ public final class PhoneActions {
         PendingIntent pi = PendingIntent.getActivity(ctx, (int) id, send, PendingIntent.FLAG_IMMUTABLE | PendingIntent.FLAG_UPDATE_CURRENT);
         postTap(ctx, (int) (5000 + id), "پیام اینستاگرام برای " + name, "بزن، گیرنده را انتخاب کن و ارسال را بزن", pi);
         ackAsync(ctx, id, "needs_tap", "اینستاگرام خودکار نیست؛ اعلان را بزن");
+    }
+
+    /** اعلان محلی «درس تازه / یادآوری»: با لمس، اپ روی همان مقصد (مثلاً اتاق مربی) باز می‌شود. */
+    private static void postNotice(Context ctx, long id, String title, String text, String target) {
+        try {
+            Intent open = new Intent(ctx, MainActivity.class).putExtra("open", target == null ? "" : target)
+                    .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK | Intent.FLAG_ACTIVITY_SINGLE_TOP);
+            PendingIntent pi = PendingIntent.getActivity(ctx, (int) (7000 + id % 1000), open, PendingIntent.FLAG_IMMUTABLE | PendingIntent.FLAG_UPDATE_CURRENT);
+            Notification n = new NotificationCompat.Builder(ctx, CH_LESSON)
+                    .setSmallIcon(android.R.drawable.ic_dialog_info).setContentTitle(title).setContentText(text)
+                    .setStyle(new NotificationCompat.BigTextStyle().bigText(text))
+                    .setContentIntent(pi).setAutoCancel(true).setPriority(NotificationCompat.PRIORITY_HIGH).build();
+            NotificationManagerCompat.from(ctx).notify((int) (7000 + id % 1000), n);
+        } catch (SecurityException ignored) { }
     }
 
     static void postTap(Context ctx, int nid, String title, String text, PendingIntent pi) {

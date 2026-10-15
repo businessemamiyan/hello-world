@@ -70,6 +70,7 @@ public class MainActivity extends AppCompatActivity {
     private Voice voice;
     private static final int V_TEXT = 0, V_COMMAND = 1, V_CHAT = 2;      // نوشتن در جعبه | دستور مستقیم | گفتگوی صوتی نوبتی
     private int pendingVoiceMode;
+    private volatile String openTarget = "";            // مقصد اعلان (مثلاً coach:sales)؛ JS با takeOpenTarget() برمی‌دارد
     private volatile String sharedImage = "";          // data:image/jpeg;base64,… از «Share» گوشی؛ JS با takeSharedImage() برمی‌دارد
     private TextToSpeech tts;
     private boolean ttsFa;
@@ -146,6 +147,7 @@ public class MainActivity extends AppCompatActivity {
 
         pendingVoiceMode = getIntent().getBooleanExtra("voice", false) ? V_COMMAND : V_TEXT;
         handleShare(getIntent());
+        handleOpen(getIntent());
         tts = new TextToSpeech(this, st -> {
             if (st == TextToSpeech.SUCCESS) ttsFa = tts.setLanguage(new Locale("fa")) >= TextToSpeech.LANG_AVAILABLE;
         });
@@ -157,6 +159,7 @@ public class MainActivity extends AppCompatActivity {
         super.onNewIntent(intent);
         setIntent(intent);
         handleShare(intent);
+        handleOpen(intent);
         if (intent != null && intent.getBooleanExtra("voice", false)) {
             intent.removeExtra("voice");
             startVoice(V_COMMAND);                 // دکمهٔ اعلان / کاشی / دستیار: مستقیم گوش بده
@@ -314,6 +317,18 @@ public class MainActivity extends AppCompatActivity {
         }
         voice = new Voice(mode);
         voice.begin();
+    }
+
+    /** لمس اعلان «درس تازه»: صفحه را روی مقصدش باز کن (اگر صفحه هنوز بالا نیامده، JS موقع شروع می‌خواند). */
+    private void handleOpen(Intent intent) {
+        try {
+            if (intent == null) return;
+            String o = intent.getStringExtra("open");
+            if (o == null || o.isEmpty()) return;
+            intent.removeExtra("open");
+            openTarget = o;
+            if (web != null) web.evaluateJavascript("window.onOpenTarget && window.onOpenTarget(" + JSONObject.quote(o) + ")", null);
+        } catch (Exception ignored) { }
     }
 
     /** عکس/اسکرین‌شات از Share گوشی: کوچک (حداکثر ۱۶۰۰ پیکسل) و JPEG می‌شود تا سبک برای سرور برود؛ بعد صفحه خبر می‌شود. */
@@ -617,6 +632,13 @@ public class MainActivity extends AppCompatActivity {
 
         @JavascriptInterface
         public boolean speakAvailable() { return ttsFa; }
+
+        @JavascriptInterface
+        public String takeOpenTarget() {
+            String t = openTarget;
+            openTarget = "";
+            return t;
+        }
 
         /** عکس Share‌شده (یک‌بار مصرف). خالی = چیزی نیست. */
         @JavascriptInterface

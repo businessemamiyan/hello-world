@@ -59,8 +59,31 @@ class Scheduler:
         try:
             rec = await coach.generate()
             await self.bot.notify_owner(coach.morning_message(rec["plan"]))
+            lesson = coach.lesson_message(rec["plan"])
+            if lesson:                                           # خودِ درس کامل، توی ربات قابل‌خواندن
+                from .coaches import split_message
+                for part in split_message(lesson):
+                    await self.bot.notify_owner(part)
+            notices = getattr(self.bot, "notices", None)
+            if notices:
+                await notices.add("📖 درس و برنامهٔ امروزت آماده‌ست", rec["plan"]["lesson"].get("title") or rec["plan"]["focus"].get("title") or "", "coach")
         except Exception:
             log.exception("برنامهٔ صبحگاهی مربی ناموفق")
+
+    async def maybe_coach_lessons(self, hhmm, today):
+        """درس‌های مربی‌های تخصصیِ روشن (اپ ← مربی ← مربی‌های من ← 🔔) را در ساعت خودشان می‌فرستد؛ در پس‌زمینه تا زمان‌بند معطل ساخت درس نشود."""
+        rooms = getattr(self.bot, "coaches", None)
+        if not rooms or not await self.mem.get_owner():
+            return
+        import asyncio
+
+        async def run():
+            try:
+                await rooms.deliver_due(hhmm, today)
+            except Exception:
+                log.exception("ارسال درس مربی‌ها ناموفق")
+        t = asyncio.ensure_future(run())
+        self._tasks = {x for x in getattr(self, "_tasks", set()) if not x.done()} | {t}
 
     async def maybe_evening(self, hhmm, today):
         """شب (۲۱:۳۰) یادآوری مرور شبانهٔ مربی؛ فقط اگر امروز برنامه ساخته شده باشد."""
@@ -109,6 +132,7 @@ class Scheduler:
         await self.maybe_coach(hhmm, today)
         await self.maybe_evening(hhmm, today)
         await self.maybe_crm(hhmm, today)
+        await self.maybe_coach_lessons(hhmm, today)
         phone = getattr(self.bot, "phone", None)
         if phone:
             try:

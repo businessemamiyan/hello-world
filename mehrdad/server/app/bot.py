@@ -16,6 +16,8 @@ from .projects import Projects
 from .phone import Phone
 from .crm import Crm
 from .coaches import Coaches
+from .pending import Pending, explicit_record
+from .notices import Notices
 from . import payroll as payroll_mod
 from .media import MAX_IMAGE_BYTES, sniff_image
 from .memory import normalize_fa, today_str
@@ -40,6 +42,8 @@ HELP = """سلام، منم مهرداد، مغز دومت 🧠
 /finance — موجودی حساب‌ها، بدهی و اقساط و هشدارها
 /salary — حقوق این ماه (از روی فیش نمونه) و ماه بعد
 /projects — وضعیت پروژه‌هات (VQ ERP، VQ Factory، NovaTunnel…)
+/coaches — مربی‌های تخصصی: روشن‌کردن درس روزانه (🔔) یا درس همین حالا
+/pending — خرج و درآمدهایی که منتظر تأیید توئن (/confirm off برای ثبت بدون تأیید)
 /crm — پیگیری‌های امروز و قیف فروشت (مشتری‌ها، معامله‌ها، فروش این ماه)
 /goals — هدف‌هایی که از روی شناختم از تو پیشنهاد می‌دم
 /nova — فروش و درآمد NovaTunnel (فقط می‌خونم)
@@ -106,6 +110,8 @@ class Bot:
         self.phone = Phone(self)
         self.crm = Crm(self)
         self.coaches = Coaches(self)
+        self.pending = Pending(self)
+        self.notices = Notices(self.mem)
         self.tg_agent = None              # app.agent_tg.TelegramAgent؛ main وصلش می‌کند
         self.stt = None                   # app.stt.STT؛ main آن را وصل می‌کند (None = ویس خاموش)
         self.tts = None                   # app.tts.TTS؛ جواب صوتی (اپ و ویس تلگرام)
@@ -113,6 +119,12 @@ class Bot:
     async def chat(self, text, images=None, voice=False):
         """یک نوبت مکالمه (هم تلگرام هم اپ): تاریخچه و حافظه را می‌خواند، می‌پرسد، و ذخیره می‌کند.
         images: لیست (media_type, bytes)؛ فقط برای همین نوبت به مغز داده می‌شود و ذخیره نمی‌شود."""
+        if not images and not voice:
+            decided = await self.pending.chat_decision(text)
+            if decided:                       # جواب کوتاهِ «آره/نه» به «ثبت کنم؟» — بدون مغز، سرور اجرا می‌کند
+                await self.mem.add_message("user", text)
+                await self.mem.add_message("assistant", decided)
+                return decided
         async with self.brain_lock:
             history = await self.mem.recent_messages(20)
             recent_mem = await self.mem.recent_memory(40)
@@ -172,6 +184,13 @@ class Bot:
                 parts.append(proj)
         except Exception:
             log.exception("چکیدهٔ پروژه‌ها ساخته نشد")
+        try:
+            pend = await self.pending.list(limit=8)
+            if pend:
+                parts.append("### خرج/درآمدهای منتظر تأیید صاحب (هنوز ثبت نشده‌اند؛ دوباره نسازشان. اگر کاربر اصلاحشان کرد، فقط مورد درست را بساز و بگو برای تأیید می‌گذارم): "
+                             + "؛ ".join(self.pending.describe(p) for p in pend))
+        except Exception:
+            log.exception("چکیدهٔ منتظر تأیید ساخته نشد")
         try:
             cl = await self.coaches.prompt()
             if cl:
@@ -300,7 +319,8 @@ class Bot:
     async def _apply_entries(self, entries, allowed_ids, user_text=""):
         """ورودی‌های مغز: جدید → ثبت؛ update_id/delete_id → فقط روی رکوردهای اخیری که مغز دیده؛ account_op/debt_op/habit_new → به‌روزرسانی اپ.
         خروجی: لیست خط‌های تأیید (حقیقت سمت سرور) برای نمایش زیر پاسخ."""
-        adds, notes, pay_ops, proj_ops, phone_ops, crm_ops = [], [], [], [], [], []
+        adds, notes, pay_ops, proj_ops, phone_ops, crm_ops, money_ops = [], [], [], [], [], [], []
+        confirm_money = await self.pending.enabled() and not explicit_record(user_text)
         paying = any("debt_op" in e and e["debt_op"]["op"] == "pay" for e in entries)
         for e in entries:
             if "delete_id" in e:
@@ -340,7 +360,7 @@ class Bot:
             else:
                 if paying and e.get("type") == "expense" and ("قسط" in (e.get("summary") or "") or e.get("category") in ("اقساط", "قسط")):
                     continue            # pay خودش خرج «اقساط» را ثبت می‌کند؛ تکراری نشود
-                adds.append(e)
+                (money_ops if confirm_money and e.get("type") in ("expense", "income") else adds).append(e)
         if pay_ops:
             notes.extend(await self.payroll.apply_ops(pay_ops))
         if proj_ops:
@@ -351,6 +371,10 @@ class Bot:
             notes.extend(await self.phone.create_many(phone_ops, user_text))
         if adds:
             await self.mem.add_memory(adds)
+        if money_ops:                     # هیچ خرج/درآمدی بی‌تأیید ثبت نمی‌شود
+            items = await self.pending.add_many(money_ops, origin="chat")
+            if items:
+                notes.append(self.pending.note_for_chat(items))
         return [n for n in notes if n]
 
     async def _apply_payslip(self, ps):
@@ -640,6 +664,26 @@ class Bot:
             await self.tg.send(chat_id, "جواب صوتی " + ("روشنه 🔊 (وقتی ویس بفرستی، جوابم رو هم ویس می‌فرستم)" if cur else "خاموشه 🔇") + "\nتغییر: /voice on یا /voice off")
             return
 
+        if text == "/coaches":
+            body, kb = await self.coaches_view()
+            await self.tg.send(chat_id, body, kb=kb)
+            return
+
+        if text == "/pending":
+            await self.tg.send(chat_id, await self.pending.text())
+            items = await self.pending.list()
+            if items:
+                await self.pending.offer(chat_id, items)
+            return
+
+        if text.startswith("/confirm"):
+            arg = text[len("/confirm"):].strip().lower()
+            if arg in ("on", "off"):
+                await self.pending.set_enabled(arg == "on")
+            on = await self.pending.enabled()
+            await self.tg.send(chat_id, "تأیید قبل از ثبت خرج/درآمد " + ("روشنه ✅ (هیچ خرجی بی‌تأیید ثبت نمی‌شه)" if on else "خاموشه ⚠️ (همه‌چیز خودکار ثبت می‌شه)") + "\nتغییر: /confirm on یا /confirm off")
+            return
+
         if text == "/crm":
             await self.tg.send(chat_id, await self.crm.text())
             return
@@ -721,16 +765,80 @@ class Bot:
         if not text:
             return
 
+        if msg.get("reply_to_message") and await self._coach_reply(chat_id, msg, text):
+            return
         await self.tg.send_chat_action(chat_id, "typing")
         onboarding = await self.mem.kv_get("onboard_q")
         if onboarding and text.strip() in ("رد", "رد کن", "skip"):
             await self.mem.kv_set("onboard_q", onboarding)
             await self._onboard_next(chat_id)
             return
+        before = await self.pending.max_id()
         reply = await self.chat(text)
         await self.tg.send(chat_id, reply)
+        fresh = await self.pending.since(before)
+        if fresh:
+            await self.pending.offer(chat_id, fresh)
         if onboarding:
             await self._onboard_next(chat_id)
+
+    async def coaches_view(self):
+        """(متن, کیبورد) فهرست مربی‌ها با 🔔 روشن/خاموش و «درس بفرست»."""
+        from .telegram import btn
+        rows = await self.coaches.listing()
+        lines = ["🎓 مربی‌های من — 🔔 یعنی هر روز در ساعت مشخص یه درس برات می‌فرستن:"]
+        kb = []
+        for c in rows:
+            on = c["sub"]["on"]
+            lines.append(f"{c['emoji']} {c['name']}" + (f" — 🔔 {c['sub']['time']}" if on else "") + (f" · {life.fa(c['lessons'])} درس" if c["lessons"] else ""))
+            kb.append([btn(("🔔 " if on else "🔕 ") + c["emoji"] + " " + c["name"].replace("مربی ", ""), f"cs:{c['id']}:t"), btn("📖 درس بفرست", f"cs:{c['id']}:n")])
+        lines.append("\nروی 🔔 بزن تا روشن/خاموش بشه. ساعت‌ها رو از اپ ← مربی ← مربی‌های من می‌تونی عوض کنی.")
+        return "\n".join(lines), kb
+
+    async def _coach_sub_callback(self, cq, chat_id, message_id, data):
+        try:
+            _, cid, act = data.split(":")
+        except ValueError:
+            await self.tg.answer(cq["id"])
+            return
+        if act == "t":
+            cur = (await self.coaches.subs()).get(cid) or {}
+            sub = await self.coaches.set_sub(cid, not cur.get("on"))
+            if sub is None:
+                await self.tg.answer(cq["id"], "این مربی نیست")
+                return
+            await self.tg.answer(cq["id"], f"🔔 روشن شد؛ هر روز ساعت {sub['time']}" if sub["on"] else "🔕 خاموش شد")
+            text, kb = await self.coaches_view()
+            try:
+                await self.tg.edit(chat_id, message_id, text, kb=kb)
+            except TGError:
+                pass
+        elif act == "n":
+            await self.tg.answer(cq["id"], "دارم درس رو آماده می‌کنم (۳۰–۶۰ ثانیه)…")
+            try:
+                await self.coaches.deliver(cid, force=True)
+            except Exception:
+                log.exception("درس فوری مربی ناموفق")
+                await self.tg.send(chat_id, "الان نتونستم درس رو بسازم؛ کمی بعد دوباره بزن.")
+        else:
+            await self.tg.answer(cq["id"])
+
+    async def _coach_reply(self, chat_id, msg, text, images=None):
+        """ریپلای روی پیام درس مربی → سؤال از همان مربی (متن و/یا عکس)؛ True اگر رسیدگی شد."""
+        rt = (msg.get("reply_to_message") or {}).get("message_id")
+        cid = await self.coaches.coach_for_msg(rt) if rt else None
+        if not cid:
+            return False
+        await self.tg.send_chat_action(chat_id, "typing")
+        try:
+            reply = await self.coaches.ask(cid, text, images)
+        except Exception:
+            log.exception("پاسخ مربی ناموفق")
+            await self.tg.send(chat_id, "مربی الان جواب نداد؛ دوباره امتحان کن.")
+            return True
+        res = await self.tg.send(chat_id, reply)
+        await self.coaches.remember_msg((res or {}).get("message_id") if isinstance(res, dict) else None, cid)   # ادامهٔ گفتگو با ریپلای روی همین جواب
+        return True
 
     async def handle_voice(self, chat_id, msg):
         """ویس تلگرام → متن (روی خود سرور) → همان مسیر چت؛ متنِ فهمیده‌شده هم نشان داده می‌شود تا اشتباه‌شنیدن را اصلاح کنی."""
@@ -755,8 +863,12 @@ class Bot:
             return
         await self.tg.send(chat_id, f"🎤 فهمیدم: «{text}»")
         await self.tg.send_chat_action(chat_id, "typing")
+        before_id = await self.pending.max_id()
         reply = await self.chat(text, voice=True)
         await self.tg.send(chat_id, reply)
+        fresh = await self.pending.since(before_id)
+        if fresh:
+            await self.pending.offer(chat_id, fresh)
         await self._voice_reply(chat_id, reply)
 
     async def _voice_reply(self, chat_id, reply):
@@ -787,8 +899,14 @@ class Bot:
             await self.tg.send(chat_id, "عکس رو فقط به صورت jpg یا png یا webp می‌فهمم.")
             return
         caption = (msg.get("caption") or "").strip()
+        if msg.get("reply_to_message") and await self._coach_reply(chat_id, msg, caption, [(mt, data)]):
+            return
+        before_id = await self.pending.max_id()
         reply = await self.chat(caption or "این عکس رو ببین؛ اگه فیش پرداخت، رسید یا چیز قابل‌ثبته ثبتش کن و بگو چی خوندی.", images=[(mt, data)])
         await self.tg.send(chat_id, reply)
+        fresh = await self.pending.since(before_id)
+        if fresh:
+            await self.pending.offer(chat_id, fresh)
 
     async def handle_callback(self, cq):
         chat_id = cq["message"]["chat"]["id"]
@@ -796,6 +914,26 @@ class Bot:
         data = cq.get("data", "")
         if not await self._is_owner(chat_id):
             await self.tg.answer(cq["id"])
+            return
+        if data.startswith("cl:"):
+            msg, voice = await self.coaches.callback(data)
+            await self.tg.answer(cq["id"], msg)
+            if voice and hasattr(self.tg, "send_voice"):
+                try:
+                    await self.tg.send_voice(chat_id, voice)
+                except Exception:
+                    log.warning("ارسال صدای درس ناموفق", exc_info=True)
+            return
+        if data.startswith("cs:"):
+            await self._coach_sub_callback(cq, chat_id, message_id, data)
+            return
+        if data.startswith("mc:"):
+            line, p = await self.pending.callback(data)
+            await self.tg.answer(cq["id"], line[:150])
+            try:
+                await self.tg.edit(chat_id, message_id, line)
+            except TGError:
+                pass
             return
         if data.startswith("cf:"):
             msg = await self.crm.callback(data)

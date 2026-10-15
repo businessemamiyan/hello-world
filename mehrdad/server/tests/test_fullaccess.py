@@ -137,6 +137,6 @@ async def test_pay_does_not_double_log_installment_expense(tmp_path):
                                                          {"type": "expense", "summary": "ناهار", "amount": 90000}],
                                "debts": [{"op": "pay", "title": "وام ملی"}]})
     await mem.add_debt({"title": "وام ملی", "remaining": 3000000.0, "total": 4000000.0, "installment_amount": 1000000.0, "due_day": 5, "next_due": "2026-10-05"})
-    await bot.chat("قسط وام ملی رو دادم و ناهار ۹۰ هزار")
+    await bot.chat("قسط وام ملی رو دادم و ناهار ۹۰ هزار، ثبت کن")                    # «ثبت کن» صریح = تأیید
     spent = sorted((m["summary"], m["amount"]) for m in await mem.recent_memory(10) if m["type"] == "expense")
     assert spent == sorted([("ناهار", 90000.0), ("قسط وام ملی", 1000000.0)])
