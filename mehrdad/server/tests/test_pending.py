@@ -103,6 +103,7 @@ async def test_explicit_record_command_and_switch_off_skip_confirmation(tmp_path
     brain.entries = [{"type": "expense", "summary": "ناهار", "detail": None, "amount": 90000.0}]
     reply = await bot.chat("ناهار ۹۰ هزار رو ثبت کن")
     assert "منتظر تأییدته" not in reply and await money(mem) == [("expense", "ناهار", 90000.0)]
+    assert "✅ ثبت شد: 💸 خرج ۹۰,۰۰۰ تومان" in reply                                              # سرور خودش حقیقت را زیر پاسخ می‌گذارد
     brain.entries = [{"type": "expense", "summary": "قهوه", "detail": None, "amount": 40000.0}]
     await bot.pending.set_enabled(False)
     reply = await bot.chat("قهوه ۴۰ هزار")

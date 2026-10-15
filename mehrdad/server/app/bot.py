@@ -371,6 +371,10 @@ class Bot:
             notes.extend(await self.phone.create_many(phone_ops, user_text))
         if adds:
             await self.mem.add_memory(adds)
+            if explicit_record(user_text) and await self.pending.enabled():          # خودش گفت «ثبت کن» → همین‌جا ثبت شد؛ سرور راستش را می‌گوید
+                for e in adds:
+                    if e.get("type") in ("expense", "income"):
+                        notes.append("✅ ثبت شد: " + self.pending.describe({"type": e["type"], "amount": e.get("amount"), "summary": e.get("summary"), "category": e.get("category")}))
         if money_ops:                     # هیچ خرج/درآمدی بی‌تأیید ثبت نمی‌شود
             items = await self.pending.add_many(money_ops, origin="chat")
             if items:
